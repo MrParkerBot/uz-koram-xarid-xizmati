@@ -7,6 +7,7 @@ deployment must set.
 
 from __future__ import annotations
 
+import mimetypes
 import os
 from pathlib import Path
 
@@ -115,5 +116,16 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# The Bootstrap build, icon font and JavaScript supplied with the technical
+# assignment. They are served as-is rather than rebuilt, so the interface the
+# customer approved survives the move to Django (DEC-005).
+STATICFILES_DIRS = [BASE_DIR / "static"]
+
+# Windows has no registry entry for web fonts, so mimetypes serves them as
+# application/octet-stream. Browsers usually sniff past that, but a strict
+# Content-Type policy will refuse the font and every icon renders as a box.
+mimetypes.add_type("font/woff", ".woff", strict=True)
+mimetypes.add_type("font/woff2", ".woff2", strict=True)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
