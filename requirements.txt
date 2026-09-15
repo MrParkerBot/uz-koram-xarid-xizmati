@@ -1,0 +1,3 @@
+# Runtime dependencies for the Uz-Koram Xarid Xizmati Bo'limi application.
+# Pinned so that an empty environment installs exactly what was validated.
+Django==5.1.1
