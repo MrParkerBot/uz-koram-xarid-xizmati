@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
 
 from django.conf import settings
 from django.test import SimpleTestCase
@@ -74,19 +74,23 @@ class BooleanSettingTests(SimpleTestCase):
 
     def test_recognised_true_spellings_are_accepted(self) -> None:
         for spelling in ("1", "true", "TRUE", "yes", "on", " On "):
-            with self.subTest(spelling=spelling):
-                with environment_variable(TEST_VARIABLE, spelling):
-                    self.assertTrue(
-                        read_boolean_setting(TEST_VARIABLE, default=False)
-                    )
+            with (
+                self.subTest(spelling=spelling),
+                environment_variable(TEST_VARIABLE, spelling),
+            ):
+                self.assertTrue(
+                    read_boolean_setting(TEST_VARIABLE, default=False)
+                )
 
     def test_recognised_false_spellings_are_accepted(self) -> None:
         for spelling in ("0", "false", "no", "off"):
-            with self.subTest(spelling=spelling):
-                with environment_variable(TEST_VARIABLE, spelling):
-                    self.assertFalse(
-                        read_boolean_setting(TEST_VARIABLE, default=True)
-                    )
+            with (
+                self.subTest(spelling=spelling),
+                environment_variable(TEST_VARIABLE, spelling),
+            ):
+                self.assertFalse(
+                    read_boolean_setting(TEST_VARIABLE, default=True)
+                )
 
     def test_unrecognised_value_falls_back_to_the_default(self) -> None:
         with environment_variable(TEST_VARIABLE, "ture"):

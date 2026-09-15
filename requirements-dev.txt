@@ -1,0 +1,4 @@
+# Development and gate dependencies. Install alongside requirements.txt:
+#   pip install -r requirements.txt -r requirements-dev.txt
+# Pinned so the pull request gate enforces the same rules on every machine.
+ruff==0.16.7

@@ -24,9 +24,18 @@ The application answers at <http://127.0.0.1:8000/>.
 
 ## Running the checks
 
+Both commands must pass before a pull request is opened.
+
 ```bash
+pip install -r requirements.txt -r requirements-dev.txt
 python manage.py test
+ruff check .
 ```
+
+`ruff.toml` lists the enabled rule set explicitly rather than relying on ruff's
+defaults, so upgrading ruff cannot silently change what the gate enforces.
+Generated migrations are excluded, because rewriting them by hand is how
+migrations get broken.
 
 ## Configuration
 
