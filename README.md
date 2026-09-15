@@ -28,10 +28,15 @@ The application answers at <http://127.0.0.1:8000/>.
 python manage.py test
 ```
 
+The suite builds a test database from the migrations on every run, so a broken
+database configuration fails the tests rather than surfacing later. It also
+checks that no model change is missing a migration.
+
 ## Configuration
 
 Settings that differ between machines are read from the environment, so no
-secret is committed.
+secret is committed. `.env.example` lists every variable with placeholder
+values; copy it to `.env` or export the variables directly.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
