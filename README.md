@@ -36,7 +36,8 @@ checks that no model change is missing a migration.
 
 Settings that differ between machines are read from the environment, so no
 secret is committed. `.env.example` lists every variable with placeholder
-values; copy it to `.env` or export the variables directly.
+values as a reference. Nothing loads a `.env` file at runtime, so export the
+variables in your shell or set them in your deployment's environment.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
