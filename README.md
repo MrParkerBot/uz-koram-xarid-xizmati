@@ -24,13 +24,22 @@ The application answers at <http://127.0.0.1:8000/>.
 
 ## Running the checks
 
+Both commands must pass before a pull request is opened.
+
 ```bash
+pip install -r requirements.txt -r requirements-dev.txt
 python manage.py test
+ruff check .
 ```
 
 The suite builds a test database from the migrations on every run, so a broken
 database configuration fails the tests rather than surfacing later. It also
 checks that no model change is missing a migration.
+
+`ruff.toml` lists the enabled rule set explicitly rather than relying on ruff's
+defaults, so upgrading ruff cannot silently change what the gate enforces.
+Generated migrations are excluded, because rewriting them by hand is how
+migrations get broken.
 
 ## Configuration
 
