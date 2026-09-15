@@ -42,6 +42,17 @@ secret is committed.
 Debug is off unless the environment turns it on, so an unconfigured deployment
 is the safe one rather than the permissive one.
 
+## Front-end assets
+
+The Bootstrap build, icon font and JavaScript supplied with the technical
+assignment live in `static/` and are served as-is. They are deliberately not
+rebuilt or minified again, so the interface the customer approved is the one
+that ships.
+
+```bash
+python manage.py collectstatic
+```
+
 ## Project status
 
 This is the application skeleton only. The root URL currently serves a
