@@ -32,6 +32,10 @@ python manage.py test
 ruff check .
 ```
 
+The suite builds a test database from the migrations on every run, so a broken
+database configuration fails the tests rather than surfacing later. It also
+checks that no model change is missing a migration.
+
 `ruff.toml` lists the enabled rule set explicitly rather than relying on ruff's
 defaults, so upgrading ruff cannot silently change what the gate enforces.
 Generated migrations are excluded, because rewriting them by hand is how
@@ -40,7 +44,9 @@ migrations get broken.
 ## Configuration
 
 Settings that differ between machines are read from the environment, so no
-secret is committed.
+secret is committed. `.env.example` lists every variable with placeholder
+values as a reference. Nothing loads a `.env` file at runtime, so export the
+variables in your shell or set them in your deployment's environment.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
