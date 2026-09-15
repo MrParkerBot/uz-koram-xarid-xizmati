@@ -51,8 +51,11 @@ ALLOWED_HOSTS = read_list_setting(
     "DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"]
 )
 
+# The Django admin is deliberately absent. The specification defines its own
+# role model and administration pages in section 11, and a second parallel
+# administration surface would sit outside the permission matrix TASK-UZK-012
+# builds. Add it only if a requirement asks for it.
 INSTALLED_APPS = [
-    "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
