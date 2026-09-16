@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block page_title %}Tayinlangan Arizalar{% endblock %}
+{% block breadcrumb %}Arizalar / Tayinlangan{% endblock %}
+{% block page_heading %}Tayinlangan{% endblock %}
+{% block content %}
+
+
+    <div class="page-header">
+      <div><h1 class="page-title">Tayinlangan Arizalar</h1><div class="muted">Assigned Applications — Specialist View</div></div>
+      <div class="page-actions">
+        <span class="role-tag role-manager">Manager</span>
+        <span class="role-tag role-specialist">Specialist</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar"><div class="toolbar-group">
+        <span class="toolbar-label">Filter:</span>
+        <select class="form-control" style="width:150px;" onchange="filterTable()">
+          <option value="">Bo'lim: barchasi</option>
+          <option>Texnik bo'lim</option>
+          <option>Ishlab chiqarish</option>
+          <option>Moliya bo'limi</option>
+        </select>
+        <select class="form-control" style="width:170px;" onchange="filterTable()">
+          <option value="">Holati: barchasi</option>
+          <option>Boshlang'ich</option>
+          <option>Birjaga qo'yilgan</option>
+          <option>Shartnoma tuzilgan</option>
+          <option>Yetkazib berilgan</option>
+        </select>
+        <button class="btn btn-primary-custom btn-sm"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
+        </div><div class="toolbar-group">
+          <button class="btn btn-outline-custom btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
+          <button class="btn btn-outline-custom btn-sm"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table-app" id="tayinlangan-table">
+          <thead><tr>
+            <th style="width:36px;">#</th>
+            <th>Ariza №</th>
+            <th>Bo'lim</th>
+            <th>Mahsulot Turi</th>
+            <th>Buyurtma nomi</th>
+            <th>Soni</th>
+            <th>O'lchov</th>
+            <th>Izoh</th>
+            <th>PDF</th>
+            <th>Qabul sanasi</th>
+            <th style="text-align:center;width:120px;">Qabul</th>
+            <th style="width:180px;">Holat</th>
+          </tr></thead>
+          <tbody id="tayinlangan-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pagination-wrap">
+        <button class="btn btn-outline-custom btn-sm">‹ Oldingi</button>
+        <button class="btn btn-primary-custom btn-sm">1</button>
+        <button class="btn btn-outline-custom btn-sm">Keyingi ›</button>
+        <div class="pagination-info"><span>Jami: <span id="total-count">4</span> ta</span></div>
+      </div>
+    </div>
+  
+{% endblock %}
+{% block extra_scripts %}
+<script>
+const statusOptions = ["Boshlang'ich","Birjaga qo'yilgan","Shartnoma tuzilgan","Yetkazib berilgan","Bekor qilingan"];
+const statusColors  = {"Boshlang'ich":"badge-soft","Birjaga qo'yilgan":"badge-trial","Shartnoma tuzilgan":"badge-info","Yetkazib berilgan":"badge-approved","Bekor qilingan":"badge-danger"};
+
+let data = [
+  {id:1, num:'ARZ-2025-001', bolim:'Texnik bo\'lim',   mahsulot:'100042 — Metal', nomi:'Bolt M12×50',     soni:500,  olchov:'ta', izoh:'Zanglamaydigan', date:'2025-03-10', accepted:false, status:'Boshlang\'ich'},
+  {id:2, num:'ARZ-2025-003', bolim:'Moliya bo\'limi',   mahsulot:'300015 — Elektr',nomi:'Kabel 4mm²',      soni:200,  olchov:'m',  izoh:'Mis kabel',      date:'2025-03-12', accepted:true,  status:'Shartnoma tuzilgan'},
+  {id:3, num:'ARZ-2025-006', bolim:'Ishlab chiqarish', mahsulot:'500022 — Yoqilg\'i',nomi:'Dizel yoqilg\'isi',soni:1000,olchov:'l', izoh:'Euro-5',       date:'2025-03-15', accepted:false, status:"Birjaga qo'yilgan"},
+  {id:4, num:'ARZ-2025-008', bolim:'Texnik bo\'lim',   mahsulot:'600011 — Asboblar',nomi:'Gayka M10',      soni:2000, olchov:'ta', izoh:'Yulduzsimon',    date:'2025-03-17', accepted:true,  status:'Yetkazib berilgan'},
+];
+
+function acceptItem(id) {
+  const item = data.find(d=>d.id===id);
+  if (item) { item.accepted = true; }
+  renderTable();
+  Toast.success('Ariza qabul qilindi  Admin xabardor qilindi.');
+}
+
+function changeStatus(id, val) {
+  const item = data.find(d=>d.id===id);
+  if (item) item.status = val;
+  Toast.success('Holat saqlandi');
+}
+
+function filterTable() {}
+
+function renderTable() {
+  const tbody = document.getElementById('tayinlangan-tbody');
+  tbody.innerHTML = data.map((item,i) => `
+    <tr data-id="${item.id}">
+      <td>${i+1}</td>
+      <td class="mono-cell">${item.num}</td>
+      <td>${item.bolim}</td>
+      <td style="font-size:11px;">${item.mahsulot}</td>
+      <td style="font-weight:500;">${item.nomi}</td>
+      <td style="font-weight:600;color:var(--color-primary);">${item.soni}</td>
+      <td>${item.olchov}</td>
+      <td style="font-size:11px;color:var(--color-text-muted);">${item.izoh}</td>
+      <td><span class="pdf-badge"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></span></td>
+      <td class="mono-cell">${item.date}</td>
+      <td style="text-align:center;">
+        ${item.accepted
+          ? `<span class="badge badge-approved"><i class="bi bi-check-lg" aria-hidden="true"></i> Qabul qilindi</span>`
+          : `<button class="btn btn-primary-custom btn-xs" onclick="acceptItem(${item.id})"><i class="bi bi-check-lg" aria-hidden="true"></i> Qabul</button>`
+        }
+      </td>
+      <td>
+        <select class="form-control status-dropdown" style="font-size:11px;padding:5px 8px;" onchange="changeStatus(${item.id}, this.value)">
+          ${statusOptions.map(s=>`<option ${s===item.status?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </td>
+    </tr>
+  `).join('');
+  document.getElementById('total-count').textContent = data.length;
+}
+
+renderTable();
+</script>
+{% endblock %}

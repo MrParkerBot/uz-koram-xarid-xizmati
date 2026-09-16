@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+{% block page_title %}Foydalanuvchilar{% endblock %}
+{% block breadcrumb %}Ma'lumotlar / Foydalanuvchilar{% endblock %}
+{% block page_heading %}Foydalanuvchilar{% endblock %}
+{% block content %}
+
+
+    <div class="page-header">
+      <div><h1 class="page-title">Foydalanuvchilar</h1><div class="muted">Tizim foydalanuvchilari boshqaruvi</div></div>
+      <div class="page-actions"><span class="role-tag role-admin">Admin only</span></div>
+    </div>
+
+    <div class="alert alert-warning" style="margin-bottom:20px;">
+      <span><i class="bi bi-exclamation-triangle" aria-hidden="true"></i></span>
+      <div><strong>Tahrirlash ruxsati:</strong> Faqat bitta foydalanuvchi tahrirlash ruxsatiga ega bo'lishi mumkin. Boshqa foydalanuvchiga ruxsat berilganda, avvalgisinikini avtomatik o'chiriladi.</div>
+    </div>
+
+    <div class="panel" style="margin-bottom:20px;">
+      <div class="panel-header">
+        <div class="panel-title">Foydalanuvchilar Ro'yhati</div>
+        <button class="btn btn-primary-custom btn-sm" onclick="showAddForm()">+ Yangi qo'shish</button>
+      </div>
+      <div class="toolbar">
+        <div class="toolbar-group">
+          <div class="search-box" style="max-width:300px;"><i class="bi bi-search search-icon" aria-hidden="true"></i><input type="text" class="form-control" id="search-input" placeholder="Ism yoki telefon qidirish…"/></div>
+          <select class="form-select" id="role-filter" onchange="filterTable()">
+            <option value="">Barcha rollar</option>
+            <option value="Admin">Admin</option>
+            <option value="Manager">Manager</option>
+            <option value="Specialist">Specialist</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table-app" id="users-table">
+          <thead><tr>
+            <th style="width:40px;">#</th>
+            <th>To'liq Ism</th>
+            <th>Parol</th>
+            <th>Telefon</th>
+            <th>User Type</th>
+            <th style="text-align:center;">Tahrirlash ruxsati</th>
+            <th style="text-align:center;">Amallar</th>
+          </tr></thead>
+          <tbody id="users-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pagination-wrap">
+        <button class="btn btn-outline-custom btn-sm prev-btn">‹ Oldingi</button>
+        <button class="btn btn-primary-custom btn-sm page-btn" data-page="1">1</button>
+        <button class="btn btn-outline-custom btn-sm next-btn">Keyingi ›</button>
+        <div class="pagination-info"><span>Jami: <span class="count">4</span> ta</span></div>
+      </div>
+    </div>
+  
+{% endblock %}
+{% block extra_scripts %}
+<!-- ADD/EDIT MODAL -->
+<div id="user-modal" class="modal-overlay hidden">
+  <div class="modal-box modal-lg">
+    <div class="modal-title" id="user-modal-title">Yangi Foydalanuvchi Qo'shish</div>
+    <input type="hidden" id="edit-user-id"/>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Ism <span style="color:var(--color-danger)">*</span></label>
+        <input type="text" class="form-control" id="u-firstname" placeholder="Ismini kiriting" required/>
+        <div class="form-error" id="u-firstname-err"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Familiya <span style="color:var(--color-danger)">*</span></label>
+        <input type="text" class="form-control" id="u-lastname" placeholder="Familiyasini kiriting" required/>
+        <div class="form-error" id="u-lastname-err"></div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Parol <span style="color:var(--color-danger)">*</span></label>
+        <div class="input-group">
+          <input type="password" class="form-control pwd-strength-input" id="u-password" placeholder="Parolni kiriting" required/>
+          <button type="button" class="input-group-icon pwd-toggle" aria-label="Parolni ko'rsatish"><i class="bi bi-eye" aria-hidden="true"></i></button>
+        </div>
+        <div class="pwd-strength">
+          <div class="pwd-strength-bar"></div>
+          <div class="pwd-strength-bar"></div>
+          <div class="pwd-strength-bar"></div>
+        </div>
+        <div class="form-error" id="u-password-err"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Telefon Raqam <span style="color:var(--color-danger)">*</span></label>
+        <div class="input-group">
+          <input type="text" class="form-control" id="u-phone" placeholder="90 123 45 67" maxlength="12" required/>
+          <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--color-text-muted);font-family:var(--mono);">+998</span>
+        </div>
+        <div class="form-hint">Format: 90 123 45 67</div>
+        <div class="form-error" id="u-phone-err"></div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">User Type <span style="color:var(--color-danger)">*</span></label>
+        <select class="form-control" id="u-role">
+          <option value="Admin">Admin</option>
+          <option value="Manager">Manager</option>
+          <option value="Specialist">Specialist</option>
+          <option value="Director">Director</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tahrirlash Ruxsati</label>
+        <div class="toggle-wrap" style="margin-top:10px;">
+          <label class="toggle">
+            <input type="checkbox" id="u-edit-perm"/>
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label">Tahrirlash huquqini berish</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline-custom" onclick="Modal.close('user-modal')">Bekor</button>
+      <button class="btn btn-primary-custom" onclick="saveUser()"><i class="bi bi-save" aria-hidden="true"></i> Saqlash</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const roleColors = {Admin:'badge-primary',Manager:'badge-info',Specialist:'badge-approved',Director:'badge-trial'};
+let editingId = null;
+let users = [
+  {id:1,first:'Abdulloh',last:'Karimov',  password:'admin123',  phone:'90 111 22 33',role:'Admin',      editPerm:true},
+  {id:2,first:'Bobur',   last:'Toshmatov',password:'manager123',phone:'91 222 33 44',role:'Manager',    editPerm:false},
+  {id:3,first:'Dilnoza', last:'Yusupova', password:'spec123',   phone:'93 333 44 55',role:'Specialist', editPerm:false},
+  {id:4,first:'Islom',   last:'Mirzaev',  password:'dir123',    phone:'94 444 55 66',role:'Director',   editPerm:false},
+];
+let nextId = 5;
+
+function showAddForm() {
+  editingId = null;
+  document.getElementById('user-modal-title').textContent = 'Yangi Foydalanuvchi Qo\'shish';
+  document.getElementById('u-firstname').value = '';
+  document.getElementById('u-lastname').value  = '';
+  document.getElementById('u-password').value  = '';
+  document.getElementById('u-phone').value     = '';
+  document.getElementById('u-role').value      = 'Manager';
+  document.getElementById('u-edit-perm').checked = false;
+  ['u-firstname-err','u-lastname-err','u-password-err','u-phone-err'].forEach(id => { document.getElementById(id).textContent = ''; });
+  Modal.open('user-modal');
+}
+
+function editUser(id) {
+  const user = users.find(u=>u.id===id);
+  if (!user) return;
+  editingId = id;
+  document.getElementById('user-modal-title').textContent = 'Foydalanuvchini Tahrirlash';
+  document.getElementById('u-firstname').value = user.first;
+  document.getElementById('u-lastname').value  = user.last;
+  document.getElementById('u-password').value  = user.password;
+  document.getElementById('u-phone').value     = user.phone;
+  document.getElementById('u-role').value      = user.role;
+  document.getElementById('u-edit-perm').checked = user.editPerm;
+  Modal.open('user-modal');
+}
+
+function saveUser() {
+  const first    = document.getElementById('u-firstname').value.trim();
+  const last     = document.getElementById('u-lastname').value.trim();
+  const password = document.getElementById('u-password').value.trim();
+  const phone    = document.getElementById('u-phone').value.trim();
+  const role     = document.getElementById('u-role').value;
+  const editPerm = document.getElementById('u-edit-perm').checked;
+
+  let valid = true;
+  if (!first)    { document.getElementById('u-firstname-err').textContent = 'Majburiy maydon'; valid=false; }
+  if (!last)     { document.getElementById('u-lastname-err').textContent  = 'Majburiy maydon'; valid=false; }
+  if (!password) { document.getElementById('u-password-err').textContent  = 'Majburiy maydon'; valid=false; }
+  if (!phone)    { document.getElementById('u-phone-err').textContent     = 'Majburiy maydon'; valid=false; }
+  if (!valid) return;
+
+  if (editPerm) {
+    const activeOther = users.find(u => u.editPerm && u.id !== editingId);
+    if (activeOther) {
+      Modal.confirm('Ruxsat o\'zgarishi', `${activeOther.first} ${activeOther.last}ga tahrirlash ruxsatini bekor qiladi. Davom etasizmi?`, () => {
+        users.forEach(u => u.editPerm = false);
+        doSave(first,last,password,phone,role,editPerm);
+      });
+      return;
+    }
+  }
+  doSave(first,last,password,phone,role,editPerm);
+}
+
+function doSave(first,last,password,phone,role,editPerm) {
+  if (editPerm) users.forEach(u => u.editPerm = false);
+  if (editingId) {
+    const u = users.find(u=>u.id===editingId);
+    if (u) Object.assign(u, {first,last,password,phone,role,editPerm});
+    Toast.success('Muvaffaqiyatli yangilandi');
+  } else {
+    users.push({id:nextId++, first,last,password,phone,role,editPerm});
+    Toast.success('Foydalanuvchi qo\'shildi');
+  }
+  Modal.close('user-modal');
+  renderTable();
+}
+
+function deleteUser(id) {
+  const u = users.find(u=>u.id===id);
+  Modal.confirm('O\'chirishni tasdiqlaysizmi?', `"${u.first} ${u.last}" o\'chirib tashlanadi.`, () => {
+    users = users.filter(u=>u.id!==id); renderTable(); Toast.success('O\'chirildi');
+  });
+}
+
+function togglePwd(id) {
+  const el = document.getElementById('pwd-'+id);
+  if (el.textContent === '••••••') el.textContent = users.find(u=>u.id===id)?.password || '';
+  else el.textContent = '••••••';
+}
+
+function filterTable() {
+  const roleVal = document.getElementById('role-filter').value.toLowerCase();
+  document.querySelectorAll('#users-tbody tr').forEach(row => {
+    const text = row.textContent.toLowerCase();
+    const matchRole = !roleVal || text.includes(roleVal);
+    row.style.display = matchRole ? '' : 'none';
+  });
+}
+
+function renderTable() {
+  const tbody = document.getElementById('users-tbody');
+  tbody.innerHTML = users.map((u,i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td>
+        <div class="user-avatar-cell">
+          <div class="user-avatar">${u.first[0]}${u.last[0]}</div>
+          <span>${u.first} ${u.last}</span>
+        </div>
+      </td>
+      <td>
+        <div class="pwd-cell">
+          <span class="pwd-mask" id="pwd-${u.id}">••••••</span>
+          <button class="btn btn-outline-custom btn-xs" onclick="togglePwd(${u.id})" aria-label="Ko'rish"><i class="bi bi-eye" aria-hidden="true"></i></button>
+        </div>
+      </td>
+      <td class="mono-cell">+998 ${u.phone}</td>
+      <td><span class="badge ${roleColors[u.role]}">${u.role}</span></td>
+      <td style="text-align:center;">
+        <label class="toggle edit-permission-toggle-wrap">
+          <input type="checkbox" class="edit-permission-toggle" data-user-id="${u.id}" data-user-name="${u.first} ${u.last}" ${u.editPerm?'checked':''}/>
+          <span class="toggle-slider"></span>
+        </label>
+      </td>
+      <td style="text-align:center;white-space:nowrap;">
+        <button class="btn btn-outline-custom btn-xs" onclick="editUser(${u.id})"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</button>
+        <button class="btn btn-outline-custom text-danger btn-xs" onclick="deleteUser(${u.id})" aria-label="O'chirish"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+      </td>
+    </tr>
+  `).join('');
+  initEditPermissionToggle();
+}
+
+renderTable();
+initTableSearch('#search-input', '#users-table');
+</script>
+{% endblock %}
