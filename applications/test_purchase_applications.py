@@ -213,6 +213,34 @@ class DepartmentTests(PurchaseTestCase):
         self.assertFalse(PurchaseApplication.objects.exists())
         self.assertContains(response, "bo`lim biriktirilmagan")
 
+    def test_a_retired_department_says_so_rather_than_saying_none(
+        self,
+    ) -> None:
+        """The #42 review found both refusals reading as the same one.
+
+        department_of() answers None for a requester who was never given a
+        department and for one whose department has been retired. The
+        remedies differ and the requester can apply neither, so the message
+        is the whole of what they get.
+        """
+        self.department.is_active = False
+        self.department.save(update_fields=["is_active"])
+
+        response = self.create()
+
+        self.assertFalse(PurchaseApplication.objects.exists())
+        self.assertContains(response, "faol emas")
+        self.assertContains(response, self.department.name)
+        self.assertNotContains(response, "biriktirilmagan")
+
+    def test_never_having_had_one_still_says_that(self) -> None:
+        self.client.force_login(make_user(USERS))
+
+        response = self.create()
+
+        self.assertContains(response, "biriktirilmagan")
+        self.assertNotContains(response, "faol emas")
+
     def test_the_form_shows_the_department_it_will_use(self) -> None:
         self.assertIn(self.department.name, self.page())
 

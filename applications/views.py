@@ -24,6 +24,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from accounts.models import UserProfile
 from accounts.permissions import may_open
 from accounts.roles import (
     KATTA_MUTAXASIS,
@@ -769,6 +770,33 @@ def purchase_application_list(request: HttpRequest) -> HttpResponse:
     )
 
 
+def why_no_department(user) -> str:
+    """Which of the two ways a requester can have no department to use.
+
+    department_of() answers None for both - never assigned one, and assigned
+    one an administrator has since retired - and the #42 review found the
+    second being reported as the first. The remedies differ: somebody has to
+    give them a department, or somebody has to bring the department back. A
+    requester cannot do either, so the message is the whole of what they get
+    and it has to name the right one.
+    """
+    profile = UserProfile.objects.filter(user=user).select_related(
+        "department"
+    ).first()
+    retired = profile is not None and profile.department is not None
+
+    if retired:
+        return (
+            f"Xarid arizasi yaratilmadi: bo`limingiz ({profile.department.name}) "
+            "faol emas. Administratorga murojaat qiling."
+        )
+
+    return (
+        "Xarid arizasi yaratilmadi: hisobingizga bo`lim biriktirilmagan. "
+        "Administratorga murojaat qiling."
+    )
+
+
 @require_POST
 def purchase_application_create(request: HttpRequest) -> HttpResponse:
     """Raise a purchase application (REQ-ARIZA-015).
@@ -790,11 +818,7 @@ def purchase_application_create(request: HttpRequest) -> HttpResponse:
     department = department_of(request.user)
 
     if department is None:
-        messages.error(
-            request,
-            "Xarid arizasi yaratilmadi: hisobingizga bo`lim biriktirilmagan. "
-            "Administratorga murojaat qiling.",
-        )
+        messages.error(request, why_no_department(request.user))
         return render(
             request,
             PURCHASE_TEMPLATE,
@@ -837,16 +861,17 @@ def purchase_application_create(request: HttpRequest) -> HttpResponse:
 def purchase_application_pdf(request: HttpRequest, pk: int) -> FileResponse:
     """Download one purchase application's PDF (DEC-019).
 
-    Answers to the xarid-ariza permission rather than to a stage map: a
-    purchase application is on one page for its whole life, so there is no
-    equivalent of PAGE_SHOWING_STAGE to consult.
+    The permission is on the route rather than in here, which is the opposite
+    of application_pdf() and deliberate: that one asks about the page showing
+    the record's current stage, and a purchase application is on one page for
+    its whole life. There is no PAGE_SHOWING_STAGE equivalent to consult, so
+    require_page_permission('xarid-ariza') on the route is the whole rule.
+
+    The #42 review found both a wrapper and an in-view check here. Two
+    controls where one can never fail invites somebody to remove the one that
+    matters.
     """
     application = get_object_or_404(PurchaseApplication, pk=pk)
-
-    if not may_open(request.user, "xarid-ariza"):
-        raise PermissionDenied(
-            f"{request.user} may not see {application.xarid_raqami}."
-        )
 
     return attachment_response(
         application.pdf, f"{application.xarid_raqami}.pdf"
