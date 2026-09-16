@@ -19,3 +19,7 @@ media/
 # Editors
 .idea/
 .vscode/
+
+# Uploaded attachments (DEC-019). Stored on local disk outside anything the web
+# server publishes, and never committed: they are customer documents.
+/attachments/

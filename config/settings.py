@@ -66,6 +66,9 @@ INSTALLED_APPS = [
     # TASK-UZK-016 onward. After accounts, which owns the shared master data
     # module it is built on.
     "reference",
+    # The work itself - applications from TASK-UZK-022, and the contracts
+    # that follow them. After reference, whose lists they point at.
+    "applications",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -144,6 +147,20 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Where uploaded attachments live (DEC-019).
+#
+# Deliberately not MEDIA_ROOT, and there is deliberately no MEDIA_URL. Django
+# does not publish MEDIA_ROOT by itself, but the setting is an invitation to
+# wire it up, and the day somebody does, every attachment becomes readable by
+# anybody who can guess a filename. DEC-019 says an attachment is served
+# through a permission check instead, so the only route to a file is a view
+# that asks the permission matrix first.
+#
+# Outside BASE_DIR / "static" and outside STATIC_ROOT, so nothing the static
+# machinery collects or serves can reach it. config/test_attachment_root.py
+# fails if that stops being true.
+ATTACHMENT_ROOT = BASE_DIR / "attachments"
 
 # The Bootstrap build, icon font and JavaScript supplied with the technical
 # assignment. They are served as-is rather than rebuilt, so the interface the
