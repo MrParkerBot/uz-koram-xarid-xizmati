@@ -40,11 +40,11 @@ from accounts.views import (
     user_update,
 )
 from reference.ariza_status_views import ariza_status_page
+from reference.shartnoma_status_views import shartnoma_status_page
 
 # Every page except the dashboard, which answers at the site root. Each entry
 # is (url path, URL name); the template is pages/<name>.html.
 PAGE_ROUTES: tuple[tuple[str, str], ...] = (
-    ("shartnoma-status/", "shartnoma-status"),
     ("mahsulot-turlari/", "mahsulot-turlari"),
     ("shartnoma-turi/", "shartnoma-turi"),
     ("kelib-arizalar/", "kelib-arizalar"),
@@ -186,5 +186,35 @@ urlpatterns = [
         "ariza-status/<int:pk>/delete/",
         require_page_permission("ariza-status")(ariza_status_page.delete_record),
         name="ariza-status-delete",
+    ),
+    # The Shartnoma Status master data page (TASK-UZK-017). DEC-010 makes the
+    # statuses editable, so the reports read this table rather than a constant.
+    path(
+        "shartnoma-status/",
+        require_page_permission("shartnoma-status")(
+            shartnoma_status_page.list_records
+        ),
+        name="shartnoma-status",
+    ),
+    path(
+        "shartnoma-status/add/",
+        require_page_permission("shartnoma-status")(
+            shartnoma_status_page.create_record
+        ),
+        name="shartnoma-status-create",
+    ),
+    path(
+        "shartnoma-status/<int:pk>/edit/",
+        require_page_permission("shartnoma-status")(
+            shartnoma_status_page.update_record
+        ),
+        name="shartnoma-status-update",
+    ),
+    path(
+        "shartnoma-status/<int:pk>/delete/",
+        require_page_permission("shartnoma-status")(
+            shartnoma_status_page.delete_record
+        ),
+        name="shartnoma-status-delete",
     ),
 ]

@@ -1,13 +1,16 @@
-"""Tests for the Ariza Status master data page of TASK-UZK-016.
+"""Tests for the Shartnoma Status master data page of TASK-UZK-017.
 
-The third page of this shape and the first built out of MasterDataPage, so
-what these prove is the shared quartet as much as the page: Save adds, Cancel
-leaves nothing behind, Edit opens filled in, and Delete asks first and then
-deactivates rather than removing (DEC-009).
+The second page built out of MasterDataPage. The quartet it shares with Ariza
+Status is proved again here rather than assumed: the two pages are wired
+separately, and a route pointing at the wrong table would pass every test that
+only exercised the other page.
 
-The seeding tests are the ones that are specific to this page. DEC-017 seeds
-four statuses as examples rather than as fixed system rows, and the difference
-matters: unlike the six User Types, these may be renamed and deleted.
+The seeding tests carry the weight specific to this page. Sections 4.3 to 4.6
+print five contract statuses as fixed counter columns and section 3.5 makes
+them editable master data; DEC-010 settles it in favour of section 3.5. So the
+five are seeded as examples, every one of them can be renamed and deleted, and
+these tests say so - because TASK-UZK-044 and TASK-UZK-045 have to generate
+their columns from this table rather than from the document's illustration.
 """
 
 from __future__ import annotations
@@ -22,11 +25,25 @@ from django.utils.crypto import get_random_string
 
 from accounts.models import UserType
 from accounts.roles import ADMIN, MENEJER, assign_user_type
-from reference.models import ArizaStatus
+from reference.models import ShartnomaStatus
 
 # No apostrophe: the page escapes one to &#x27;, which would make every
 # assertion about the rendered name an assertion about HTML escaping.
-ADDED_STATUS = "Kelishilmoqda"
+ADDED_STATUS = "Imzolanmoqda"
+
+# The five DEC-010 seeds. Named here so the tests read against the decision
+# rather than against a list retyped in six places.
+SEEDED_STATUSES = (
+    "Boshlang`ich xolatda",
+    "Birjaga qo`yilgan",
+    "Shartnoma tuzilgan",
+    "Yetkazib berilgan",
+    "Bekor qilingan",
+)
+
+# One seeded status the tests rename and clash against. A backtick rather than
+# an apostrophe, which is what the supplied pages use for these names.
+RENAMEABLE = "Boshlang`ich xolatda"
 
 
 def make_user(type_name: str = ADMIN):
@@ -40,8 +57,8 @@ def make_user(type_name: str = ADMIN):
     return user
 
 
-class ArizaStatusPageTestCase(TestCase):
-    """An administrator on the Ariza Status page."""
+class ShartnomaStatusPageTestCase(TestCase):
+    """An administrator on the Shartnoma Status page."""
 
     def setUp(self) -> None:
         self.client.force_login(make_user(ADMIN))
@@ -53,57 +70,53 @@ class ArizaStatusPageTestCase(TestCase):
             "category_number": "",
         }
         fields.update(overrides)
-        return self.client.post(reverse("ariza-status-create"), fields)
+        return self.client.post(reverse("shartnoma-status-create"), fields)
 
     def page(self) -> str:
-        return self.client.get(reverse("ariza-status")).content.decode()
+        return self.client.get(reverse("shartnoma-status")).content.decode()
 
 
-class SeedingTests(ArizaStatusPageTestCase):
-    """DEC-017: four statuses to start with, as examples rather than rules."""
+class SeedingTests(ShartnomaStatusPageTestCase):
+    """DEC-010: five statuses to start with, as examples rather than a set."""
 
-    def test_the_four_decided_statuses_are_there(self) -> None:
+    def test_the_five_decided_statuses_are_there(self) -> None:
         self.assertEqual(
-            set(ArizaStatus.objects.values_list("name", flat=True)),
-            {"Yangi", "Qabul qilingan", "Tayinlangan", "Bekor qilingan"},
+            set(ShartnomaStatus.objects.values_list("name", flat=True)),
+            set(SEEDED_STATUSES),
         )
 
     def test_they_appear_on_the_page(self) -> None:
         page = self.page()
 
-        for name in ("Yangi", "Qabul qilingan", "Tayinlangan", "Bekor qilingan"):
+        for name in SEEDED_STATUSES:
             with self.subTest(status=name):
                 self.assertIn(name, page)
 
     def test_they_are_listed_in_the_order_the_work_moves_through_them(self) -> None:
         # Not alphabetically, which would put Bekor qilingan first and the
-        # new-application state last. TASK-UZK-017 gave both status tables a
-        # position column for this; a status list describes a progression.
+        # starting state third. DEC-010 has the reports generate one column
+        # per active status, so this is also the order those columns come out
+        # in, and the document illustrates them in workflow order.
         self.assertEqual(
-            list(ArizaStatus.objects.active().values_list("name", flat=True)),
-            ["Yangi", "Qabul qilingan", "Tayinlangan", "Bekor qilingan"],
+            list(ShartnomaStatus.objects.active().values_list("name", flat=True)),
+            list(SEEDED_STATUSES),
         )
 
     def test_a_new_status_is_appended_rather_than_sorted_in(self) -> None:
         self.create()
 
-        listed = list(ArizaStatus.objects.active().values_list("name", flat=True))
+        listed = list(
+            ShartnomaStatus.objects.active().values_list("name", flat=True)
+        )
 
         self.assertEqual(listed[-1], ADDED_STATUS)
-
-    def test_a_status_given_a_position_lands_there(self) -> None:
-        self.create(position=15)
-
-        listed = list(ArizaStatus.objects.active().values_list("name", flat=True))
-
-        self.assertEqual(listed[1], ADDED_STATUS)
 
     def test_a_seeded_status_can_be_deleted(self) -> None:
         # Unlike the six User Types, these are examples. Nothing in the code
         # is written against their names, so nothing breaks when one goes.
-        seeded = ArizaStatus.objects.get(name="Tayinlangan")
+        seeded = ShartnomaStatus.objects.get(name="Birjaga qo`yilgan")
 
-        self.client.post(reverse("ariza-status-delete", args=[seeded.pk]))
+        self.client.post(reverse("shartnoma-status-delete", args=[seeded.pk]))
         seeded.refresh_from_db()
 
         self.assertFalse(seeded.is_active)
@@ -112,25 +125,25 @@ class SeedingTests(ArizaStatusPageTestCase):
         # The migration runs get_or_create, so re-running it against a
         # database that already has the rows leaves them alone rather than
         # failing on the unique name.
-        seed = import_module("reference.migrations.0002_seed_ariza_statuses")
+        seed = import_module("reference.migrations.0004_seed_shartnoma_statuses")
 
-        seed.seed_ariza_statuses(apps, None)
+        seed.seed_shartnoma_statuses(apps, None)
 
-        self.assertEqual(ArizaStatus.objects.count(), 4)
+        self.assertEqual(ShartnomaStatus.objects.count(), len(SEEDED_STATUSES))
 
     def test_a_seeded_status_can_be_renamed(self) -> None:
-        seeded = ArizaStatus.objects.get(name="Yangi")
+        seeded = ShartnomaStatus.objects.get(name=RENAMEABLE)
 
         self.client.post(
-            reverse("ariza-status-update", args=[seeded.pk]),
-            {"name": "Yangi ariza", "badge_colour": "blue", "category_number": ""},
+            reverse("shartnoma-status-update", args=[seeded.pk]),
+            {"name": "Boshlanishida", "badge_colour": "blue", "category_number": ""},
         )
         seeded.refresh_from_db()
 
-        self.assertEqual(seeded.name, "Yangi ariza")
+        self.assertEqual(seeded.name, "Boshlanishida")
 
 
-class CreationTests(ArizaStatusPageTestCase):
+class CreationTests(ShartnomaStatusPageTestCase):
     """Save adds the status to the list."""
 
     def test_a_created_status_appears_in_the_table(self) -> None:
@@ -139,50 +152,54 @@ class CreationTests(ArizaStatusPageTestCase):
         self.assertIn(ADDED_STATUS, self.page())
 
     def test_creation_redirects_back_to_the_page(self) -> None:
-        self.assertRedirects(self.create(), reverse("ariza-status"))
+        self.assertRedirects(self.create(), reverse("shartnoma-status"))
 
     def test_a_name_is_required(self) -> None:
         response = self.create(name="")
 
-        self.assertFalse(ArizaStatus.objects.filter(name="").exists())
+        self.assertFalse(ShartnomaStatus.objects.filter(name="").exists())
         self.assertEqual(response.status_code, 200)
 
     def test_two_statuses_cannot_share_a_name(self) -> None:
-        response = self.create(name="Yangi")
+        response = self.create(name=RENAMEABLE)
 
-        self.assertEqual(ArizaStatus.objects.filter(name__iexact="Yangi").count(), 1)
+        self.assertEqual(
+            ShartnomaStatus.objects.filter(name__iexact=RENAMEABLE).count(), 1
+        )
         self.assertContains(response, "Bu nom allaqachon mavjud")
 
     def test_a_name_differing_only_in_case_is_refused(self) -> None:
-        response = self.create(name="YANGI")
+        response = self.create(name=RENAMEABLE.upper())
 
-        self.assertEqual(ArizaStatus.objects.filter(name__iexact="Yangi").count(), 1)
+        self.assertEqual(
+            ShartnomaStatus.objects.filter(name__iexact=RENAMEABLE).count(), 1
+        )
         self.assertEqual(response.status_code, 200)
 
     def test_a_created_status_keeps_its_badge_colour(self) -> None:
         self.create(badge_colour="green")
 
         self.assertEqual(
-            ArizaStatus.objects.get(name=ADDED_STATUS).badge_colour, "green"
+            ShartnomaStatus.objects.get(name=ADDED_STATUS).badge_colour, "green"
         )
 
     def test_the_badge_colour_becomes_a_class_the_stylesheet_defines(self) -> None:
         self.create(badge_colour="green")
 
         self.assertEqual(
-            ArizaStatus.objects.get(name=ADDED_STATUS).badge_class, "badge-approved"
+            ShartnomaStatus.objects.get(name=ADDED_STATUS).badge_class, "badge-approved"
         )
 
     def test_the_category_number_is_optional(self) -> None:
         self.create()
 
-        self.assertIsNone(ArizaStatus.objects.get(name=ADDED_STATUS).category_number)
+        self.assertIsNone(ShartnomaStatus.objects.get(name=ADDED_STATUS).category_number)
 
     def test_a_six_digit_category_number_is_accepted(self) -> None:
         self.create(category_number=100123)
 
         self.assertEqual(
-            ArizaStatus.objects.get(name=ADDED_STATUS).category_number, 100123
+            ShartnomaStatus.objects.get(name=ADDED_STATUS).category_number, 100123
         )
 
     def test_a_category_number_of_another_length_is_refused(self) -> None:
@@ -192,61 +209,61 @@ class CreationTests(ArizaStatusPageTestCase):
                 response = self.create(category_number=supplied)
 
                 self.assertFalse(
-                    ArizaStatus.objects.filter(name=ADDED_STATUS).exists()
+                    ShartnomaStatus.objects.filter(name=ADDED_STATUS).exists()
                 )
                 self.assertEqual(response.status_code, 200)
 
 
-class CancelTests(ArizaStatusPageTestCase):
+class CancelTests(ShartnomaStatusPageTestCase):
     """Cancel leaves no record behind."""
 
     def test_opening_the_form_and_leaving_creates_nothing(self) -> None:
-        before = ArizaStatus.objects.count()
+        before = ShartnomaStatus.objects.count()
 
-        self.client.get(reverse("ariza-status"))
+        self.client.get(reverse("shartnoma-status"))
 
-        self.assertEqual(ArizaStatus.objects.count(), before)
+        self.assertEqual(ShartnomaStatus.objects.count(), before)
 
     def test_cancel_from_an_edit_changes_nothing(self) -> None:
-        status = ArizaStatus.objects.get(name="Yangi")
+        status = ShartnomaStatus.objects.get(name=RENAMEABLE)
 
-        self.client.get(f"{reverse('ariza-status')}?edit={status.pk}")
-        self.client.get(reverse("ariza-status"))
+        self.client.get(f"{reverse('shartnoma-status')}?edit={status.pk}")
+        self.client.get(reverse("shartnoma-status"))
 
         status.refresh_from_db()
 
-        self.assertEqual(status.name, "Yangi")
+        self.assertEqual(status.name, RENAMEABLE)
 
 
-class EditingTests(ArizaStatusPageTestCase):
+class EditingTests(ShartnomaStatusPageTestCase):
     """Edit opens the form filled in and saves what was changed."""
 
     def setUp(self) -> None:
         super().setUp()
         self.create()
-        self.status = ArizaStatus.objects.get(name=ADDED_STATUS)
+        self.status = ShartnomaStatus.objects.get(name=ADDED_STATUS)
 
     def edit(self, **overrides):
         fields = {
-            "name": "Kelishildi",
+            "name": "Imzolandi",
             "badge_colour": "blue",
             "category_number": "",
         }
         fields.update(overrides)
         return self.client.post(
-            reverse("ariza-status-update", args=[self.status.pk]), fields
+            reverse("shartnoma-status-update", args=[self.status.pk]), fields
         )
 
     def test_the_form_opens_filled_in(self) -> None:
-        page = self.client.get(f"{reverse('ariza-status')}?edit={self.status.pk}")
+        page = self.client.get(f"{reverse('shartnoma-status')}?edit={self.status.pk}")
 
         self.assertContains(page, f'value="{ADDED_STATUS}"')
 
     def test_the_form_posts_to_the_update_route_when_editing(self) -> None:
-        page = self.client.get(f"{reverse('ariza-status')}?edit={self.status.pk}")
+        page = self.client.get(f"{reverse('shartnoma-status')}?edit={self.status.pk}")
 
         self.assertContains(
-            page, reverse("ariza-status-update", args=[self.status.pk])
+            page, reverse("shartnoma-status-update", args=[self.status.pk])
         )
 
     def test_an_edited_status_shows_the_edited_values(self) -> None:
@@ -254,49 +271,49 @@ class EditingTests(ArizaStatusPageTestCase):
 
         self.status.refresh_from_db()
 
-        self.assertEqual(self.status.name, "Kelishildi")
+        self.assertEqual(self.status.name, "Imzolandi")
         self.assertEqual(self.status.badge_colour, "blue")
         self.assertEqual(self.status.category_number, 100456)
 
     def test_editing_does_not_create_a_second_record(self) -> None:
-        before = ArizaStatus.objects.count()
+        before = ShartnomaStatus.objects.count()
 
         self.edit()
 
-        self.assertEqual(ArizaStatus.objects.count(), before)
+        self.assertEqual(ShartnomaStatus.objects.count(), before)
 
     def test_an_invalid_edit_keeps_the_form_on_the_record(self) -> None:
         # Otherwise Save on a rejected edit would silently become an Add.
-        response = self.edit(name="Yangi")
+        response = self.edit(name=RENAMEABLE)
 
         self.assertContains(
-            response, reverse("ariza-status-update", args=[self.status.pk])
+            response, reverse("shartnoma-status-update", args=[self.status.pk])
         )
 
     def test_editing_a_record_that_does_not_exist_is_a_not_found(self) -> None:
-        response = self.client.get(f"{reverse('ariza-status')}?edit=9999")
+        response = self.client.get(f"{reverse('shartnoma-status')}?edit=9999")
 
         self.assertEqual(response.status_code, 404)
 
     def test_an_edit_id_that_is_not_a_number_is_a_not_found(self) -> None:
         # ?edit= is the one place a pk reaches the page without going through
         # a URL converter, so it is the one place a non-number can arrive.
-        response = self.client.get(f"{reverse('ariza-status')}?edit=abc")
+        response = self.client.get(f"{reverse('shartnoma-status')}?edit=abc")
 
         self.assertEqual(response.status_code, 404)
 
 
-class DeletionTests(ArizaStatusPageTestCase):
+class DeletionTests(ShartnomaStatusPageTestCase):
     """DEC-009: ask, then deactivate."""
 
     def setUp(self) -> None:
         super().setUp()
         self.create()
-        self.status = ArizaStatus.objects.get(name=ADDED_STATUS)
+        self.status = ShartnomaStatus.objects.get(name=ADDED_STATUS)
 
     def delete(self):
         return self.client.post(
-            reverse("ariza-status-delete", args=[self.status.pk])
+            reverse("shartnoma-status-delete", args=[self.status.pk])
         )
 
     def test_a_deleted_status_leaves_the_list(self) -> None:
@@ -311,14 +328,14 @@ class DeletionTests(ArizaStatusPageTestCase):
         self.status.refresh_from_db()
 
         self.assertFalse(self.status.is_active)
-        self.assertTrue(ArizaStatus.objects.filter(pk=self.status.pk).exists())
+        self.assertTrue(ShartnomaStatus.objects.filter(pk=self.status.pk).exists())
 
     def test_a_deleted_status_leaves_the_active_queryset(self) -> None:
         # Which is what every drop-down in the application will be built on.
         self.delete()
 
         self.assertFalse(
-            ArizaStatus.objects.active().filter(pk=self.status.pk).exists()
+            ShartnomaStatus.objects.active().filter(pk=self.status.pk).exists()
         )
 
     def test_the_page_asks_before_deleting(self) -> None:
@@ -326,7 +343,7 @@ class DeletionTests(ArizaStatusPageTestCase):
 
     def test_deletion_needs_a_post(self) -> None:
         response = self.client.get(
-            reverse("ariza-status-delete", args=[self.status.pk])
+            reverse("shartnoma-status-delete", args=[self.status.pk])
         )
 
         self.status.refresh_from_db()
@@ -347,7 +364,7 @@ class DeletionTests(ArizaStatusPageTestCase):
 
         response = self.create()
 
-        self.assertEqual(ArizaStatus.objects.filter(name=ADDED_STATUS).count(), 1)
+        self.assertEqual(ShartnomaStatus.objects.filter(name=ADDED_STATUS).count(), 1)
         # Without the apostrophe: the page escapes it to &#x27;.
         self.assertContains(response, "chirilgan yozuvga tegishli")
 
@@ -356,23 +373,23 @@ class PermissionTests(TestCase):
     """The page is Admin-only under DEC-015, and so are its actions."""
 
     def setUp(self) -> None:
-        self.status = ArizaStatus.objects.get(name="Yangi")
+        self.status = ShartnomaStatus.objects.get(name=RENAMEABLE)
 
     def test_a_manager_may_not_open_the_page(self) -> None:
         self.client.force_login(make_user(MENEJER))
 
-        self.assertEqual(self.client.get(reverse("ariza-status")).status_code, 403)
+        self.assertEqual(self.client.get(reverse("shartnoma-status")).status_code, 403)
 
     def test_a_manager_may_not_create(self) -> None:
         self.client.force_login(make_user(MENEJER))
 
         response = self.client.post(
-            reverse("ariza-status-create"),
+            reverse("shartnoma-status-create"),
             {"name": ADDED_STATUS, "badge_colour": "orange", "category_number": ""},
         )
 
         self.assertEqual(response.status_code, 403)
-        self.assertFalse(ArizaStatus.objects.filter(name=ADDED_STATUS).exists())
+        self.assertFalse(ShartnomaStatus.objects.filter(name=ADDED_STATUS).exists())
 
     def test_a_manager_may_not_edit(self) -> None:
         # accounts/test_permissions.py walks the page views and the Users
@@ -381,19 +398,19 @@ class PermissionTests(TestCase):
         self.client.force_login(make_user(MENEJER))
 
         response = self.client.post(
-            reverse("ariza-status-update", args=[self.status.pk]),
+            reverse("shartnoma-status-update", args=[self.status.pk]),
             {"name": "Boshqa nom", "badge_colour": "blue", "category_number": ""},
         )
         self.status.refresh_from_db()
 
         self.assertEqual(response.status_code, 403)
-        self.assertEqual(self.status.name, "Yangi")
+        self.assertEqual(self.status.name, RENAMEABLE)
 
     def test_a_manager_may_not_delete(self) -> None:
         self.client.force_login(make_user(MENEJER))
 
         response = self.client.post(
-            reverse("ariza-status-delete", args=[self.status.pk])
+            reverse("shartnoma-status-delete", args=[self.status.pk])
         )
         self.status.refresh_from_db()
 
@@ -401,4 +418,4 @@ class PermissionTests(TestCase):
         self.assertTrue(self.status.is_active)
 
     def test_an_anonymous_visitor_is_redirected(self) -> None:
-        self.assertEqual(self.client.get(reverse("ariza-status")).status_code, 302)
+        self.assertEqual(self.client.get(reverse("shartnoma-status")).status_code, 302)
