@@ -132,7 +132,22 @@ class CreationTests(MahsulotTuriPageTestCase):
         response = self.create(name="Kimyoviy moddalar")
 
         self.assertEqual(MahsulotTuri.objects.count(), 1)
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Bu raqam allaqachon mavjud")
+
+    def test_a_number_held_by_a_deleted_category_says_so(self) -> None:
+        # DEC-009 keeps the deleted row, so it keeps the number. Being told
+        # the number exists, while looking at a list that does not contain it,
+        # is the one refusal worth spelling out - the same reason the name has
+        # two messages rather than one.
+        self.create()
+        deleted = MahsulotTuri.objects.get()
+        self.client.post(reverse("mahsulot-turlari-delete", args=[deleted.pk]))
+
+        response = self.create(name="Kimyoviy moddalar")
+
+        self.assertEqual(MahsulotTuri.objects.count(), 1)
+        # Without the apostrophe: the page escapes it to &#x27;.
+        self.assertContains(response, "chirilgan kategoriyaga tegishli")
 
     def test_a_six_digit_number_is_accepted(self) -> None:
         self.create()

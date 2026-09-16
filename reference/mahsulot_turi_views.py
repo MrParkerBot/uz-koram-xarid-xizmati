@@ -28,7 +28,26 @@ class MahsulotTuriForm(MasterDataForm):
     nothing to report under.
     """
 
+    NUMBER_ALREADY_USED = "Bu raqam allaqachon mavjud."
+    NUMBER_HELD_BY_DELETED_RECORD = (
+        "Bu raqam o'chirilgan kategoriyaga tegishli. Boshqa raqam kiriting."
+    )
+
     category_number = required_category_number_field()
+
+    def clean_category_number(self) -> int:
+        """Refuse a number already taken, saying which kind of clash it is.
+
+        The second unique column on this page, and the first anywhere in the
+        application. Left to Django it would answer the same sentence whether
+        the category holding the number is on the page or was deleted from it.
+        """
+        return self.refuse_a_clash(
+            self.cleaned_data["category_number"],
+            lookup="category_number",
+            already_used=self.NUMBER_ALREADY_USED,
+            held_by_deleted_record=self.NUMBER_HELD_BY_DELETED_RECORD,
+        )
 
     class Meta:
         model = MahsulotTuri
