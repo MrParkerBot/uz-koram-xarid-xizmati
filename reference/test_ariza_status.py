@@ -255,6 +255,13 @@ class EditingTests(ArizaStatusPageTestCase):
 
         self.assertEqual(response.status_code, 404)
 
+    def test_an_edit_id_that_is_not_a_number_is_a_not_found(self) -> None:
+        # ?edit= is the one place a pk reaches the page without going through
+        # a URL converter, so it is the one place a non-number can arrive.
+        response = self.client.get(f"{reverse('ariza-status')}?edit=abc")
+
+        self.assertEqual(response.status_code, 404)
+
 
 class DeletionTests(ArizaStatusPageTestCase):
     """DEC-009: ask, then deactivate."""

@@ -25,9 +25,10 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from django import forms
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
-from django.http import HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -210,13 +211,25 @@ class MasterDataPage:
             },
         )
 
-    def _active_record(self, pk) -> models.Model:
+    def _active_record(self, pk: int | str) -> models.Model:
         """One row that has not been deleted, or a 404.
 
         A deleted row answers 404 rather than 403: it has left the page, and
         saying it exists but may not be touched would contradict that.
+
+        pk arrives as an int from the URL converter on the edit and delete
+        routes, and as the raw string from ?edit= on the list route - which is
+        the one place it reaches the page without a converter having checked
+        it. A pk that is not a number is a 404 here rather than the ValueError
+        the query would otherwise raise, because ?edit=abc is a request for a
+        record that does not exist, not a server fault.
         """
-        return get_object_or_404(self.model, pk=pk, is_active=True)
+        try:
+            return get_object_or_404(self.model, pk=pk, is_active=True)
+        except (ValueError, ValidationError) as not_a_pk:
+            raise Http404(
+                f"{pk!r} is not the id of a {self.model._meta.verbose_name}."
+            ) from not_a_pk
 
     def _list_records(self, request: HttpRequest) -> HttpResponse:
         """The table, with one row open for editing when asked."""
