@@ -56,6 +56,35 @@ def next_ariza_raqami(today: date | None = None) -> str:
     return f"{prefix}{used + 1:0{ARIZA_NUMBER_DIGITS}d}"
 
 
+class DecisionRefused(ValueError):
+    """A decision the record will not take, and which one it will not take.
+
+    The two reasons a rejection is refused - no comment, and an application
+    somebody has already decided - are different things a caller says
+    different words about. They used to arrive as one bare ValueError, which
+    left the view asking the instance which case it was: a question whose
+    answer depended on where the re-read happened to sit inside the method
+    that raised. The #28 review objected, and was right - the ordering became
+    load-bearing without anybody choosing that.
+
+    The reason travels with the exception instead. A ValueError subclass so
+    that a caller written before this still catches it.
+    """
+
+    class Reason(models.TextChoices):
+        NO_COMMENT = "no_comment", "Izoh kiritilmagan"
+        ALREADY_DECIDED = "already_decided", "Ariza allaqachon hal qilingan"
+
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+    @property
+    def was_already_decided(self) -> bool:
+        """Whether this refusal is about the stage rather than the comment."""
+        return self.reason == self.Reason.ALREADY_DECIDED
+
+
 class Application(models.Model):
     """One purchase application, as section 4.1 describes it.
 
@@ -237,9 +266,9 @@ class Application(models.Model):
             simultaneous callers is told True.
 
         Raises:
-            ValueError: when the application is at a stage acceptance makes no
-                sense from - a rejected one. That is not a double click; it is
-                a request for something that should not happen.
+            DecisionRefused: when the application is at a stage acceptance
+                makes no sense from - a rejected one. That is not a double
+                click; it is a request for something that should not happen.
         """
         # Whatever the caller is holding may be a moment old - the view
         # fetched it before this call started. Decide on the row as it is now,
@@ -251,9 +280,10 @@ class Application(models.Model):
             return False
 
         if not self.is_incoming:
-            raise ValueError(
+            raise DecisionRefused(
+                DecisionRefused.Reason.ALREADY_DECIDED,
                 f"{self.ariza_raqami} is {self.stage}, not incoming, "
-                "so it cannot be accepted."
+                "so it cannot be accepted.",
             )
 
         from reference.models import ArizaStatus
@@ -316,14 +346,16 @@ class Application(models.Model):
             two simultaneous callers is told True.
 
         Raises:
-            ValueError: when the comment is empty or only whitespace, or when
-                the application is at a stage rejection makes no sense from.
-                Both leave the record exactly as it was.
+            DecisionRefused: when the comment is empty or only whitespace, or
+                when the application is at a stage rejection makes no sense
+                from. The exception says which; both leave the record exactly
+                as it was.
         """
         reason = (comment or "").strip()
         if not reason:
-            raise ValueError(
-                f"{self.ariza_raqami} cannot be rejected without a comment."
+            raise DecisionRefused(
+                DecisionRefused.Reason.NO_COMMENT,
+                f"{self.ariza_raqami} cannot be rejected without a comment.",
             )
 
         # Decide on the row as it is now, not as the caller last saw it, and
@@ -335,9 +367,10 @@ class Application(models.Model):
             return False
 
         if not self.is_incoming:
-            raise ValueError(
+            raise DecisionRefused(
+                DecisionRefused.Reason.ALREADY_DECIDED,
                 f"{self.ariza_raqami} is {self.stage}, not incoming, "
-                "so it cannot be rejected."
+                "so it cannot be rejected.",
             )
 
         from reference.models import ArizaStatus

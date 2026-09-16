@@ -21,7 +21,7 @@ from django.utils.crypto import get_random_string
 
 from accounts.models import UserType
 from accounts.roles import ADMIN, MENEJER, USERS, assign_user_type
-from applications.models import Application
+from applications.models import Application, DecisionRefused
 from reference.models import ArizaStatus, Department, MahsulotTuri
 
 REASON = "Byudjet ajratilmagan."
@@ -277,13 +277,23 @@ class ConcurrentRejectionTests(RejectionTestCase):
 
         self.assertEqual(self.reload().stage, Application.Stage.ACCEPTED)
 
-    def test_the_comment_is_still_required_before_anything_is_read(self):
-        # The comment check comes before the row is re-read, so a rejection
-        # with no reason costs no query and refuses whatever the stage is.
+    def test_the_comment_is_required_whatever_the_stage_is(self):
+        # Renamed, because the #28 review was right that the old name -
+        # "before anything is read" - claimed an ordering the body did not
+        # pin. Pinning it with assertNumQueries(0) turned out to be
+        # impossible and, more to the point, wrong: reject() is wrapped in
+        # transaction.atomic, so entering it opens a savepoint before the
+        # comment is looked at. The check does still come first, and what
+        # that is worth to a caller is this - an empty comment is refused as
+        # an empty comment no matter what stage the application is at, which
+        # is now asserted through the reason the refusal carries rather than
+        # through a query count.
         self.application.accept(by=self.decider)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DecisionRefused) as refusal:
             self.application.reject(by=self.decider, comment="")
+
+        self.assertFalse(refusal.exception.was_already_decided)
 
 
 class AccessTests(RejectionTestCase):
@@ -352,3 +362,58 @@ class RejectedAttachmentTests(RejectionTestCase):
         )
 
         self.assertEqual(response.status_code, 403)
+
+
+class RefusalReasonTests(RejectionTestCase):
+    """A refusal says which refusal it is, and the view reads that.
+
+    The #28 finding: the view told the two apart by asking the instance
+    whether it was still incoming, which is only correct because of where
+    refresh_from_db() happens to sit inside reject(). The interleaving below
+    is the one that already reported the wrong thing.
+    """
+
+    def test_an_empty_comment_says_so(self) -> None:
+        with self.assertRaises(DecisionRefused) as refusal:
+            self.application.reject(by=self.decider, comment="")
+
+        self.assertFalse(refusal.exception.was_already_decided)
+
+    def test_an_already_decided_application_says_so(self) -> None:
+        self.application.accept(by=self.decider)
+
+        with self.assertRaises(DecisionRefused) as refusal:
+            self.application.reject(by=self.decider, comment=REASON)
+
+        self.assertTrue(refusal.exception.was_already_decided)
+
+    def test_an_empty_comment_on_a_stale_row_is_still_about_the_comment(self):
+        # The instance says incoming, the row says accepted, and the comment
+        # is empty. The user typed nothing; that is what they are told - not
+        # that somebody else decided it, which would send them to look at a
+        # row they cannot act on anyway.
+        stale = Application.objects.get(pk=self.application.pk)
+        self.application.accept(by=self.decider)
+
+        with self.assertRaises(DecisionRefused) as refusal:
+            stale.reject(by=self.decider, comment="")
+
+        self.assertFalse(refusal.exception.was_already_decided)
+
+    def test_the_page_reports_the_comment_and_not_the_stage(self) -> None:
+        # The misreport the review described, end to end: this request loaded
+        # the list, a colleague accepted the application, and this request
+        # posts with an empty comment. It used to say "izoh kiritilishi
+        # shart" by accident - it says it on purpose now, and the test would
+        # fail if the reasons were swapped.
+        page = self.client.post(
+            self.url, {"inkor_izohi": ""}, follow=True
+        ).content.decode()
+
+        self.assertIn("izoh kiritilishi shart", page)
+        self.assertNotIn("allaqachon hal qilingan", page)
+
+    def test_a_refusal_is_still_a_value_error(self) -> None:
+        # A caller written before this, and there are several in the suite.
+        with self.assertRaises(ValueError):
+            self.application.reject(by=self.decider, comment="")
