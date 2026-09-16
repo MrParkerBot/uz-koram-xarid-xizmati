@@ -59,6 +59,9 @@ ALLOWED_HOSTS = read_list_setting(
 INSTALLED_APPS = [
     # The project package itself, so its template tag library is discoverable.
     "config",
+    # The department's own facts about a user: their type, and from
+    # TASK-UZK-013 what they are permitted to edit.
+    "accounts",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",

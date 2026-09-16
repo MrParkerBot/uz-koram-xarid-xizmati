@@ -158,9 +158,26 @@ The login page is the only view that opts out, with `@login_not_required`.
 A view added later is closed unless it says otherwise, which is the direction
 worth defaulting to: forgetting the decorator locks a page, not opens it.
 
-Roles do not exist yet. Every signed-in user can open every page until
-`TASK-UZK-010` adds the role model and `TASK-UZK-012` enforces the permission
-matrix.
+## Roles
+
+The specification calls a role a **User Type** and gives it a master data page,
+so it is a row rather than a constant. DEC-013 fixes the six the department
+works with, and a migration seeds them:
+
+Admin, Bo`lim Boshlig`i, Menejer, Katta Mutaxasis, Direktor and Users.
+
+A user's type lives on `accounts.UserProfile`, not on the account, and
+`accounts/roles.py` is the only place that reads it. It answers from the
+database on every call, so changing somebody's type takes effect on their next
+request rather than at their next sign-in.
+
+A user with no type, a user whose type was deactivated, and an anonymous
+visitor all resolve to no role, and every role check refuses them. Nobody is
+waved through for want of an answer.
+
+Assigning a type is `accounts.roles.assign_user_type` until `TASK-UZK-011`
+builds the Users page. Which pages each type may open is `TASK-UZK-012`; every
+signed-in user can still open all of them.
 
 ## Templates
 
