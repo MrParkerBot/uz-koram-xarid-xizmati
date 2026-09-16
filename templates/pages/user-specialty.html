@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block page_title %}User Specialty{% endblock %}
+{% block breadcrumb %}Ma'lumotlar / User Specialty{% endblock %}
+{% block page_heading %}User Specialty{% endblock %}
+{% block content %}
+
+
+    <div class="page-header">
+      <div><h1 class="page-title">User Specialty</h1><div class="muted">Mutaxassislik turlari</div></div>
+      <div class="page-actions"><span class="role-tag role-admin">Admin only</span></div>
+    </div>
+
+    <div class="split-layout">
+      <!-- TABLE SIDE -->
+      <div class="split-table-side">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div style="font-size:14px;font-weight:700;">Mutaxassisliklar Ro'yhati</div>
+          <button class="btn btn-primary-custom btn-sm" onclick="showForm()">+ Yangi qo'shish</button>
+        </div>
+        <div class="search-box" style="margin-bottom:14px;"><i class="bi bi-search search-icon" aria-hidden="true"></i>
+          <input type="text" class="form-control" id="search-input" placeholder="Qidirish…"/>
+        </div>
+        <div class="table-wrap">
+          <table class="table-app" id="spec-table">
+            <thead><tr>
+              <th style="width:40px;">#</th>
+              <th class="sortable">Specialty Nomi<span class="sort-icon"></span></th>
+              <th style="width:120px;text-align:center;">Amallar</th>
+            </tr></thead>
+            <tbody id="spec-tbody">
+              <tr data-id="1"><td>1</td><td>Mexanik muhandis</td><td style="text-align:center;white-space:nowrap;"><button class="btn btn-outline-custom btn-xs" onclick="editRow(1)"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</button> <button class="btn btn-outline-custom text-danger btn-xs" onclick="deleteRow(1,'Mexanik muhandis')" aria-label="O'chirish"><i class="bi bi-x-lg" aria-hidden="true"></i></button></td></tr>
+              <tr data-id="2"><td>2</td><td>Elektrik muhandis</td><td style="text-align:center;white-space:nowrap;"><button class="btn btn-outline-custom btn-xs" onclick="editRow(2)"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</button> <button class="btn btn-outline-custom text-danger btn-xs" onclick="deleteRow(2,'Elektrik muhandis')" aria-label="O'chirish"><i class="bi bi-x-lg" aria-hidden="true"></i></button></td></tr>
+              <tr data-id="3"><td>3</td><td>Texnolog</td><td style="text-align:center;white-space:nowrap;"><button class="btn btn-outline-custom btn-xs" onclick="editRow(3)"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</button> <button class="btn btn-outline-custom text-danger btn-xs" onclick="deleteRow(3,'Texnolog')" aria-label="O'chirish"><i class="bi bi-x-lg" aria-hidden="true"></i></button></td></tr>
+              <tr data-id="4"><td>4</td><td>Iqtisodchi</td><td style="text-align:center;white-space:nowrap;"><button class="btn btn-outline-custom btn-xs" onclick="editRow(4)"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</button> <button class="btn btn-outline-custom text-danger btn-xs" onclick="deleteRow(4,'Iqtisodchi')" aria-label="O'chirish"><i class="bi bi-x-lg" aria-hidden="true"></i></button></td></tr>
+              <tr data-id="5"><td>5</td><td>Moliyachi</td><td style="text-align:center;white-space:nowrap;"><button class="btn btn-outline-custom btn-xs" onclick="editRow(5)"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</button> <button class="btn btn-outline-custom text-danger btn-xs" onclick="deleteRow(5,'Moliyachi')" aria-label="O'chirish"><i class="bi bi-x-lg" aria-hidden="true"></i></button></td></tr>
+              <tr data-id="6"><td>6</td><td>Huquqshunos</td><td style="text-align:center;white-space:nowrap;"><button class="btn btn-outline-custom btn-xs" onclick="editRow(6)"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</button> <button class="btn btn-outline-custom text-danger btn-xs" onclick="deleteRow(6,'Huquqshunos')" aria-label="O'chirish"><i class="bi bi-x-lg" aria-hidden="true"></i></button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- FORM SIDE -->
+      <div class="split-form-side">
+        <div class="split-form-title" id="form-title"><i class="bi bi-plus-lg" aria-hidden="true"></i> Yangi Specialty qo'shish</div>
+        <input type="hidden" id="edit-id" value=""/>
+        <div class="form-group">
+          <label class="form-label">Specialty Nomi <span style="color:var(--color-danger)">*</span></label>
+          <input type="text" class="form-control" id="spec-name" placeholder="Nomini kiriting…" required/>
+          <div class="form-error" id="spec-name-err"></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:24px;">
+          <button class="btn btn-primary-custom" style="flex:1;" onclick="saveRow()"><i class="bi bi-save" aria-hidden="true"></i> Saqlash</button>
+          <button class="btn btn-outline-custom" style="flex:1;" onclick="cancelEdit()"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</button>
+        </div>
+        <div class="alert alert-info" style="margin-top:20px;">
+          <span>ℹ</span>
+          <div>Mutaxassislik qo'shish yoki tahrirlash uchun ushbu formani to'ldiring. Saqlashdan oldin nom kiritilishi shart.</div>
+        </div>
+      </div>
+    </div>
+  
+{% endblock %}
+{% block extra_scripts %}
+<script>
+let editingId = null;
+let data = [
+  {id:1, name:'Mexanik muhandis'},
+  {id:2, name:'Elektrik muhandis'},
+  {id:3, name:'Texnolog'},
+  {id:4, name:'Iqtisodchi'},
+  {id:5, name:'Moliyachi'},
+  {id:6, name:'Huquqshunos'},
+];
+let nextId = 7;
+
+function showForm(id) {
+  document.getElementById('edit-id').value = id || '';
+  document.getElementById('spec-name').value = '';
+  document.getElementById('spec-name-err').textContent = '';
+  document.getElementById('form-title').innerHTML = id ? '<i class="bi bi-pencil" aria-hidden="true"></i> Tahrirlash' : '<i class="bi bi-plus-lg" aria-hidden="true"></i> Yangi Specialty qo\'shish';
+  editingId = id || null;
+  if (id) {
+    const item = data.find(d => d.id === id);
+    if (item) document.getElementById('spec-name').value = item.name;
+  }
+  document.getElementById('spec-name').focus();
+}
+
+function editRow(id) { showForm(id); }
+
+function saveRow() {
+  const name = document.getElementById('spec-name').value.trim();
+  if (!name) {
+    document.getElementById('spec-name-err').textContent = 'Bu maydon to\'ldirilishi shart';
+    document.getElementById('spec-name').style.borderColor = 'var(--color-danger)';
+    return;
+  }
+  document.getElementById('spec-name').style.borderColor = '';
+  document.getElementById('spec-name-err').textContent = '';
+
+  if (editingId) {
+    const item = data.find(d => d.id === editingId);
+    if (item) item.name = name;
+    Toast.success('Muvaffaqiyatli yangilandi');
+  } else {
+    data.push({id: nextId, name});
+    nextId++;
+    Toast.success('Muvaffaqiyatli qo\'shildi');
+  }
+  renderTable();
+  cancelEdit();
+}
+
+function deleteRow(id, name) {
+  Modal.confirm('O\'chirishni tasdiqlaysizmi?', `"${name}" o\'chirib tashlanadi. Bu amal qaytarib bo\'lmaydi.`, () => {
+    data = data.filter(d => d.id !== id);
+    renderTable();
+    Toast.success('O\'chirildi');
+  });
+}
+
+function cancelEdit() {
+  editingId = null;
+  document.getElementById('edit-id').value = '';
+  document.getElementById('spec-name').value = '';
+  document.getElementById('spec-name-err').textContent = '';
+  document.getElementById('spec-name').style.borderColor = '';
+  document.getElementById('form-title').innerHTML = '<i class="bi bi-plus-lg" aria-hidden="true"></i> Yangi Specialty qo\'shish';
+}
+
+function renderTable() {
+  const tbody = document.getElementById('spec-tbody');
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="3"><div class="empty-state"><div class="empty-icon"><i class="bi bi-inbox" aria-hidden="true"></i></div><div class="empty-title">Ma'lumot topilmadi</div><div class="empty-desc">Yangi specialty qo'shing.</div></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.map((item, i) => `
+    <tr data-id="${item.id}">
+      <td>${i+1}</td>
+      <td>${item.name}</td>
+      <td style="text-align:center;white-space:nowrap;">
+        <button class="btn btn-outline-custom btn-xs" onclick="editRow(${item.id})"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</button>
+        <button class="btn btn-outline-custom text-danger btn-xs" onclick="deleteRow(${item.id},'${item.name}')" aria-label="O'chirish"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+initTableSearch('#search-input', '#spec-table');
+</script>
+{% endblock %}

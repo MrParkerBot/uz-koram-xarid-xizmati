@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block page_title %}Xarid Arizasi{% endblock %}
+{% block breadcrumb %}Shartnomalar / Xarid Arizasi{% endblock %}
+{% block page_heading %}Xarid Arizasi{% endblock %}
+{% block content %}
+
+
+    <div class="page-header">
+      <div><h1 class="page-title">Xarid Arizasi</h1><div class="muted">Purchase Requisition — Department Staff View</div></div>
+      <div class="page-actions">
+        <span class="role-tag role-manager">Manager</span>
+        <span class="role-tag role-specialist">Specialist</span>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:24px;">
+      <div class="toolbar"><div class="toolbar-group">
+        <select class="form-control" style="width:160px;">
+          <option value="">Holati: barchasi</option>
+          <option>Tasdiq kutilmoqda</option>
+          <option>Tasdiqlandi</option>
+          <option>Inkor etildi</option>
+        </select>
+        <select class="form-control" style="width:170px;">
+          <option value="">Mahsulot turi: barchasi</option>
+          <option>100042 — Metallurgiya</option>
+          <option>200031 — Kimyoviy</option>
+        </select>
+        <input class="form-control" type="date" style="width:140px;"/>
+        <button class="btn btn-primary-custom btn-sm"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
+        </div><div class="toolbar-group">
+          <button class="btn btn-primary-custom btn-sm" onclick="Modal.open('xa-modal')">+ Ariza Yaratish</button>
+          <button class="btn btn-outline-custom btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
+          <button class="btn btn-outline-custom btn-sm"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table-app" id="xa-table">
+          <thead><tr>
+            <th style="width:36px;">#</th>
+            <th>Ariza №</th>
+            <th>Shartnoma nomi</th>
+            <th>Bo'lim</th>
+            <th>Buyurtma nomi</th>
+            <th>Soni</th>
+            <th>O'lchov</th>
+            <th>Holati</th>
+            <th>Mahsulot Turi</th>
+            <th>Izoh</th>
+            <th>PDF</th>
+            <th>Yaratilgan</th>
+          </tr></thead>
+          <tbody id="xa-tbody">
+            <tr>
+              <td>1</td>
+              <td class="mono-cell">XA-2025-001</td>
+              <td>Bolt yetkazib berish shartnomasi</td>
+              <td>Texnik bo'lim</td>
+              <td>Bolt M12×50</td>
+              <td style="font-weight:600;color:var(--color-primary);">500</td>
+              <td>ta</td>
+              <td><span class="badge badge-trial">Tasdiq kutilmoqda</span></td>
+              <td style="font-size:11px;" class="mono-cell">100042 — Metal</td>
+              <td style="font-size:11px;color:var(--color-text-muted);">Tez kerak</td>
+              <td><span class="pdf-badge"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></span></td>
+              <td class="mono-cell">2025-03-14</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td class="mono-cell">XA-2025-002</td>
+              <td>Gaz yetkazib berish shartnomasi</td>
+              <td>Ishlab chiqarish</td>
+              <td>Asetilen gazi</td>
+              <td style="font-weight:600;color:var(--color-primary);">20</td>
+              <td>kg</td>
+              <td><span class="badge badge-approved">Tasdiqlandi</span></td>
+              <td style="font-size:11px;" class="mono-cell">200031 — Kimyoviy</td>
+              <td style="font-size:11px;color:var(--color-text-muted);">—</td>
+              <td><span class="pdf-badge"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></span></td>
+              <td class="mono-cell">2025-03-13</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td class="mono-cell">XA-2025-003</td>
+              <td>Kabel ta'minoti</td>
+              <td>Moliya bo'limi</td>
+              <td>Kabel 4mm²</td>
+              <td style="font-weight:600;color:var(--color-primary);">200</td>
+              <td>m</td>
+              <td><span class="badge badge-danger">Inkor etildi</span></td>
+              <td style="font-size:11px;" class="mono-cell">300015 — Elektr</td>
+              <td style="font-size:11px;color:var(--color-danger);">Narx noto'g'ri</td>
+              <td><span class="pdf-badge"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></span></td>
+              <td class="mono-cell">2025-03-12</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination-wrap">
+        <button class="btn btn-outline-custom btn-sm">‹ Oldingi</button>
+        <button class="btn btn-primary-custom btn-sm">1</button>
+        <button class="btn btn-outline-custom btn-sm">Keyingi ›</button>
+        <div class="pagination-info"><span>Jami: 3 ta</span></div>
+      </div>
+    </div>
+  
+{% endblock %}
+{% block extra_scripts %}
+<!-- XA CREATE MODAL -->
+<div id="xa-modal" class="modal-overlay hidden">
+  <div class="modal-box" style="max-width:720px;max-height:90vh;overflow-y:auto;padding:28px;">
+    <div class="modal-title"><i class="bi bi-cart3" aria-hidden="true"></i> Xarid Arizasi Yaratish</div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Ariza Raqami</label><input type="text" class="form-control mono" value="XA-2025-004" disabled/></div>
+      <div class="form-group"><label class="form-label">Yaratilingan Sana</label><input type="text" class="form-control" id="xa-date" disabled/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Shartnoma Nomi <span style="color:var(--color-danger)">*</span></label>
+        <select class="form-control"><option value="">— Tanlang —</option><option>Bolt yetkazib berish shartnomasi (SHT-2025-042)</option><option>Gaz yetkazib berish shartnomasi (SHT-2025-043)</option></select></div>
+      <div class="form-group"><label class="form-label">Bo'lim Nomi <span style="color:var(--color-danger)">*</span></label>
+        <select class="form-control"><option value="">— Tanlang —</option><option>Texnik bo'lim</option><option>Ishlab chiqarish</option><option>Moliya bo'limi</option></select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Buyurtma Nomi <span style="color:var(--color-danger)">*</span></label><input type="text" class="form-control" placeholder="Item nomi" required/></div>
+      <div class="form-group"><label class="form-label">Mahsulot Turi <span style="color:var(--color-danger)">*</span></label>
+        <select class="form-control"><option>100042 — Metallurgiya</option><option>200031 — Kimyoviy</option><option>300015 — Elektr</option></select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Soni <span style="color:var(--color-danger)">*</span></label>
+        <div style="display:flex;gap:8px;"><input type="number" class="form-control" placeholder="0" style="flex:2;"/><select class="form-control" style="flex:1;"><option>ta</option><option>kg</option><option>m</option><option>l</option></select></div></div>
+      <div class="form-group"><label class="form-label">Izoh</label><input type="text" class="form-control" placeholder="Qo'shimcha izoh…"/></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Ilova (PDF) <span style="color:var(--color-danger)">*</span></label>
+      <div class="file-upload-wrap">
+        <div class="file-upload-area"><div class="upload-icon"><i class="bi bi-paperclip" aria-hidden="true"></i></div><div class="upload-text">PDF faylni yuklash uchun bosing</div><input type="file" accept=".pdf" style="display:none;"/></div>
+        <div class="file-upload-preview" style="display:none;"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline-custom" data-close-modal="xa-modal"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</button>
+      <button class="btn btn-primary-custom" onclick="submitXA()"><i class="bi bi-check-lg" aria-hidden="true"></i> Ariza Yuborish</button>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('xa-date').value = new Date().toISOString().split('T')[0];
+function submitXA() {
+  Toast.success('Xarid arizasi yuborildi  Admin xabardor qilindi.');
+  Modal.close('xa-modal');
+}
+initFileUpload();
+</script>
+{% endblock %}

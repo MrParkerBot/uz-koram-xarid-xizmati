@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block page_title %}Qabul Qilingan Arizalar{% endblock %}
+{% block breadcrumb %}Arizalar / Qabul Qilingan{% endblock %}
+{% block page_heading %}Qabul Qilingan{% endblock %}
+{% block content %}
+
+
+    <div class="page-header">
+      <div><h1 class="page-title">Qabul Qilingan Arizalar</h1><div class="muted">Accepted Applications + Employee Assignment</div></div>
+      <div class="page-actions">
+        <span class="role-tag role-admin">Admin</span>
+        <span class="role-tag role-manager">Manager</span>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:24px;">
+      <div class="toolbar"><div class="toolbar-group">
+        <span class="toolbar-label">Filter:</span>
+        <select class="form-control" style="width:150px;" onchange="filterTable()">
+          <option value="">Bo'lim: barchasi</option>
+          <option>Texnik bo'lim</option>
+          <option>Ishlab chiqarish</option>
+          <option>Moliya bo'limi</option>
+        </select>
+        <select class="form-control" style="width:160px;" onchange="filterTable()">
+          <option value="">Tayinlangan xodim</option>
+          <option>Alisher Karimov</option>
+          <option>Dilnoza Yusupova</option>
+          <option>Bobur Toshmatov</option>
+        </select>
+        <input class="form-control" type="date" style="width:140px;"/>
+        <button class="btn btn-primary-custom btn-sm"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
+        </div><div class="toolbar-group">
+          <button class="btn btn-primary-custom btn-sm" onclick="openCreateModal()">+ Ariza Yaratish</button>
+          <button class="btn btn-outline-custom btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
+          <button class="btn btn-outline-custom btn-sm"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table-app" id="qabul-table">
+          <thead><tr>
+            <th style="width:36px;">#</th>
+            <th>Ariza №</th>
+            <th>Bo'lim</th>
+            <th>Mahsulot Turi</th>
+            <th>Buyurtma nomi</th>
+            <th>Soni</th>
+            <th>O'lchov</th>
+            <th>PDF</th>
+            <th>Qabul sanasi</th>
+            <th>Tayinlangan xodim</th>
+            <th style="text-align:center;width:150px;">Amallar</th>
+          </tr></thead>
+          <tbody id="qabul-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pagination-wrap">
+        <button class="btn btn-outline-custom btn-sm">‹ Oldingi</button>
+        <button class="btn btn-primary-custom btn-sm">1</button>
+        <button class="btn btn-outline-custom btn-sm">2</button>
+        <button class="btn btn-outline-custom btn-sm">Keyingi ›</button>
+        <div class="pagination-info"><span>Jami: <span id="total-count">5</span> ta</span></div>
+      </div>
+    </div>
+  
+{% endblock %}
+{% block extra_scripts %}
+<!-- CREATE ARIZA MODAL -->
+<div id="create-modal" class="modal-overlay hidden">
+  <div class="modal-box modal-lg" style="max-width:720px;">
+    <div class="modal-title"><i class="bi bi-clipboard" aria-hidden="true"></i> Ariza Yaratish Formasi</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Ariza Raqami</label>
+        <input type="text" class="form-control mono" value="ARZ-2025-017" disabled/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Yaratilingan Sana</label>
+        <input type="text" class="form-control" id="create-date" disabled/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Bo'lim Nomi <span style="color:var(--color-danger)">*</span></label>
+        <select class="form-control" required>
+          <option value="">— Tanlang —</option>
+          <option>Texnik bo'lim</option>
+          <option>Ishlab chiqarish</option>
+          <option>Moliya bo'limi</option>
+          <option>Logistika</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Buyurtmachi Ismi <span style="color:var(--color-danger)">*</span></label>
+        <input type="text" class="form-control" placeholder="To'liq ism" required/>
+      </div>
+    </div>
+
+    <!-- Dynamic item rows -->
+    <div class="item-rows-container">
+      <div class="item-row-header">Buyurtma qatorlari:</div>
+      <div id="item-rows-container">
+        <div class="form-row-items-4" style="margin-bottom:10px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Mahsulot Turi</label>
+            <select class="form-control" style="font-size:12px;">
+              <option>100042 — Metallurgiya</option>
+              <option>200031 — Kimyoviy</option>
+              <option>300015 — Elektr</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Buyurtma Nomi</label>
+            <input type="text" class="form-control" placeholder="Item nomi"/>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Soni</label>
+            <input type="number" class="form-control" placeholder="100"/>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">O'lchov</label>
+            <select class="form-control"><option>ta</option><option>kg</option><option>m</option><option>l</option></select>
+          </div>
+        </div>
+      </div>
+      <button type="button" class="btn btn-outline-custom btn-xs" onclick="addItemRowCreate()">+ Qator qo'shish</button>
+    </div>
+
+    <div class="form-group" style="margin-top:16px;">
+      <label class="form-label">Ilova (PDF) <span style="color:var(--color-danger)">*</span></label>
+      <div class="file-upload-wrap">
+        <div class="file-upload-area">
+          <div class="upload-icon"><i class="bi bi-paperclip" aria-hidden="true"></i></div>
+          <div class="upload-text">PDF faylni yuklash uchun bosing yoki sudrab keling</div>
+          <input type="file" accept=".pdf" style="display:none;"/>
+        </div>
+        <div class="file-upload-preview" style="display:none;"></div>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Tayinlangan Xodim</label>
+        <select class="form-control">
+          <option value="">— Tanlang —</option>
+          <option>Alisher Karimov (4 ta bajarilmoqda)</option>
+          <option>Dilnoza Yusupova (2 ta bajarilmoqda)</option>
+          <option>Bobur Toshmatov (6 ta bajarilmoqda)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Izoh</label>
+        <textarea class="form-control" placeholder="Qo'shimcha izoh…" rows="2" style="resize:vertical;"></textarea>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-outline-custom" data-close-modal="create-modal"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</button>
+      <button class="btn btn-primary-custom" onclick="submitCreate()"><i class="bi bi-check-lg" aria-hidden="true"></i> Yaratish va Tayinlash</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let qabulData = [
+  {id:1, num:'ARZ-2025-001', bolim:'Texnik bo\'lim',   mahsulot:'100042 — Metallurgiya', nomi:'Bolt M12×50',  soni:500,  olchov:'ta', date:'2025-03-10', assigned:'Alisher K.', assignedId:1},
+  {id:2, num:'ARZ-2025-002', bolim:'Ishlab chiqarish',mahsulot:'200031 — Kimyoviy',     nomi:'Asetilen gazi',soni:20,   olchov:'kg', date:'2025-03-11', assigned:'',           assignedId:null},
+  {id:3, num:'ARZ-2025-003', bolim:'Moliya bo\'limi',  mahsulot:'300015 — Elektr',       nomi:'Kabel 4mm²',   soni:200,  olchov:'m',  date:'2025-03-12', assigned:'Dilnoza Y.', assignedId:3},
+  {id:4, num:'ARZ-2025-004', bolim:'Texnik bo\'lim',   mahsulot:'100042 — Metallurgiya', nomi:'Prokat po\'lat',soni:1000,olchov:'kg', date:'2025-03-13', assigned:'',           assignedId:null},
+  {id:5, num:'ARZ-2025-005', bolim:'Logistika',        mahsulot:'600011 — Asboblar',     nomi:'Gayka M10',    soni:2000, olchov:'ta', date:'2025-03-14', assigned:'',           assignedId:null},
+];
+
+const specialists = ['— Tanlang —','Alisher K.','Dilnoza Y.','Bobur T.'];
+
+function assign(id) {
+  const sel = document.getElementById('assign-sel-'+id);
+  if (!sel || !sel.value || sel.value === '— Tanlang —') { Toast.warning('Xodimni tanlang'); return; }
+  const item = qabulData.find(d=>d.id===id);
+  if (item) { item.assigned = sel.value; item.assignedId = specialists.indexOf(sel.value); }
+  renderTable();
+  Toast.success(`${sel.value}ga tayinlandi <i class="bi bi-check-lg" aria-hidden="true"></i>`);
+}
+
+function reassign(id) {
+  const item = qabulData.find(d=>d.id===id);
+  if (item) { item.assigned = ''; item.assignedId = null; }
+  renderTable();
+  Toast.info('Qayta tayinlash uchun xodim tanlang');
+}
+
+function renderTable() {
+  const tbody = document.getElementById('qabul-tbody');
+  tbody.innerHTML = qabulData.map((item,i) => `
+    <tr data-id="${item.id}">
+      <td>${i+1}</td>
+      <td class="mono-cell">${item.num}</td>
+      <td>${item.bolim}</td>
+      <td style="font-size:12px;">${item.mahsulot}</td>
+      <td style="font-weight:500;">${item.nomi}</td>
+      <td style="font-weight:600;color:var(--color-primary);">${item.soni}</td>
+      <td>${item.olchov}</td>
+      <td><span class="pdf-badge"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></span></td>
+      <td class="mono-cell">${item.date}</td>
+      <td>
+        ${item.assigned
+          ? `<span class="badge badge-info">${item.assigned}</span>`
+          : `<select id="assign-sel-${item.id}" class="form-control" style="width:140px;padding:5px 8px;font-size:11px;">
+               ${specialists.map(s=>`<option>${s}</option>`).join('')}
+             </select>`
+        }
+      </td>
+      <td style="text-align:center;white-space:nowrap;">
+        ${item.assigned
+          ? `<button class="btn btn-outline-custom btn-xs" onclick="reassign(${item.id})"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Qayta</button>`
+          : `<button class="btn btn-primary-custom btn-xs" onclick="assign(${item.id})">Tayinlash</button>`
+        }
+      </td>
+    </tr>
+  `).join('');
+  document.getElementById('total-count').textContent = qabulData.length;
+}
+
+function filterTable() { /* client-side filter */ }
+
+function openCreateModal() {
+  document.getElementById('create-date').value = new Date().toISOString().split('T')[0];
+  Modal.open('create-modal');
+}
+
+function addItemRowCreate() {
+  const container = document.getElementById('item-rows-container');
+  const row = document.createElement('div');
+  row.className = 'form-row-items-4';
+  row.style.marginBottom = '10px';
+  row.innerHTML = `
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Mahsulot Turi</label>
+      <select class="form-control" style="font-size:12px;"><option>100042 — Metallurgiya</option><option>200031 — Kimyoviy</option></select></div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Buyurtma Nomi</label><input type="text" class="form-control" placeholder="Item nomi"/></div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Soni</label><input type="number" class="form-control" placeholder="100"/></div>
+    <div class="form-group" style="margin-bottom:0;display:flex;gap:6px;align-items:flex-end;">
+      <div style="flex:1;"><label class="form-label">O'lchov</label><select class="form-control"><option>ta</option><option>kg</option><option>m</option></select></div>
+      <button type="button" class="btn btn-outline-custom text-danger btn-xs" style="margin-bottom:2px;" onclick="this.closest('.form-row-items-4').remove()" aria-label="Qatorni olib tashlash"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+    </div>
+  `;
+  container.insertBefore(row, container.querySelector('button'));
+}
+
+function submitCreate() {
+  Toast.success('Ariza yaratildi va xodimga tayinlandi');
+  Modal.close('create-modal');
+}
+
+renderTable();
+</script>
+{% endblock %}

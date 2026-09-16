@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block page_title %}Bo'limlar Xaridi{% endblock %}
+{% block breadcrumb %}Hisobotlar / Bo'limlar Xaridi{% endblock %}
+{% block page_heading %}Bo'limlar Xaridi{% endblock %}
+{% block content %}
+
+
+    <div class="page-header">
+      <div><h1 class="page-title">Korhona Xaridi | Bo'limlar</h1><div class="muted">Enterprise Purchase by Department</div></div>
+      <div class="page-actions"><span class="role-tag role-admin">Admin only</span></div>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar"><div class="toolbar-group">
+        <span class="toolbar-label">Sana:</span>
+        <input class="form-control" type="date" style="width:140px;"/>
+        <input class="form-control" type="date" style="width:140px;"/>
+        <select class="form-control" style="width:160px;">
+          <option value="">Bo'lim: barchasi</option>
+          <option>Texnik bo'lim</option>
+          <option>Ishlab chiqarish</option>
+          <option>Moliya bo'limi</option>
+          <option>Logistika</option>
+        </select>
+        <button class="btn btn-primary-custom btn-sm"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
+        </div><div class="toolbar-group">
+          <button class="btn btn-outline-custom btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
+          <button class="btn btn-outline-custom btn-sm"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table-app">
+          <thead><tr>
+            <th style="width:36px;">#</th>
+            <th>Bo'lim Nomi</th>
+            <th class="sortable">Xarid topshiriqlari<span class="sort-icon"></span></th>
+            <th class="sortable">Boshlang'ich<span class="sort-icon"></span></th>
+            <th class="sortable">Birjaga qo'yilgan<span class="sort-icon"></span></th>
+            <th class="sortable">Shartnoma tuzilgan<span class="sort-icon"></span></th>
+            <th class="sortable">Yetkazib berilgan<span class="sort-icon"></span></th>
+            <th class="sortable">Bekor qilingan<span class="sort-icon"></span></th>
+          </tr></thead>
+          <tbody id="bolim-tbody">
+            <tr>
+              <td>1</td>
+              <td><a href="mahsulotlar.html" style="font-weight:700;color:var(--color-primary);">Texnik bo'lim</a></td>
+              <td style="color:var(--color-primary);font-weight:700;">24</td><td>4</td><td>6</td><td>10</td>
+              <td style="color:var(--color-success);font-weight:600;">3</td><td style="color:var(--color-danger);">1</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td><a href="mahsulotlar.html" style="font-weight:700;color:var(--color-primary);">Ishlab chiqarish</a></td>
+              <td style="color:var(--color-primary);font-weight:700;">18</td><td>2</td><td>4</td><td>8</td>
+              <td style="color:var(--color-success);font-weight:600;">3</td><td style="color:var(--color-danger);">1</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td><a href="mahsulotlar.html" style="font-weight:700;color:var(--color-primary);">Moliya bo'limi</a></td>
+              <td style="color:var(--color-primary);font-weight:700;">12</td><td>1</td><td>3</td><td>6</td>
+              <td style="color:var(--color-success);font-weight:600;">2</td><td style="color:var(--color-danger);">0</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td><a href="mahsulotlar.html" style="font-weight:700;color:var(--color-primary);">Logistika</a></td>
+              <td style="color:var(--color-primary);font-weight:700;">8</td><td>1</td><td>2</td><td>4</td>
+              <td style="color:var(--color-success);font-weight:600;">1</td><td style="color:var(--color-danger);">0</td>
+            </tr>
+            <tr class="total-row">
+              <td colspan="2" style="font-weight:700;"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Jami:</td>
+              <td style="font-weight:800;">62</td><td style="font-weight:700;">8</td><td style="font-weight:700;">15</td><td style="font-weight:700;">28</td>
+              <td style="font-weight:700;color:var(--color-success);">9</td><td style="font-weight:700;color:var(--color-danger);">2</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="alert alert-info" style="margin-top:16px;">
+      <span>ℹ</span>
+      <div>Bo'lim nomi bosiladigan havola — bosganda <strong>Mahsulotlar</strong> sahifasiga o'tadi va o'sha bo'lim bo'yicha filtrlanadi.</div>
+    </div>
+  
+{% endblock %}
