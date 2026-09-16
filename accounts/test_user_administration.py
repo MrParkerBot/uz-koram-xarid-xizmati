@@ -330,3 +330,56 @@ class AnonymousAccessTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(get_user_model().objects.count(), 0)
+
+
+class PhoneNumberTests(UsersPageTestCase):
+    """The page prints +998 in front of whatever is stored."""
+
+    def test_the_documented_format_is_accepted(self) -> None:
+        self.create_user(phone_number="90 123 45 67")
+
+        self.assertTrue(get_user_model().objects.filter(first_name="Bobur").exists())
+
+    def test_a_number_in_another_shape_is_refused(self) -> None:
+        for supplied in ("901234567", "+998 90 123 45 67", "telefon yo'q", "   "):
+            with self.subTest(phone_number=supplied):
+                response = self.create_user(phone_number=supplied)
+
+                self.assertFalse(
+                    get_user_model().objects.filter(first_name="Bobur").exists()
+                )
+                self.assertEqual(response.status_code, 200)
+
+    def test_the_country_code_is_not_stored_twice(self) -> None:
+        # The page renders a literal +998 before the field, so a number that
+        # carried one would read "+998 +998 90 ...".
+        self.create_user(phone_number="90 123 45 67")
+
+        page = self.client.get(reverse("users")).content.decode()
+
+        self.assertIn("+998 90 123 45 67", page)
+        self.assertNotIn("+998 +998", page)
+
+
+class SelfDeletionTests(UsersPageTestCase):
+    """Nobody deletes the account they are signed in with."""
+
+    def test_deleting_your_own_account_is_refused(self) -> None:
+        response = self.client.post(
+            reverse("user-delete", args=[self.administrator.pk])
+        )
+
+        self.administrator.refresh_from_db()
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(self.administrator.is_active)
+
+    def test_deleting_somebody_else_still_works(self) -> None:
+        self.create_user()
+        other = get_user_model().objects.get(first_name="Bobur")
+
+        self.client.post(reverse("user-delete", args=[other.pk]))
+
+        other.refresh_from_db()
+
+        self.assertFalse(other.is_active)

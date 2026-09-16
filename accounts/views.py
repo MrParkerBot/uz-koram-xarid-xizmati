@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from django.contrib.auth import get_user_model
 from django.db.models import QuerySet
-from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
+from django.http import (
+    HttpRequest,
+    HttpResponse,
+    HttpResponseForbidden,
+)
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -91,7 +95,7 @@ def user_update(request: HttpRequest, pk: int) -> HttpResponse:
 
 
 @require_POST
-def user_delete(request: HttpRequest, pk: int) -> HttpResponseRedirect:
+def user_delete(request: HttpRequest, pk: int) -> HttpResponse:
     """Delete a user the way DEC-009 defines deletion.
 
     The account is deactivated rather than removed: it leaves the list and can
@@ -99,6 +103,14 @@ def user_delete(request: HttpRequest, pk: int) -> HttpResponseRedirect:
     Deleting the row would take its applications and contracts with it.
     """
     deleted_user = get_object_or_404(get_user_model(), pk=pk, is_active=True)
+
+    # Deleting yourself is never what somebody meant to do, and the account
+    # doing the deleting is the one that can still reach this page. Refusing
+    # costs nothing; recovering from it means editing the database.
+    if deleted_user.pk == request.user.pk:
+        return HttpResponseForbidden(
+            "O'z hisobingizni o'chira olmaysiz."
+        )
 
     deleted_user.is_active = False
     deleted_user.save(update_fields=["is_active"])

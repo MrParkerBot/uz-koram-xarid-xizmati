@@ -17,12 +17,18 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractBaseUser
 from django.contrib.auth.password_validation import validate_password
+from django.core.validators import RegexValidator
 from django.db import transaction
 from django.utils.text import slugify
 
 from accounts.models import UserProfile, UserType
 
 MAXIMUM_USERNAME_ATTEMPTS = 1000
+
+# The format the page's own hint promises: "90 123 45 67". The +998 is printed
+# by the page rather than stored, so a number that carried it would render as
+# +998 +998 90 123 45 67.
+PHONE_NUMBER_FORMAT = r"^\d{2} \d{3} \d{2} \d{2}$"
 
 
 def derive_username(first_name: str, last_name: str) -> str:
@@ -57,7 +63,17 @@ class UserAdministrationForm(forms.Form):
         required=False,
         help_text="Leave empty when editing to keep the current password.",
     )
-    phone_number = forms.CharField(label="Telefon Raqam", max_length=32)
+    phone_number = forms.CharField(
+        label="Telefon Raqam",
+        max_length=12,
+        validators=[
+            RegexValidator(
+                PHONE_NUMBER_FORMAT,
+                message="Format: 90 123 45 67",
+            )
+        ],
+        help_text="Uzbek national number without the +998 the page prints.",
+    )
     user_type = forms.ModelChoiceField(
         label="User Type",
         queryset=UserType.objects.none(),
