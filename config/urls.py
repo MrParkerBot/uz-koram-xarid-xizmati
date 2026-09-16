@@ -45,6 +45,7 @@ from applications.views import (
     application_create,
     application_pdf,
     assign_application,
+    assigned_list,
     incoming_list,
     reject_application,
 )
@@ -58,7 +59,6 @@ from reference.supplier_views import supplier_page
 # Every page except the dashboard, which answers at the site root. Each entry
 # is (url path, URL name); the template is pages/<name>.html.
 PAGE_ROUTES: tuple[tuple[str, str], ...] = (
-    ("tayinlangan/", "tayinlangan"),
     ("kelishinlingan/", "kelishinlingan"),
     ("tuzilgan/", "tuzilgan"),
     ("xodimlar-yuklamasi/", "xodimlar-yuklamasi"),
@@ -347,6 +347,15 @@ urlpatterns = [
         "qabul-arizalar/",
         require_page_permission("qabul-arizalar")(accepted_list),
         name="qabul-arizalar",
+    ),
+    # The Tayinlangan Arizalar page (TASK-UZK-028). It left PAGE_ROUTES when
+    # it stopped being a template with no data behind it; the path and the
+    # name are the ones the sidebar, the permission matrix and
+    # PAGE_SHOWING_STAGE already use.
+    path(
+        "tayinlangan/",
+        require_page_permission("tayinlangan")(assigned_list),
+        name="tayinlangan",
     ),
     # Creating an application (TASK-UZK-026). The form is on the Qabul
     # qilingan page, so it answers to that page's permission like every other
