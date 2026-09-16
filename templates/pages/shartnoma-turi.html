@@ -1,9 +1,20 @@
 {% extends "base.html" %}
+{% comment %}
+The Shartnoma Turi master data page, on real data.
+
+The supplied layout is kept, including its note about where these types are
+used. What changed is where the rows come from: the prototype held four types
+in a JavaScript array and edited it in the browser.
+
+DEC-023 settles CONFLICT-004 here. Section 3.7 gives contract type a
+maintainable page while the section 4.8 contract form fixes it to Import and
+Local; the decision is for section 3.7, with those two seeded as a starting
+point rather than as the whole list.
+{% endcomment %}
 {% block page_title %}Shartnoma Turi{% endblock %}
 {% block breadcrumb %}Ma'lumotlar / Shartnoma Turi{% endblock %}
 {% block page_heading %}Shartnoma Turi{% endblock %}
 {% block content %}
-
 
     <div class="page-header">
       <div><h1 class="page-title">Shartnoma Turi</h1><div class="muted">Contract types — Shartnoma 4.8 formida ishlatiladi</div></div>
@@ -11,10 +22,11 @@
     </div>
 
     <div class="split-layout">
+      <!-- TABLE SIDE -->
       <div class="split-table-side">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
           <div style="font-size:14px;font-weight:700;">Shartnoma Turlari Ro'yhati</div>
-          <button class="btn btn-primary-custom btn-sm" onclick="showForm()">+ Yangi qo'shish</button>
+          <a class="btn btn-primary-custom btn-sm" href="{% url 'shartnoma-turi' %}">+ Yangi qo'shish</a>
         </div>
         <div class="search-box" style="margin-bottom:14px;"><i class="bi bi-search search-icon" aria-hidden="true"></i><input type="text" class="form-control" id="search-input" placeholder="Qidirish…"/></div>
         <div class="table-wrap">
@@ -24,67 +36,59 @@
               <th class="sortable">Shartnoma Turi<span class="sort-icon"></span></th>
               <th style="width:120px;text-align:center;">Amallar</th>
             </tr></thead>
-            <tbody id="turi-tbody"></tbody>
+            <tbody id="turi-tbody">
+            {% for contract_type in contract_types %}
+              <tr data-id="{{ contract_type.pk }}">
+                <td>{{ forloop.counter }}</td>
+                <td>{{ contract_type.name }}</td>
+                <td style="text-align:center;white-space:nowrap;">
+                  <a class="btn btn-outline-custom btn-xs" href="{% url 'shartnoma-turi' %}?edit={{ contract_type.pk }}"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</a>
+                  <form method="post" action="{% url 'shartnoma-turi-delete' contract_type.pk %}" style="display:inline;" data-confirm="{{ contract_type.name }} o'chirilsinmi?">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline-custom text-danger btn-xs" aria-label="O'chirish"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+                  </form>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3" class="muted" style="text-align:center;">Hozircha yozuv yo'q.</td></tr>
+            {% endfor %}
+            </tbody>
           </table>
         </div>
       </div>
+
+      <!-- FORM SIDE -->
       <div class="split-form-side">
-        <div class="split-form-title" id="form-title"><i class="bi bi-plus-lg" aria-hidden="true"></i> Yangi Shartnoma Turi qo'shish</div>
-        <input type="hidden" id="edit-id"/>
-        <div class="form-group">
-          <label class="form-label">Shartnoma Turi <span style="color:var(--color-danger)">*</span></label>
-          <input type="text" class="form-control" id="turi-name" placeholder="masalan: Import, Local, Framework…" required/>
-          <div class="form-error" id="turi-name-err"></div>
-        </div>
-        <div style="display:flex;gap:10px;margin-top:24px;">
-          <button class="btn btn-primary-custom" style="flex:1;" onclick="saveRow()"><i class="bi bi-save" aria-hidden="true"></i> Saqlash</button>
-          <button class="btn btn-outline-custom" style="flex:1;" onclick="cancelEdit()"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</button>
-        </div>
-        <div class="alert alert-info" style="margin-top:20px;">
-          <span>ℹ</span><div>Bu turlari <strong>Kelishinlingan Shartnoma (4.8)</strong> kiritish formasida dropdown sifatida ishlatiladi.</div>
-        </div>
+        <form method="post" action="{% if edited_record %}{% url 'shartnoma-turi-update' edited_record.pk %}{% else %}{% url 'shartnoma-turi-create' %}{% endif %}">
+          {% csrf_token %}
+          <div class="split-form-title" id="form-title">
+            {% if edited_record %}<i class="bi bi-pencil" aria-hidden="true"></i> Shartnoma Turi tahrirlash{% else %}<i class="bi bi-plus-lg" aria-hidden="true"></i> Yangi Shartnoma Turi qo'shish{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.name.id_for_label }}">Shartnoma Turi <span style="color:var(--color-danger)">*</span></label>
+            <input type="text" class="form-control" name="{{ form.name.html_name }}" id="{{ form.name.id_for_label }}" value="{{ form.name.value|default:'' }}" placeholder="masalan: Import, Local, Framework…" required/>
+            <div class="form-error">{{ form.name.errors|striptags }}</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.category_number.id_for_label }}">Category Number</label>
+            <input type="number" class="form-control" name="{{ form.category_number.html_name }}" id="{{ form.category_number.id_for_label }}" value="{{ form.category_number.value|default:'' }}" placeholder="100123"/>
+            <div class="form-hint">6 xonali son. Majburiy emas.</div>
+            <div class="form-error">{{ form.category_number.errors|striptags }}</div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:24px;">
+            <button type="submit" class="btn btn-primary-custom" style="flex:1;"><i class="bi bi-save" aria-hidden="true"></i> Saqlash</button>
+            <a class="btn btn-outline-custom" style="flex:1;" href="{% url 'shartnoma-turi' %}"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</a>
+          </div>
+          <div class="alert alert-info" style="margin-top:20px;">
+            <span>ℹ</span><div>Bu turlari <strong>Kelishinlingan Shartnoma (4.8)</strong> kiritish formasida dropdown sifatida ishlatiladi. Ro'yhat tahrirlanadi: Import va Local boshlang'ich qiymatlar, to'liq ro'yhat emas (DEC-023).</div>
+          </div>
+        </form>
       </div>
     </div>
-  
+
 {% endblock %}
 {% block extra_scripts %}
 <script>
-let editingId=null, nextId=5;
-let data=[
-  {id:1,name:'Import'},
-  {id:2,name:'Mahalliy (Local)'},
-  {id:3,name:'Ramka (Framework)'},
-  {id:4,name:'Davlat xaridi'},
-];
-function showForm(id){
-  editingId=id||null;
-  document.getElementById('form-title').innerHTML=id?'<i class="bi bi-pencil" aria-hidden="true"></i> Tahrirlash':'<i class="bi bi-plus-lg" aria-hidden="true"></i> Yangi Shartnoma Turi qo\'shish';
-  document.getElementById('turi-name').value='';
-  document.getElementById('turi-name-err').textContent='';
-  if(id){const item=data.find(d=>d.id===id);if(item)document.getElementById('turi-name').value=item.name;}
-}
-function saveRow(){
-  const name=document.getElementById('turi-name').value.trim();
-  if(!name){document.getElementById('turi-name-err').textContent='Majburiy maydon';return;}
-  document.getElementById('turi-name-err').textContent='';
-  if(editingId){const item=data.find(d=>d.id===editingId);if(item)item.name=name;Toast.success('Yangilandi');}
-  else{data.push({id:nextId++,name});Toast.success('Qo\'shildi');}
-  renderTable();cancelEdit();
-}
-function deleteRow(id,name){
-  Modal.confirm('O\'chirishni tasdiqlaysizmi?',`"${name}" o\'chirib tashlanadi.`,()=>{data=data.filter(d=>d.id!==id);renderTable();Toast.success('O\'chirildi');});
-}
-function cancelEdit(){
-  editingId=null;
-  document.getElementById('turi-name').value='';
-  document.getElementById('turi-name-err').textContent='';
-  document.getElementById('form-title').innerHTML='<i class="bi bi-plus-lg" aria-hidden="true"></i> Yangi Shartnoma Turi qo\'shish';
-}
-function renderTable(){
-  const tbody=document.getElementById('turi-tbody');
-  tbody.innerHTML=data.map((item,i)=>`<tr><td>${i+1}</td><td>${item.name}</td><td style="text-align:center;white-space:nowrap;"><button class="btn btn-outline-custom btn-xs" onclick="showForm(${item.id})"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</button> <button class="btn btn-outline-custom text-danger btn-xs" onclick="deleteRow(${item.id},'${item.name}')" aria-label="O'chirish"><i class="bi bi-x-lg" aria-hidden="true"></i></button></td></tr>`).join('');
-}
-renderTable();
-initTableSearch('#search-input','#turi-table');
+initTableSearch('#search-input', '#turi-table');
 </script>
 {% endblock %}
