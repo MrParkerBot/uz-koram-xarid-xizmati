@@ -44,6 +44,7 @@ from applications.views import (
     accepted_list,
     application_create,
     application_pdf,
+    assign_application,
     incoming_list,
     reject_application,
 )
@@ -370,6 +371,14 @@ urlpatterns = [
         "kelib-arizalar/<int:pk>/qabul/",
         require_page_permission("kelib-arizalar")(accept_application),
         name="ariza-qabul",
+    ),
+    # Assigning and re-assigning, offered on the Qabul qilingan page and
+    # answering to its permission (TASK-UZK-027). One route for both, because
+    # DEC-024 makes them the same act.
+    path(
+        "qabul-arizalar/<int:pk>/tayinlash/",
+        require_page_permission("qabul-arizalar")(assign_application),
+        name="ariza-tayinlash",
     ),
     # Rejecting, for the same reason and under the same permission
     # (TASK-UZK-024).

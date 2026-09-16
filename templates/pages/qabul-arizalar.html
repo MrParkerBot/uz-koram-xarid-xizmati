@@ -7,19 +7,22 @@ prototype held five applications in a JavaScript array and rendered them from
 a template literal, so nothing survived a refresh, the PDF badge downloaded
 nothing and Tayinlash assigned nobody.
 
-Three things on this page are deliberately not finished, and saying so here is
-the point:
+One thing on this page is deliberately not finished, and saying so here is the
+point: the filter bar is inert. TASK-UZK-041 builds filtering for every table
+at once, and controls that look like they work but do not would be worse than
+controls that are visibly waiting.
 
-- The filter bar is inert. TASK-UZK-041 builds filtering for every table at
-  once, and controls that look like they work but do not would be worse than
-  controls that are visibly waiting.
-- Tayinlangan xodim, Choose user and Tayinlash are the assignment REQ-ARIZA-006
-  describes, and TASK-UZK-027 wires them. Until then the column is empty on
-  every row, which is by design rather than by fault.
-The prototype's "Ariza Yaratish" modal is back, and posts (TASK-UZK-026). It
-was removed by TASK-UZK-025 because it posted nowhere, and an inert creation
-form on a page that is otherwise real reads as a broken feature rather than as
-a placeholder.
+Everything else on it is real now.
+
+The "Ariza Yaratish" modal posts (TASK-UZK-026). It was removed by
+TASK-UZK-025 because it posted nowhere, and an inert creation form on a page
+that is otherwise real reads as a broken feature rather than as a placeholder.
+
+Tayinlangan xodim and Tayinlash are wired (TASK-UZK-027). An unassigned row
+offers the chooser and the button; an assigned one shows who has it and offers
+Qayta, which is REQ-ARIZA-007's re-assignment rather than a second way of
+doing the same thing. An assigned application stays on this page for exactly
+that reason - the row is where it is moved from.
 
 The table shows one row per order line rather than one per application, with
 the application's own cells spanning its lines. An application can order
@@ -105,12 +108,26 @@ week.
               </td>
               <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.qabul_qilingan_sana|date:"Y-m-d" }}</td>
               <td rowspan="{{ lines|length }}">
-                <select class="form-control" style="width:140px;padding:5px 8px;font-size:11px;" disabled title="TASK-UZK-027 tayinlashni quradi">
-                  <option value="">&mdash; Tanlang &mdash;</option>
-                </select>
+                {% if ariza.assigned_to %}
+                  <span class="badge badge-info">{{ ariza.assigned_to.get_full_name|default:ariza.assigned_to.username }}</span>
+                {% else %}
+                  <select class="form-control" form="tayinlash-{{ ariza.pk }}" name="xodim" style="width:140px;padding:5px 8px;font-size:11px;" required>
+                    <option value="">&mdash; Tanlang &mdash;</option>
+                    {% for xodim in specialists %}
+                      <option value="{{ xodim.pk }}">{{ xodim.get_full_name|default:xodim.username }}</option>
+                    {% endfor %}
+                  </select>
+                {% endif %}
               </td>
               <td style="text-align:center;white-space:nowrap;" rowspan="{{ lines|length }}">
-                <button class="btn btn-primary-custom btn-xs" disabled title="TASK-UZK-027 tayinlashni quradi">Tayinlash</button>
+                {% if ariza.assigned_to %}
+                  <button type="button" class="btn btn-outline-custom btn-xs js-reassign" data-reassign-url="{% url 'ariza-tayinlash' ariza.pk %}" data-reassign-ariza="{{ ariza.ariza_raqami }}" data-reassign-xodim="{{ ariza.assigned_to.get_full_name|default:ariza.assigned_to.username }}"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Qayta</button>
+                {% else %}
+                  <form method="post" id="tayinlash-{{ ariza.pk }}" action="{% url 'ariza-tayinlash' ariza.pk %}" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary-custom btn-xs">Tayinlash</button>
+                  </form>
+                {% endif %}
               </td>
               {% endif %}
             </tr>
@@ -278,6 +295,45 @@ applications can share.
 
     document.getElementById('item-rows-container').appendChild(row);
     total.value = index + 1;
+  });
+</script>
+
+<!-- RE-ASSIGN MODAL (TASK-UZK-027) -->
+<div id="reassign-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <form method="post" id="reassign-form">
+      {% csrf_token %}
+      <div class="modal-title"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Qayta tayinlash</div>
+      <p class="modal-desc muted">Ariza <span id="reassign-ariza" class="mono-cell"></span> hozir <span id="reassign-xodim"></span>da. Boshqa xodimga o'tkazish uchun tanlang.</p>
+      <div class="form-group">
+        <label class="form-label" for="reassign-select">Xodim <span style="color:var(--color-danger)">*</span></label>
+        <select class="form-control" id="reassign-select" name="xodim" required>
+          <option value="">&mdash; Tanlang &mdash;</option>
+          {% for xodim in specialists %}
+            <option value="{{ xodim.pk }}">{{ xodim.get_full_name|default:xodim.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-custom" data-close-modal="reassign-modal">Bekor qilish</button>
+        <button type="submit" class="btn btn-primary-custom">O'tkazish</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  // DEC-024 allows a move at any time, so this is offered on every assigned
+  // row rather than only on one that has not been accepted yet.
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest('.js-reassign');
+    if (!button) return;
+    const form = document.getElementById('reassign-form');
+    form.action = button.dataset.reassignUrl;
+    form.reset();
+    document.getElementById('reassign-ariza').textContent = button.dataset.reassignAriza;
+    document.getElementById('reassign-xodim').textContent = button.dataset.reassignXodim;
+    Modal.open('reassign-modal');
   });
 </script>
 {% endblock %}
