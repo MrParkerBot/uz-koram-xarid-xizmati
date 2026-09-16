@@ -98,11 +98,28 @@ inline script in `extra_scripts`. Twenty of the twenty-one supplied pages are
 here; `login.html` carries no shell and arrives with authentication in
 `TASK-UZK-008`.
 
-The pages still link to one another by `.html` filename, as the supplied files
-did. `TASK-UZK-007` gives them URLs and rewrites those links.
+Every page has a URL and a name, listed in `config/urls.py`. The name matches
+the template's filename, so a page can be traced from the sidebar to the URL
+to the template without a lookup table. The dashboard answers at the site root.
+
+## Navigation
+
+`config/navigation.py` holds the sidebar: its groups, labels, icons and the URL
+name each entry points at. The structure is the one the customer approved in
+the supplied `sidebar.js`; what changed is that Django renders it, so a link
+cannot point at a page that does not exist and the current page is marked on
+the server.
+
+`static/js/sidebar.js` is no longer loaded. It rebuilt the navigation in the
+browser and would overwrite the rendered links. The file stays in `static/`
+because it was supplied with the assignment and the asset tests assert it is
+served.
+
+Every entry is shown to everyone for now. Hiding the ones a role may not open
+is `TASK-UZK-012`.
 
 ## Project status
 
-This is the application skeleton plus the shared page shell. The root URL
-still serves a placeholder; the real pages arrive in `TASK-UZK-006` and
-`TASK-UZK-007`.
+Every page renders and is reachable, but none of them has data yet: the
+tables and forms are still the sample markup supplied with the assignment.
+Authentication arrives in `TASK-UZK-008`.
