@@ -194,6 +194,18 @@ class TogglePageTests(TestCase):
 class DeletedHolderTests(TestCase):
     """A deactivated account must not keep the lock closed for everybody."""
 
+    def test_a_deleted_holder_may_not_edit_contracts(self) -> None:
+        # The two questions this module answers have to agree about the same
+        # person: one saying "nobody is the editor" while the other says "yes,
+        # they may" is how a deactivated account keeps its authority.
+        holder = make_user("departed")
+        grant_contract_editing(holder)
+
+        holder.is_active = False
+        holder.save(update_fields=["is_active"])
+
+        self.assertFalse(may_edit_contracts(holder))
+
     def test_a_deleted_holder_is_not_reported_as_the_editor(self) -> None:
         # DEC-009 deletion is a deactivation, so the row survives with the
         # permission still set. Reporting them as the holder would leave the

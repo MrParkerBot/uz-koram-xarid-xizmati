@@ -38,8 +38,12 @@ def may_edit_contracts(user: AbstractBaseUser | None) -> bool:
     if user is None or not getattr(user, "is_authenticated", False):
         return False
 
+    # The account has to be active as well as flagged, for the same reason
+    # contract_editor excludes a deactivated holder: DEC-009 leaves the row in
+    # place when somebody is deleted, and a deleted person must not still be
+    # the one person allowed to change a contract.
     return UserProfile.objects.filter(
-        user=user, may_edit_contracts=True
+        user=user, may_edit_contracts=True, user__is_active=True
     ).exists()
 
 
