@@ -115,7 +115,7 @@ DATABASES = {
 # Where an unauthenticated visitor is sent, and where each end of the session
 # lands. TASK-UZK-009 makes the first of these apply to every page.
 LOGIN_URL = "login"
-LOGIN_REDIRECT_URL = "dashboard"
+LOGIN_REDIRECT_URL = "landing-page"
 LOGOUT_REDIRECT_URL = "login"
 
 # The session cookie now identifies a real user rather than a browser-side

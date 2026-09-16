@@ -68,7 +68,9 @@ EXPECTED_PAGES: dict[str, set[str]] = {
     USERS: {"xarid-ariza"},
 }
 
-# The four pages section 11 assigns to nobody, which DEC-015 resolves.
+# The pages section 11 assigns to nobody, which DEC-015 resolves. The
+# decision names four; the fourth, Top suppliers, is TASK-UZK-051 and does not
+# exist yet, so it is absent here rather than forgotten.
 PAGES_SECTION_11_FORGOT = {"dashboard", "logs", "tuzilgan"}
 
 
@@ -270,3 +272,101 @@ class SidebarTests(TestCase):
 
         self.assertEqual(sidebar.count('class="nav-section-label"'), 1)
         self.assertEqual(sidebar.count('class="nav-link'), 1)
+
+
+class EveryViewIsGuardedTests(TestCase):
+    """The decorator is applied by hand, so something has to check it was.
+
+    TASK-UZK-009 closed the application to anonymous visitors with a
+    middleware, precisely because twenty decorators are twenty chances to
+    forget the twenty-first. This check is opt-in by contrast, and forty tasks
+    remain - most of them adding views. A view with a row in the matrix and no
+    decorator reads as protected while being open, so the URL configuration is
+    walked rather than trusted.
+    """
+
+    def test_every_page_view_refuses_a_user_with_no_type(self) -> None:
+        nobody = get_user_model().objects.create_user(
+            username="unguarded.check", password=get_random_string(24)
+        )
+        self.client.force_login(nobody)
+
+        for page in navigation_url_names():
+            with self.subTest(page=page):
+                self.assertEqual(
+                    self.client.get(reverse(page)).status_code,
+                    403,
+                    f"{page} answered a user with no User Type. Either its view "
+                    "is missing require_page_permission or its row is wrong.",
+                )
+
+    def test_every_users_page_action_refuses_a_user_with_no_type(self) -> None:
+        nobody = get_user_model().objects.create_user(
+            username="unguarded.actions", password=get_random_string(24)
+        )
+        victim = user_of_type(ADMIN)
+        self.client.force_login(nobody)
+
+        actions = (
+            (reverse("user-create"), {}),
+            (reverse("user-update", args=[victim.pk]), {}),
+            (reverse("user-delete", args=[victim.pk]), {}),
+        )
+        for url, payload in actions:
+            with self.subTest(url=url):
+                self.assertEqual(self.client.post(url, payload).status_code, 403)
+
+
+class LandingPageTests(TestCase):
+    """Signing in must not answer 403."""
+
+    def test_a_manager_lands_on_the_dashboard(self) -> None:
+        self.client.force_login(user_of_type(MENEJER))
+
+        response = self.client.get(reverse("landing-page"))
+
+        self.assertRedirects(response, reverse("dashboard"))
+
+    def test_a_type_without_the_dashboard_lands_somewhere_it_may_open(
+        self,
+    ) -> None:
+        # Bo`lim Boshlig`i, Katta Mutaxasis and a requester all used to meet a
+        # 403 immediately after signing in correctly.
+        for type_name in (BOLIM_BOSHLIGI, KATTA_MUTAXASIS, USERS):
+            with self.subTest(user_type=type_name):
+                self.client.force_login(user_of_type(type_name))
+
+                landed = self.client.get(reverse("landing-page"), follow=True)
+
+                self.assertEqual(landed.status_code, 200)
+
+    def test_a_requester_lands_on_the_only_page_they_have(self) -> None:
+        self.client.force_login(user_of_type(USERS))
+
+        response = self.client.get(reverse("landing-page"))
+
+        self.assertRedirects(response, reverse("xarid-ariza"))
+
+    def test_a_user_with_no_type_is_told_rather_than_looped(self) -> None:
+        nobody = get_user_model().objects.create_user(
+            username="no.type.landing", password=get_random_string(24)
+        )
+        self.client.force_login(nobody)
+
+        response = self.client.get(reverse("landing-page"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_signing_in_goes_through_the_landing_page(self) -> None:
+        password = get_random_string(24)
+        user = user_of_type(USERS)
+        user.set_password(password)
+        user.save(update_fields=["password"])
+
+        response = self.client.post(
+            reverse("login"), {"username": user.get_username(), "password": password}
+        )
+
+        self.assertRedirects(
+            response, reverse("landing-page"), target_status_code=302
+        )

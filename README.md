@@ -197,7 +197,14 @@ section 11 wrote as one - and it is written out at the top of
 `accounts/permissions.py`.
 
 A page added to the application without a row in the matrix fails a test rather
-than becoming Admin-only by accident.
+than becoming Admin-only by accident, and a page view added without the
+decorator fails another: the check is applied by hand, so something has to
+verify it was applied.
+
+Signing in lands on `/kirish/`, which forwards to the first page the user's
+type may open, in the sidebar's own order. It is not the dashboard, because
+three of the six types may not open that one - they would sign in correctly and
+be told they are forbidden.
 
 ## Users
 

@@ -76,10 +76,19 @@ class LoginTests(AuthenticationTestCase):
 
         self.assertEqual(int(self.client.session["_auth_user_id"]), self.user.pk)
 
-    def test_valid_credentials_land_on_the_dashboard(self) -> None:
+    def test_valid_credentials_land_on_a_page_the_user_may_open(self) -> None:
+        # TASK-UZK-012 put a landing page between the login and the dashboard:
+        # three of the six User Types may not open the dashboard, so signing in
+        # correctly used to answer 403. This account is an Admin, so the
+        # landing page sends it to the dashboard.
         response = self.sign_in()
 
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertRedirects(
+            response, reverse("landing-page"), target_status_code=302
+        )
+        self.assertRedirects(
+            self.client.get(reverse("landing-page")), reverse("dashboard")
+        )
 
     def test_a_wrong_password_is_rejected(self) -> None:
         response = self.sign_in(password=WRONG_PASSWORD)
@@ -131,7 +140,9 @@ class LoginTests(AuthenticationTestCase):
 
         response = self.client.get(reverse("login"))
 
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertRedirects(
+            response, reverse("landing-page"), target_status_code=302
+        )
 
 
 class LogoutTests(AuthenticationTestCase):

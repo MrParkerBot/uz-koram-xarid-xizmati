@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import PermissionDenied
 from django.db.models import QuerySet
 from django.http import (
     HttpRequest,
@@ -14,6 +15,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from accounts.forms import UserAdministrationForm
+from accounts.permissions import first_page_for
 
 USERS_TEMPLATE = "pages/users.html"
 
@@ -116,3 +118,19 @@ def user_delete(request: HttpRequest, pk: int) -> HttpResponse:
     deleted_user.save(update_fields=["is_active"])
 
     return redirect(reverse("users"))
+
+
+def landing_page(request: HttpRequest) -> HttpResponse:
+    """Send a signed-in user to the first page their type may open.
+
+    Signing in used to land everybody on the dashboard, which three of the six
+    types may not open (DEC-015) - so signing in correctly answered 403. This
+    reads the same matrix the sidebar does rather than inventing an order.
+    """
+    page_name = first_page_for(request.user)
+    if page_name is None:
+        raise PermissionDenied(
+            "Hisobingizga User Type belgilanmagan. Admin bilan bog'laning."
+        )
+
+    return redirect(page_name)

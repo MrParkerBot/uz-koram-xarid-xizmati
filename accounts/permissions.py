@@ -147,3 +147,19 @@ def require_page_permission(page_name: str) -> Callable:
         return permitted_view
 
     return decorate
+
+
+def first_page_for(user: AbstractBaseUser | AnonymousUser | None) -> str | None:
+    """The page to send this user to when they have not asked for one.
+
+    The sidebar's own order, so that somebody lands on the first thing they
+    would have clicked. None when they may open nothing at all - an account
+    that exists but has been given no type.
+    """
+    from config.navigation import navigation_url_names
+
+    for page_name in navigation_url_names():
+        if may_open(user, page_name):
+            return page_name
+
+    return None

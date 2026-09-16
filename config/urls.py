@@ -19,7 +19,13 @@ from django.urls import path
 from django.views.generic import TemplateView
 
 from accounts.permissions import require_page_permission
-from accounts.views import user_create, user_delete, user_list, user_update
+from accounts.views import (
+    landing_page,
+    user_create,
+    user_delete,
+    user_list,
+    user_update,
+)
 
 # Every page except the dashboard, which answers at the site root. Each entry
 # is (url path, URL name); the template is pages/<name>.html.
@@ -70,6 +76,9 @@ urlpatterns = [
     # prefetches one - cannot end somebody's session.
     path("logout/", LogoutView.as_view(), name="logout"),
     path("", page_view("dashboard"), name="dashboard"),
+    # Where signing in lands. Not the dashboard: three of the six types may
+    # not open it, so signing in correctly used to answer 403.
+    path("kirish/", landing_page, name="landing-page"),
     *(
         path(route, page_view(page_name), name=page_name)
         for route, page_name in PAGE_ROUTES
