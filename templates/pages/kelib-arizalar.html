@@ -1,4 +1,24 @@
 {% extends "base.html" %}
+{% comment %}
+The Kelib tushgan Arizalar page, on real data.
+
+The supplied layout is kept. What changed is where the rows come from: the
+prototype held eight applications in a JavaScript array, so nothing survived a
+refresh and the PDF icon downloaded nothing.
+
+Two things on this page are deliberately not finished, and saying so here is
+the point:
+
+- The filter bar is inert. TASK-UZK-041 builds filtering for every table at
+  once, and four controls that look like they work but do not would be worse
+  than four that are visibly waiting.
+- Accept and Reject are the actions section 4.1 describes, and TASK-UZK-023
+  and TASK-UZK-024 wire them.
+
+DEC-016 also puts a requester, their Bo`lim Boshlig`i and a Direktor in front
+of this list. None of that is built either, so an application here is one that
+somebody put into the database, not one that came through an approval chain.
+{% endcomment %}
 {% block page_title %}Kelib Tushgan Arizalar{% endblock %}
 {% block breadcrumb %}Arizalar / Kelib Tushgan{% endblock %}
 {% block page_heading %}Kelib Tushgan{% endblock %}
@@ -17,25 +37,25 @@
       <!-- FILTER BAR -->
       <div class="toolbar"><div class="toolbar-group">
         <span class="toolbar-label">Filter:</span>
-        <select class="form-control" id="f-bolim" style="width:150px;" onchange="filterTable()">
+        <select class="form-control" id="f-bolim" style="width:150px;" disabled>
           <option value="">Bo'lim: barchasi</option>
           <option>Texnik bo'lim</option>
           <option>Ishlab chiqarish</option>
           <option>Moliya bo'limi</option>
           <option>Logistika</option>
         </select>
-        <select class="form-control" id="f-mahsulot" style="width:160px;" onchange="filterTable()">
+        <select class="form-control" id="f-mahsulot" style="width:160px;" disabled>
           <option value="">Mahsulot turi: barchasi</option>
           <option>100042 — Metallurgiya</option>
           <option>200031 — Kimyoviy</option>
           <option>300015 — Elektr</option>
         </select>
-        <input class="form-control" type="date" id="f-dan" style="width:140px;" onchange="filterTable()"/>
-        <input class="form-control" type="date" id="f-gacha" style="width:140px;" onchange="filterTable()"/>
-        <button class="btn btn-primary-custom btn-sm" onclick="filterTable()"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
+        <input class="form-control" type="date" id="f-dan" style="width:140px;" disabled/>
+        <input class="form-control" type="date" id="f-gacha" style="width:140px;" disabled/>
+        <button class="btn btn-primary-custom btn-sm" disabled title="TASK-UZK-041 filtrlashni quradi"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
         </div><div class="toolbar-group">
-          <button class="btn btn-outline-custom btn-sm" onclick="Toast.info('Excel yuklanmoqda…')"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
-          <button class="btn btn-outline-custom btn-sm" onclick="Toast.info('PDF yuklanmoqda…')"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>
+          <button class="btn btn-outline-custom btn-sm" disabled title="TASK-UZK-042 eksportni quradi"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
+          <button class="btn btn-outline-custom btn-sm" disabled title="TASK-UZK-042 eksportni quradi"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>
         </div>
       </div>
 
@@ -55,155 +75,36 @@
             <th class="sortable">Kelib tushgan<span class="sort-icon"></span></th>
             <th style="text-align:center;width:140px;">Amallar</th>
           </tr></thead>
-          <tbody id="ariza-tbody"></tbody>
+          <tbody id="ariza-tbody">
+          {% for ariza in applications %}
+            <tr data-id="{{ ariza.pk }}">
+              <td>{{ forloop.counter }}</td>
+              <td class="mono-cell">{{ ariza.ariza_raqami }}</td>
+              <td>{{ ariza.department.name }}</td>
+              <td style="font-size:11px;" class="mono-cell">{{ ariza.mahsulot_turi.category_number }} &mdash; {{ ariza.mahsulot_turi.name }}</td>
+              <td>{{ ariza.buyurtma_nomi }}</td>
+              <td style="font-weight:600;color:var(--color-primary);">{{ ariza.soni_display }}</td>
+              <td>{{ ariza.olchov_birligi }}</td>
+              <td style="font-size:11px;color:var(--color-text-muted);">{{ ariza.izoh|default:"&mdash;" }}</td>
+              <td>
+                {% if ariza.pdf %}
+                  <a class="pdf-badge" href="{% url 'ariza-pdf' ariza.pk %}" title="{{ ariza.ariza_raqami }}.pdf"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></a>
+                {% else %}
+                  <span class="muted small">&mdash;</span>
+                {% endif %}
+              </td>
+              <td class="mono-cell">{{ ariza.kelib_tushgan_sana|date:"Y-m-d" }}</td>
+              <td style="text-align:center;white-space:nowrap;">
+                <button class="btn btn-outline-custom text-success btn-xs" disabled title="TASK-UZK-023 qabul qilishni quradi"><i class="bi bi-check-lg" aria-hidden="true"></i> Qabul</button>
+                <button class="btn btn-outline-custom text-danger btn-xs" disabled title="TASK-UZK-024 inkor etishni quradi"><i class="bi bi-x-lg" aria-hidden="true"></i> Inkor</button>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="11" class="muted" style="text-align:center;">Hozircha kelib tushgan ariza yo'q.</td></tr>
+          {% endfor %}
+          </tbody>
         </table>
       </div>
-
-      <!-- PAGINATION -->
-      <div class="pagination-wrap">
-        <button class="btn btn-outline-custom btn-sm prev-btn">‹ Oldingi</button>
-        <button class="btn btn-primary-custom btn-sm page-btn" data-page="1">1</button>
-        <button class="btn btn-outline-custom btn-sm page-btn" data-page="2">2</button>
-        <button class="btn btn-outline-custom btn-sm next-btn">Keyingi ›</button>
-        <div class="pagination-info">
-          <span>Qatorlar:</span>
-          <select class="form-control" style="width:70px;">
-            <option>25</option><option>10</option><option>50</option>
-          </select>
-          <span>Jami: <span class="count" id="total-count">8</span> ta</span>
-        </div>
-      </div>
     </div>
-  
-{% endblock %}
-{% block extra_scripts %}
-<!-- REJECT MODAL -->
-<div id="reject-modal" class="modal-overlay hidden">
-  <div class="modal-box">
-    <div class="modal-title">Arizani Inkor Etish</div>
-    <div class="modal-desc" id="reject-modal-desc">Ariza inkor etiladi. Sababini kiriting:</div>
-    <div class="form-group">
-      <textarea class="form-control" id="reject-reason" placeholder="Sabab / izoh…" rows="4" style="resize:vertical;" required></textarea>
-      <div class="form-error" id="reject-reason-err"></div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-outline-custom" data-close-modal="reject-modal">Bekor</button>
-      <button class="btn btn-outline-custom text-danger" id="confirm-reject-btn">Inkor etish — OK</button>
-    </div>
-  </div>
-</div>
 
-<!-- ACCEPT MODAL -->
-<div id="accept-modal" class="modal-overlay hidden">
-  <div class="modal-box">
-    <div class="modal-title">Arizani Qabul Qilish</div>
-    <div class="modal-desc" id="accept-modal-desc">Arizani qabul qilasizmi?</div>
-    <div class="modal-footer">
-      <button class="btn btn-outline-custom" data-close-modal="accept-modal">Bekor</button>
-      <button class="btn btn-outline-custom text-success" id="confirm-accept-btn"><i class="bi bi-check-lg" aria-hidden="true"></i> Ha, Qabul Qilish</button>
-    </div>
-  </div>
-</div>
-
-<script>
-let currentActionId = null;
-let arizalar = [
-  {id:1,  num:'ARZ-2025-001', bolim:'Texnik bo\'lim',    mahsulot:'100042 — Metallurgiya', nomi:'Bolt M12×50',       soni:500, olchov:'ta',  izoh:'Zanglamaydigan',  date:'2025-03-10', status:'pending'},
-  {id:2,  num:'ARZ-2025-002', bolim:'Ishlab chiqarish', mahsulot:'200031 — Kimyoviy',     nomi:'Asetilen gazi',      soni:20,  olchov:'kg',  izoh:'—',               date:'2025-03-11', status:'pending'},
-  {id:3,  num:'ARZ-2025-003', bolim:'Moliya bo\'limi',   mahsulot:'300015 — Elektr',       nomi:'Kabel 4mm²',         soni:200, olchov:'m',   izoh:'Mis kabel',        date:'2025-03-12', status:'pending'},
-  {id:4,  num:'ARZ-2025-004', bolim:'Logistika',         mahsulot:'100042 — Metallurgiya', nomi:'Prokat po\'lat',     soni:1000,olchov:'kg',  izoh:'GOST 2590-2006',   date:'2025-03-13', status:'pending'},
-  {id:5,  num:'ARZ-2025-005', bolim:'Texnik bo\'lim',    mahsulot:'400008 — Qurilish',     nomi:'Sement M500',        soni:50,  olchov:'qop', izoh:'Nam emas',         date:'2025-03-14', status:'pending'},
-  {id:6,  num:'ARZ-2025-006', bolim:'Ishlab chiqarish', mahsulot:'500022 — Yoqilg\'i',    nomi:'Dizel yoqilg\'isi',  soni:1000,olchov:'l',   izoh:'Euro-5',           date:'2025-03-15', status:'pending'},
-  {id:7,  num:'ARZ-2025-007', bolim:'Moliya bo\'limi',   mahsulot:'300015 — Elektr',       nomi:'Lampa LED 40W',      soni:100, olchov:'ta',  izoh:'—',               date:'2025-03-16', status:'pending'},
-  {id:8,  num:'ARZ-2025-008', bolim:'Texnik bo\'lim',    mahsulot:'600011 — Asboblar',     nomi:'Gayka M10',          soni:2000,olchov:'ta',  izoh:'Yulduzsimon',      date:'2025-03-17', status:'pending'},
-];
-
-function openRejectModal(id) {
-  currentActionId = id;
-  const item = arizalar.find(a=>a.id===id);
-  document.getElementById('reject-modal-desc').textContent = `${item.num} arizasi inkor etiladi. Sababini kiriting:`;
-  document.getElementById('reject-reason').value = '';
-  document.getElementById('reject-reason-err').textContent = '';
-  Modal.open('reject-modal');
-}
-
-function openAcceptModal(id) {
-  currentActionId = id;
-  const item = arizalar.find(a=>a.id===id);
-  document.getElementById('accept-modal-desc').textContent = `"${item.num}" arizasini qabul qilasizmi? Ariza "Qabul Qilingan" sahifasiga o'tkaziladi.`;
-  Modal.open('accept-modal');
-}
-
-document.getElementById('confirm-accept-btn').addEventListener('click', () => {
-  const item = arizalar.find(a=>a.id===currentActionId);
-  if (item) {
-    item.status = 'accepted';
-    const row = document.querySelector(`tr[data-id="${currentActionId}"]`);
-    if (row) {
-      row.style.background = 'rgba(45,182,125,.08)';
-      setTimeout(() => { row.remove(); updateCount(); }, 600);
-    }
-    Toast.success(`${item.num} qabul qilindi <i class="bi bi-check-lg" aria-hidden="true"></i>`);
-  }
-  Modal.close('accept-modal');
-});
-
-document.getElementById('confirm-reject-btn').addEventListener('click', () => {
-  const reason = document.getElementById('reject-reason').value.trim();
-  if (!reason) { document.getElementById('reject-reason-err').textContent = 'Sabab kiritilishi shart'; return; }
-  const item = arizalar.find(a=>a.id===currentActionId);
-  if (item) {
-    item.status = 'rejected';
-    const row = document.querySelector(`tr[data-id="${currentActionId}"]`);
-    if (row) {
-      const actionCell = row.querySelector('td:last-child');
-      actionCell.innerHTML = `<span class="badge badge-danger">Inkor etildi</span>`;
-      Toast.error(`${item.num} inkor etildi`);
-    }
-  }
-  Modal.close('reject-modal');
-});
-
-function filterTable() {
-  const bolim    = document.getElementById('f-bolim').value.toLowerCase();
-  const mahsulot = document.getElementById('f-mahsulot').value.toLowerCase();
-  let count = 0;
-  document.querySelectorAll('#ariza-tbody tr').forEach(row => {
-    const text = row.textContent.toLowerCase();
-    const match = (!bolim || text.includes(bolim)) && (!mahsulot || text.includes(mahsulot));
-    row.style.display = match ? '' : 'none';
-    if (match) count++;
-  });
-  document.getElementById('total-count').textContent = count;
-}
-
-function updateCount() {
-  document.getElementById('total-count').textContent = document.querySelectorAll('#ariza-tbody tr:not([style*="none"])').length;
-}
-
-function renderTable() {
-  const tbody = document.getElementById('ariza-tbody');
-  tbody.innerHTML = arizalar.filter(a=>a.status==='pending').map((item,i) => `
-    <tr data-id="${item.id}">
-      <td>${i+1}</td>
-      <td class="mono-cell">${item.num}</td>
-      <td>${item.bolim}</td>
-      <td style="font-size:12px;">${item.mahsulot}</td>
-      <td style="font-weight:500;">${item.nomi}</td>
-      <td style="font-weight:600;color:var(--color-primary);">${item.soni}</td>
-      <td>${item.olchov}</td>
-      <td style="font-size:11px;color:var(--color-text-muted);max-width:100px;">${item.izoh}</td>
-      <td><span class="pdf-badge"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</span></td>
-      <td class="mono-cell">${item.date}</td>
-      <td style="text-align:center;white-space:nowrap;">
-        <button class="btn btn-outline-custom text-success btn-xs" onclick="openAcceptModal(${item.id})"><i class="bi bi-check-lg" aria-hidden="true"></i> Qabul</button>
-        <button class="btn btn-outline-custom text-danger btn-xs" onclick="openRejectModal(${item.id})"><i class="bi bi-x-lg" aria-hidden="true"></i> Inkor</button>
-      </td>
-    </tr>
-  `).join('');
-  updateCount();
-}
-
-renderTable();
-</script>
 {% endblock %}

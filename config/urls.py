@@ -39,6 +39,7 @@ from accounts.views import (
     user_list,
     user_update,
 )
+from applications.views import application_pdf, incoming_list
 from reference.ariza_status_views import ariza_status_page
 from reference.department_views import department_page
 from reference.mahsulot_turi_views import mahsulot_turi_page
@@ -49,7 +50,6 @@ from reference.supplier_views import supplier_page
 # Every page except the dashboard, which answers at the site root. Each entry
 # is (url path, URL name); the template is pages/<name>.html.
 PAGE_ROUTES: tuple[tuple[str, str], ...] = (
-    ("kelib-arizalar/", "kelib-arizalar"),
     ("qabul-arizalar/", "qabul-arizalar"),
     ("tayinlangan/", "tayinlangan"),
     ("kelishinlingan/", "kelishinlingan"),
@@ -323,5 +323,22 @@ urlpatterns = [
         "firmalar/<int:pk>/delete/",
         require_page_permission("firmalar")(supplier_page.delete_record),
         name="firmalar-delete",
+    ),
+    # The Kelib tushgan Arizalar page (TASK-UZK-022), the first page with a
+    # record that has a life cycle rather than a name. The PDF answers to the
+    # same permission as the page, so an attachment is reachable by exactly
+    # the people who may see the row it belongs to (DEC-019).
+    path(
+        "kelib-arizalar/",
+        require_page_permission("kelib-arizalar")(incoming_list),
+        name="kelib-arizalar",
+    ),
+    # Not wrapped in require_page_permission: the view asks about the page
+    # that currently shows this application, because the attachment has to
+    # stop being reachable when the row stops being visible.
+    path(
+        "arizalar/<int:pk>/pdf/",
+        application_pdf,
+        name="ariza-pdf",
     ),
 ]
