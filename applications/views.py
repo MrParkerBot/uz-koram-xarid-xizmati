@@ -152,18 +152,24 @@ def reject_application(request: HttpRequest, pk: int) -> HttpResponse:
         rejected = application.reject(
             by=request.user, comment=request.POST.get("inkor_izohi", "")
         )
-    except ValueError as refused:
+    except ValueError:
         if not application.is_incoming:
-            # A decision has already been taken on this application by
-            # somebody else. That is not something to explain in a message on
-            # a list this row is no longer on.
-            raise PermissionDenied(str(refused)) from refused
+            # A decision was taken on this application by somebody else while
+            # the page sat open. Reported the way accept_application reports
+            # it, and for the reason the #26 review gave: the caller had the
+            # permission they needed, and what changed is the application.
+            messages.error(
+                request,
+                f"{application.ariza_raqami} inkor etilmadi: ariza "
+                "allaqachon hal qilingan.",
+            )
+        else:
+            messages.error(
+                request,
+                f"{application.ariza_raqami} inkor etilmadi: izoh "
+                "kiritilishi shart.",
+            )
 
-        messages.error(
-            request,
-            f"{application.ariza_raqami} inkor etilmadi: izoh kiritilishi "
-            "shart.",
-        )
         return redirect("kelib-arizalar")
 
     if rejected:

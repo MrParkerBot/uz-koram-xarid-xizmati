@@ -310,9 +310,10 @@ class Application(models.Model):
             comment: why. Stored with its surrounding whitespace stripped.
 
         Returns:
-            True when this call rejected it, and False when it was already
-            rejected - the second click of a double click, which is not an
-            error.
+            True when this call rejected it, and False when somebody else
+            already had - the second click of a double click, which is not an
+            error. The transition is a conditional write, so exactly one of
+            two simultaneous callers is told True.
 
         Raises:
             ValueError: when the comment is empty or only whitespace, or when
@@ -325,6 +326,11 @@ class Application(models.Model):
                 f"{self.ariza_raqami} cannot be rejected without a comment."
             )
 
+        # Decide on the row as it is now, not as the caller last saw it, and
+        # leave the caller holding that. Same reason as accept(): the view
+        # fetched this instance before the call started.
+        self.refresh_from_db()
+
         if self.stage == self.Stage.REJECTED:
             return False
 
@@ -336,22 +342,33 @@ class Application(models.Model):
 
         from reference.models import ArizaStatus
 
-        self.stage = self.Stage.REJECTED
-        self.inkor_izohi = reason
-        self.inkor_qilingan_sana = timezone.now()
-        self.rejected_by = by
-        self.status = ArizaStatus.objects.filter(
+        decided_at = timezone.now()
+        status = ArizaStatus.objects.filter(
             code=ArizaStatus.Code.CANCELLED, is_active=True
         ).first()
-        self.save(
-            update_fields=[
-                "stage",
-                "inkor_izohi",
-                "inkor_qilingan_sana",
-                "rejected_by",
-                "status",
-            ]
+
+        # The condition is part of the write, for the reason accept() gives at
+        # length: a check followed by an unconditional save lets the loser of
+        # a race overwrite the winner's decision.
+        rejected = type(self).objects.filter(
+            pk=self.pk, stage=self.Stage.INCOMING
+        ).update(
+            stage=self.Stage.REJECTED,
+            inkor_izohi=reason,
+            inkor_qilingan_sana=decided_at,
+            rejected_by=by,
+            status=status,
         )
+
+        if not rejected:
+            self.refresh_from_db()
+            return False
+
+        self.stage = self.Stage.REJECTED
+        self.inkor_izohi = reason
+        self.inkor_qilingan_sana = decided_at
+        self.rejected_by = by
+        self.status = status
 
         return True
 

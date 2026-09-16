@@ -215,13 +215,75 @@ class RejectingTwiceTests(RejectionTestCase):
         with self.assertRaises(ValueError):
             self.application.reject(by=self.decider, comment=REASON)
 
-    def test_the_view_refuses_it_rather_than_reporting_it(self) -> None:
-        # An application somebody else has already accepted is not a row on
-        # this list any more, so there is nowhere to put a message about it.
+    def test_a_stale_page_is_told_what_happened_rather_than_forbidden(self):
+        # The #26 review settled this shape for accept, and reject follows it:
+        # whoever clicks Inkor on a row a colleague accepted while the page
+        # sat open had the permission they needed. What changed is the
+        # application.
         self.application.accept(by=self.decider)
 
-        self.assertEqual(self.reject().status_code, 403)
+        page = self.client.post(
+            self.url, {"inkor_izohi": REASON}, follow=True
+        ).content.decode()
+
+        self.assertIn("allaqachon hal qilingan", page)
         self.assertEqual(self.reload().stage, Application.Stage.ACCEPTED)
+
+
+class ConcurrentRejectionTests(RejectionTestCase):
+    """Two people deciding the same application at the same moment.
+
+    reject() mirrors accept(), including the fix the #26 review produced: the
+    stage comparison is part of the write, so the loser of a race cannot
+    overwrite the winner's decision. The interleaving is reproduced by holding
+    a stale instance across somebody else's decision, which is what a second
+    request that loaded the row a moment earlier actually has.
+    """
+
+    def stale_copy(self) -> Application:
+        return Application.objects.get(pk=self.application.pk)
+
+    def test_only_one_of_two_simultaneous_callers_rejects_it(self) -> None:
+        first, second = self.stale_copy(), self.stale_copy()
+
+        self.assertTrue(first.reject(self.decider, REASON))
+        self.assertFalse(second.reject(make_user(MENEJER), "Boshqa sabab."))
+
+    def test_the_loser_does_not_overwrite_the_winners_reason(self) -> None:
+        first, second = self.stale_copy(), self.stale_copy()
+
+        first.reject(self.decider, REASON)
+        second.reject(make_user(MENEJER), "Boshqa sabab.")
+
+        settled = self.reload()
+        self.assertEqual(settled.inkor_izohi, REASON)
+        self.assertEqual(settled.rejected_by, self.decider)
+
+    def test_the_loser_ends_up_holding_the_truth(self) -> None:
+        first, second = self.stale_copy(), self.stale_copy()
+
+        first.reject(self.decider, REASON)
+        second.reject(make_user(MENEJER), "Boshqa sabab.")
+
+        self.assertEqual(second.stage, Application.Stage.REJECTED)
+        self.assertEqual(second.inkor_izohi, REASON)
+
+    def test_a_stale_incoming_row_that_was_accepted_is_refused(self) -> None:
+        stale = self.stale_copy()
+        self.application.accept(by=self.decider)
+
+        with self.assertRaises(ValueError):
+            stale.reject(by=self.decider, comment=REASON)
+
+        self.assertEqual(self.reload().stage, Application.Stage.ACCEPTED)
+
+    def test_the_comment_is_still_required_before_anything_is_read(self):
+        # The comment check comes before the row is re-read, so a rejection
+        # with no reason costs no query and refuses whatever the stage is.
+        self.application.accept(by=self.decider)
+
+        with self.assertRaises(ValueError):
+            self.application.reject(by=self.decider, comment="")
 
 
 class AccessTests(RejectionTestCase):
