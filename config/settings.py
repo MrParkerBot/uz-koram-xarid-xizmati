@@ -11,7 +11,6 @@ import mimetypes
 import os
 from pathlib import Path
 
-from django.contrib.messages import constants as messages_constants
 from django.core.management.utils import get_random_secret_key
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -113,7 +112,13 @@ TEMPLATES = [
 # vendored style.css has no .alert-error - it calls that idea .alert-danger,
 # as Bootstrap does. Renaming the tag here is better than translating it in
 # the template, because every page that ever shows a message gets it right.
-MESSAGE_TAGS = {messages_constants.ERROR: "danger"}
+#
+# 40 is django.contrib.messages.ERROR, written as its value rather than
+# imported: importing the messages package would run it, and everything it
+# imports, while this module is still deciding what the settings are. It
+# happens to work, which is not the same as being safe to do in the file that
+# establishes load order.
+MESSAGE_TAGS = {40: "danger"}
 
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
