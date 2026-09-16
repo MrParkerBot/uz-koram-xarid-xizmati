@@ -150,9 +150,17 @@ python manage.py createsuperuser
 `django.contrib.auth` provides that command; the Django admin site is still
 deliberately absent.
 
+Every page is closed. `LoginRequiredMiddleware` requires a session for every
+view, and an anonymous request is redirected to `/login/` with the page it
+wanted in `next`, so signing in returns the visitor to where they were going.
+The login page is the only view that opts out, with `@login_not_required`.
+
+A view added later is closed unless it says otherwise, which is the direction
+worth defaulting to: forgetting the decorator locks a page, not opens it.
+
 Roles do not exist yet. Every signed-in user can open every page until
 `TASK-UZK-010` adds the role model and `TASK-UZK-012` enforces the permission
-matrix. Closing the pages to anonymous visitors is `TASK-UZK-009`.
+matrix.
 
 ## Templates
 
@@ -164,6 +172,6 @@ gives it no sidebar.
 
 ## Project status
 
-Every page renders, is reachable, and sits behind a real login for anyone who
-has an account - but the pages have no data yet: their tables and forms are
-still the sample markup supplied with the assignment.
+Every page renders and sits behind a real login - but the pages have no data
+yet: their tables and forms are still the sample markup supplied with the
+assignment, and every signed-in user sees all of them.

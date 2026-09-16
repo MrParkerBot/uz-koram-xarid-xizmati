@@ -16,6 +16,7 @@ from django.test import SimpleTestCase
 from django.urls import reverse
 
 from config.settings import read_boolean_setting, read_list_setting
+from config.test_support import SignedInTestCase
 
 TEST_VARIABLE = "UZK_TEST_SETTING"
 
@@ -34,8 +35,12 @@ def environment_variable(name: str, value: str) -> Iterator[None]:
             os.environ[name] = previous_value
 
 
-class ServiceRootTests(SimpleTestCase):
-    """The running application answers at the root URL."""
+class ServiceRootTests(SignedInTestCase):
+    """The running application answers at the root URL.
+
+    Signed in, since TASK-UZK-009 closed every page. The anonymous case is
+    asserted in config/test_authentication.py, where it belongs.
+    """
 
     def test_root_url_returns_successful_response(self) -> None:
         response = self.client.get("/")

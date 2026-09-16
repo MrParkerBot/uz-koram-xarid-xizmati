@@ -10,13 +10,17 @@ password reaching a rendered page.
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.request import urlopen
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.staticfiles import finders
+from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.test import TestCase
 from django.urls import reverse
 from django.utils.crypto import get_random_string
+
+from config.navigation import navigation_url_names
 
 USERNAME = "b.toshmatov"
 FIRST_NAME = "Bobur"
@@ -279,3 +283,89 @@ class SessionCookieTests(TestCase):
         # reachable over HTTPS sets DJANGO_SECURE_COOKIES.
         self.assertEqual(settings.SESSION_COOKIE_SECURE, settings.CSRF_COOKIE_SECURE)
         self.assertFalse(settings.SESSION_COOKIE_SECURE)
+
+
+class ClosedApplicationTests(AuthenticationTestCase):
+    """Every page is closed to a visitor with no session."""
+
+    def test_every_page_redirects_an_anonymous_visitor_to_the_login_page(
+        self,
+    ) -> None:
+        for url_name in navigation_url_names():
+            with self.subTest(page=url_name):
+                response = self.client.get(reverse(url_name))
+
+                self.assertEqual(response.status_code, 302)
+                self.assertTrue(response.url.startswith(reverse("login")))
+
+    def test_the_redirect_remembers_where_the_visitor_was_going(self) -> None:
+        # Otherwise signing in always lands on the dashboard and the visitor
+        # has to find their way back.
+        target = reverse("logs")
+
+        response = self.client.get(target)
+
+        self.assertIn(f"next={target}", response.url)
+
+    def test_every_page_answers_once_signed_in(self) -> None:
+        self.client.force_login(self.user)
+
+        for url_name in navigation_url_names():
+            with self.subTest(page=url_name):
+                response = self.client.get(reverse(url_name))
+
+                self.assertEqual(response.status_code, 200)
+
+    def test_the_login_page_stays_open(self) -> None:
+        # The one view that must not be closed: closing it would mean nobody
+        # could ever sign in.
+        response = self.client.get(reverse("login"))
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_an_unknown_url_is_still_a_not_found(self) -> None:
+        response = self.client.get("/no-such-page/")
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_signing_in_returns_the_visitor_to_the_page_they_asked_for(self) -> None:
+        target = reverse("tuzilgan")
+
+        response = self.client.post(
+            f"{reverse('login')}?next={target}",
+            {"username": USERNAME, "password": PASSWORD},
+        )
+
+        self.assertRedirects(response, target)
+
+
+class AnonymousAssetTests(StaticLiveServerTestCase):
+    """The login page has to be able to style itself.
+
+    Fetched over the wire without a session rather than checked in the
+    markup: a page that merely asks for a stylesheet looks identical whether
+    the stylesheet is served or redirected to the login form.
+    """
+
+    host = "127.0.0.1"
+
+    def test_the_stylesheets_the_login_page_needs_are_served_anonymously(
+        self,
+    ) -> None:
+        for asset in ("css/style.css", "css/bootstrap.min.css"):
+            with (
+                self.subTest(asset=asset),
+                urlopen(f"{self.live_server_url}/static/{asset}") as response,
+            ):
+                self.assertEqual(response.status, 200)
+                self.assertEqual(
+                    response.headers["Content-Type"].split(";")[0], "text/css"
+                )
+
+    def test_the_login_page_asks_for_those_stylesheets(self) -> None:
+        with urlopen(f"{self.live_server_url}{reverse('login')}") as response:
+            page = response.read().decode()
+
+        for asset in ("css/style.css", "css/bootstrap.min.css"):
+            with self.subTest(asset=asset):
+                self.assertIn(asset, page)

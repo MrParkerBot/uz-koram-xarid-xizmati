@@ -72,6 +72,11 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Closed by default. Decorating twenty pages individually would be twenty
+    # chances to forget the twenty-first, and every task from TASK-UZK-011
+    # onward adds views. A view that must stay open says so with
+    # @login_not_required; only the login page does.
+    "django.contrib.auth.middleware.LoginRequiredMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
