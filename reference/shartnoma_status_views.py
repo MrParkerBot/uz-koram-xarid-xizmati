@@ -11,6 +11,7 @@ from accounts.master_data import (
     MasterDataForm,
     MasterDataPage,
     category_number_field,
+    position_form_field,
 )
 from reference.models import ShartnomaStatus
 
@@ -23,11 +24,12 @@ class ShartnomaStatusForm(MasterDataForm):
     stylesheet has no badge for.
     """
 
+    position = position_form_field()
     category_number = category_number_field()
 
     class Meta:
         model = ShartnomaStatus
-        fields = ("name", "badge_colour", "category_number")
+        fields = ("name", "badge_colour", "position", "category_number")
 
 
 shartnoma_status_page = MasterDataPage(

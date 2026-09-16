@@ -75,6 +75,29 @@ class SeedingTests(ArizaStatusPageTestCase):
             with self.subTest(status=name):
                 self.assertIn(name, page)
 
+    def test_they_are_listed_in_the_order_the_work_moves_through_them(self) -> None:
+        # Not alphabetically, which would put Bekor qilingan first and the
+        # new-application state last. TASK-UZK-017 gave both status tables a
+        # position column for this; a status list describes a progression.
+        self.assertEqual(
+            list(ArizaStatus.objects.active().values_list("name", flat=True)),
+            ["Yangi", "Qabul qilingan", "Tayinlangan", "Bekor qilingan"],
+        )
+
+    def test_a_new_status_is_appended_rather_than_sorted_in(self) -> None:
+        self.create()
+
+        listed = list(ArizaStatus.objects.active().values_list("name", flat=True))
+
+        self.assertEqual(listed[-1], ADDED_STATUS)
+
+    def test_a_status_given_a_position_lands_there(self) -> None:
+        self.create(position=15)
+
+        listed = list(ArizaStatus.objects.active().values_list("name", flat=True))
+
+        self.assertEqual(listed[1], ADDED_STATUS)
+
     def test_a_seeded_status_can_be_deleted(self) -> None:
         # Unlike the six User Types, these are examples. Nothing in the code
         # is written against their names, so nothing breaks when one goes.

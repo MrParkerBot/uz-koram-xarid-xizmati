@@ -58,7 +58,7 @@ def make_user(type_name: str = ADMIN):
 
 
 class ShartnomaStatusPageTestCase(TestCase):
-    """An administrator on the Ariza Status page."""
+    """An administrator on the Shartnoma Status page."""
 
     def setUp(self) -> None:
         self.client.force_login(make_user(ADMIN))
@@ -77,7 +77,7 @@ class ShartnomaStatusPageTestCase(TestCase):
 
 
 class SeedingTests(ShartnomaStatusPageTestCase):
-    """DEC-017: four statuses to start with, as examples rather than rules."""
+    """DEC-010: five statuses to start with, as examples rather than a set."""
 
     def test_the_five_decided_statuses_are_there(self) -> None:
         self.assertEqual(
@@ -91,6 +91,25 @@ class SeedingTests(ShartnomaStatusPageTestCase):
         for name in SEEDED_STATUSES:
             with self.subTest(status=name):
                 self.assertIn(name, page)
+
+    def test_they_are_listed_in_the_order_the_work_moves_through_them(self) -> None:
+        # Not alphabetically, which would put Bekor qilingan first and the
+        # starting state third. DEC-010 has the reports generate one column
+        # per active status, so this is also the order those columns come out
+        # in, and the document illustrates them in workflow order.
+        self.assertEqual(
+            list(ShartnomaStatus.objects.active().values_list("name", flat=True)),
+            list(SEEDED_STATUSES),
+        )
+
+    def test_a_new_status_is_appended_rather_than_sorted_in(self) -> None:
+        self.create()
+
+        listed = list(
+            ShartnomaStatus.objects.active().values_list("name", flat=True)
+        )
+
+        self.assertEqual(listed[-1], ADDED_STATUS)
 
     def test_a_seeded_status_can_be_deleted(self) -> None:
         # Unlike the six User Types, these are examples. Nothing in the code

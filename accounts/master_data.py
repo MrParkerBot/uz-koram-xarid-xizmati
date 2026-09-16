@@ -92,6 +92,54 @@ def badge_class_for(colour: str) -> str:
     return BADGE_COLOURS.get(colour, "badge-soft")
 
 
+# A status list has an order the work moves through, and it is neither
+# alphabetical nor reliably the creation timestamp: rows seeded in one loop can
+# share a timestamp to the microsecond, and the tie-break then decides. So the
+# order is a number the row carries.
+#
+# Steps of ten, so a status can later be dropped between two without renumbering
+# the table.
+POSITION_STEP = 10
+
+# What an unplaced row carries. Zero rather than null so the column can be
+# ordered on without a null-handling rule in every query.
+UNPLACED = 0
+
+
+def position_field(label: str = "Tartib") -> models.PositiveIntegerField:
+    """Where a row sits in an ordered master data list."""
+    return models.PositiveIntegerField(
+        label,
+        default=UNPLACED,
+        blank=True,
+        help_text=(
+            "Ro'yhatdagi va hisobot ustunlaridagi tartib. "
+            "Bo'sh qoldirilsa, oxiriga qo'shiladi."
+        ),
+    )
+
+
+def position_form_field(label: str = "Tartib") -> forms.IntegerField:
+    """The optional position a master data form may offer.
+
+    Optional because an administrator adding a status almost always wants it
+    at the end, and making them work out which number that is would be a
+    question with one sensible answer.
+    """
+    return forms.IntegerField(
+        label=label,
+        required=False,
+        min_value=1,
+        help_text="Ro'yhatdagi tartib. Bo'sh qoldirilsa, oxiriga qo'shiladi.",
+    )
+
+
+def next_position(model: type[models.Model]) -> int:
+    """The position that puts a new row at the end of this table."""
+    last = model.objects.aggregate(models.Max("position"))["position__max"]
+    return (last or UNPLACED) + POSITION_STEP
+
+
 def deactivate(record) -> None:
     """Delete a master data record the way DEC-009 defines deletion.
 
@@ -117,6 +165,14 @@ class MasterDataForm(forms.ModelForm):
     NAME_HELD_BY_DELETED_RECORD = (
         "Bu nom o'chirilgan yozuvga tegishli. Boshqa nom kiriting."
     )
+
+    def clean_position(self) -> int:
+        """Blank means the end of the list.
+
+        Only called on a form that declares a position field; the master data
+        pages whose rows have no inherent order do not.
+        """
+        return self.cleaned_data.get("position") or UNPLACED
 
     def clean_name(self) -> str:
         """Refuse a name already taken, case-insensitively."""
