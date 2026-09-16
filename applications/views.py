@@ -713,6 +713,14 @@ def assign_application(request: HttpRequest, pk: int) -> HttpResponse:
 def agreed_contracts() -> QuerySet[Contract]:
     """The contracts on the Kelishinlingan Shartnoma page (REQ-SHARTNOMA-004).
 
+    Agreed contracts and rejected ones. A rejected contract belongs here
+    because DEC-024 says it is corrected and resent - it needs somewhere a
+    person can see it and act on it, and this is the page carrying its
+    rejection comment as a column. The #48 review found the query filtering to
+    the agreed stage alone, which made REQ-SHARTNOMA-004's Izoh column
+    permanently empty and left TASK-UZK-038's Re-Send control no row to live
+    on.
+
     Filtered on the stage code rather than on a ShartnomaStatus name, for the
     reason every list here gives: DEC-010 makes the statuses examples the
     department extends, so a list reading one quietly empties the day
@@ -726,7 +734,9 @@ def agreed_contracts() -> QuerySet[Contract]:
     application that asked.
     """
     return (
-        Contract.objects.filter(stage=Contract.Stage.AGREED)
+        Contract.objects.filter(
+            stage__in=(Contract.Stage.AGREED, Contract.Stage.REJECTED)
+        )
         .select_related(
             "application",
             "application__department",

@@ -213,16 +213,18 @@ class ListTests(ContractTestCase):
     def test_an_empty_list_says_so_rather_than_showing_nothing(self) -> None:
         self.assertIn("Hozircha kelishinlingan shartnoma", self.table())
 
-    def test_only_agreed_contracts_are_listed(self) -> None:
+    def test_a_contract_that_has_moved_on_is_not_listed(self) -> None:
+        # Sent and signed contracts belong to the pages that follow this one.
+        # Rejected ones do not move on - DEC-024 brings them back here.
         agreed = self.a_contract()
-        gone = self.a_contract()
-        Contract.objects.filter(pk=gone.pk).update(
-            stage=Contract.Stage.SIGNED
-        )
+        for stage in (Contract.Stage.SENT, Contract.Stage.SIGNED):
+            with self.subTest(stage=stage):
+                gone = self.a_contract()
+                Contract.objects.filter(pk=gone.pk).update(stage=stage)
 
-        row = self.table()
-        self.assertIn(agreed.shartnoma_raqami, row)
-        self.assertNotIn(gone.shartnoma_raqami, row)
+                row = self.table()
+                self.assertIn(agreed.shartnoma_raqami, row)
+                self.assertNotIn(gone.shartnoma_raqami, row)
 
 
 class RejectionCommentTests(ContractTestCase):
@@ -233,16 +235,24 @@ class RejectionCommentTests(ContractTestCase):
 
         self.assertNotIn("Byudjet", self.table())
 
-    def test_a_rejected_contract_shows_its_comment(self) -> None:
-        # Written directly: TASK-UZK-038 is what rejects a contract, and a
-        # column that has never held anything is a column nobody has checked
-        # renders.
+    def test_a_rejected_contract_is_listed_with_its_comment(self) -> None:
+        # The stage is set as well as the comment, which is what the #48
+        # review found missing: writing the comment onto a contract still at
+        # the agreed stage tested a state the workflow never produces, and
+        # hid the fact that a rejected contract was not on this page at all.
+        #
+        # Written directly rather than through a transition because
+        # TASK-UZK-038 is what rejects a contract, and this page has to be
+        # ready for one before that arrives - DEC-024 has it corrected and
+        # resent from here.
         contract = self.a_contract()
         Contract.objects.filter(pk=contract.pk).update(
-            inkor_izohi="Narx juda baland."
+            stage=Contract.Stage.REJECTED, inkor_izohi="Narx juda baland."
         )
 
-        self.assertIn("Narx juda baland.", self.table())
+        row = self.table()
+        self.assertIn(contract.shartnoma_raqami, row)
+        self.assertIn("Narx juda baland.", row)
 
 
 class MasterDataProtectionTests(ContractTestCase):
