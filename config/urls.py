@@ -25,6 +25,12 @@ from accounts.specialty_views import (
     specialty_list,
     specialty_update,
 )
+from accounts.type_views import (
+    user_type_create,
+    user_type_delete,
+    user_type_list,
+    user_type_update,
+)
 from accounts.views import (
     landing_page,
     user_contract_editing,
@@ -37,7 +43,6 @@ from accounts.views import (
 # Every page except the dashboard, which answers at the site root. Each entry
 # is (url path, URL name); the template is pages/<name>.html.
 PAGE_ROUTES: tuple[tuple[str, str], ...] = (
-    ("user-types/", "user-types"),
     ("ariza-status/", "ariza-status"),
     ("shartnoma-status/", "shartnoma-status"),
     ("mahsulot-turlari/", "mahsulot-turlari"),
@@ -132,6 +137,28 @@ urlpatterns = [
         "user-specialty/<int:pk>/delete/",
         require_page_permission("user-specialty")(specialty_delete),
         name="user-specialty-delete",
+    ),
+    # The User Types master data page (TASK-UZK-015). A type is also a role,
+    # so the six DEC-013 fixes cannot be renamed or deleted here.
+    path(
+        "user-types/",
+        require_page_permission("user-types")(user_type_list),
+        name="user-types",
+    ),
+    path(
+        "user-types/add/",
+        require_page_permission("user-types")(user_type_create),
+        name="user-types-create",
+    ),
+    path(
+        "user-types/<int:pk>/edit/",
+        require_page_permission("user-types")(user_type_update),
+        name="user-types-update",
+    ),
+    path(
+        "user-types/<int:pk>/delete/",
+        require_page_permission("user-types")(user_type_delete),
+        name="user-types-delete",
     ),
     path(
         "users/<int:pk>/contract-editing/",

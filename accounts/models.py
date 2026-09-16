@@ -35,7 +35,24 @@ class MasterDataQuerySet(models.QuerySet):
 class UserType(models.Model):
     """A role, as the specification's User Types page defines one."""
 
+    # The badge colours the supplied page offers, mapped to the classes the
+    # vendored style.css already defines. Stored as the page's own word rather
+    # than the CSS class, so a restyle does not rewrite the data.
+    BADGE_COLOURS = {
+        "orange": "badge-primary",
+        "blue": "badge-info",
+        "green": "badge-approved",
+        "yellow": "badge-trial",
+        "gray": "badge-soft",
+    }
+
     name = models.CharField("User Type", max_length=64, unique=True)
+    badge_colour = models.CharField(
+        "Badge Rangi",
+        max_length=16,
+        choices=[(colour, colour) for colour in BADGE_COLOURS],
+        default="orange",
+    )
     category_number = models.PositiveIntegerField(
         "Category Number", null=True, blank=True
     )
@@ -51,6 +68,11 @@ class UserType(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+    @property
+    def badge_class(self) -> str:
+        """The CSS class the page puts on this type's badge."""
+        return self.BADGE_COLOURS.get(self.badge_colour, "badge-soft")
 
 
 class UserProfile(models.Model):

@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
-from django import forms
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from accounts.master_data import category_number_field, deactivate
+from accounts.master_data import (
+    MasterDataForm,
+    category_number_field,
+    deactivate,
+)
 from accounts.models import UserSpecialty
 
 SPECIALTY_TEMPLATE = "pages/user-specialty.html"
 
 
-class UserSpecialtyForm(forms.ModelForm):
+class UserSpecialtyForm(MasterDataForm):
     """Capture one User Specialty.
 
     Category Number is not on the supplied page, and the specification does
@@ -27,31 +30,6 @@ class UserSpecialtyForm(forms.ModelForm):
     class Meta:
         model = UserSpecialty
         fields = ("name", "category_number")
-
-    def clean_name(self) -> str:
-        """Refuse a name already taken, including by a deleted record.
-
-        Django's own message for the unique constraint is in English on a page
-        written in Uzbek, and it says a record exists - which is bewildering
-        when the record holding the name was deleted and is therefore nowhere
-        on the page. This says which of the two happened.
-        """
-        name = self.cleaned_data["name"]
-
-        taken = UserSpecialty.objects.filter(name__iexact=name)
-        if self.instance.pk is not None:
-            taken = taken.exclude(pk=self.instance.pk)
-
-        clash = taken.first()
-        if clash is None:
-            return name
-
-        if clash.is_active:
-            raise forms.ValidationError("Bu nom allaqachon mavjud.")
-
-        raise forms.ValidationError(
-            "Bu nom o'chirilgan yozuvga tegishli. Boshqa nom kiriting."
-        )
 
 
 def render_specialty_page(
