@@ -248,6 +248,26 @@ A deactivated account is not reported as the holder: DEC-009 leaves its row in
 place, and a page saying somebody who cannot sign in holds the only lock would
 be worse than saying nobody does.
 
+## Master data
+
+The specification describes the same page eight times (sections 3.2, 3.5-3.8):
+a table with a counter and row actions, a form beside it, Save adding a record,
+Cancel discarding it, Edit opening the form filled in, and Delete removing the
+record after a confirmation.
+
+`accounts/master_data.py` holds the parts that do not differ - the six-digit
+Category Number of DEC-023, and the deletion DEC-009 defines - so the eight
+pages differ only where the specification says they do.
+
+**Deleting deactivates.** The record leaves the table and every drop-down,
+while an application or contract that already refers to it still resolves. One
+consequence is worth knowing: the deactivated row keeps its name, and names are
+unique, so a deleted name cannot be entered again. Whether an administrator
+should be able to restore the old record instead is an open question for the
+customer.
+
+`User Specialty` (`TASK-UZK-014`) is the first of the eight.
+
 ## Templates
 
 `templates/base_document.html` holds the document every page shares: the head,

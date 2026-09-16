@@ -16,10 +16,14 @@ from django.conf import settings
 from django.db import models
 
 
-class UserTypeQuerySet(models.QuerySet):
-    """Queries the rest of the application asks for by name."""
+class MasterDataQuerySet(models.QuerySet):
+    """Queries every master data table answers.
 
-    def active(self) -> UserTypeQuerySet:
+    Shared because DEC-009 gives them all the same deletion rule: a deleted
+    row is deactivated, leaves the lists and stays resolvable.
+    """
+
+    def active(self) -> MasterDataQuerySet:
         """The types that still appear in lists and drop-downs.
 
         A deleted type is marked inactive rather than removed (DEC-009), so
@@ -38,7 +42,7 @@ class UserType(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    objects = UserTypeQuerySet.as_manager()
+    objects = MasterDataQuerySet.as_manager()
 
     class Meta:
         ordering = ("name",)
@@ -82,3 +86,33 @@ class UserProfile(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user.get_username()} ({self.user_type or 'no user type'})"
+
+
+class UserSpecialty(models.Model):
+    """A specialty a member of the department holds (section 3.2).
+
+    Master data, like UserType: a row an administrator maintains rather than a
+    constant. Deleting one deactivates it (DEC-009), so that a person or an
+    application already referring to it still resolves while the specialty
+    leaves the lists and drop-downs.
+    """
+
+    name = models.CharField("Specialty Nomi", max_length=128, unique=True)
+    category_number = models.PositiveIntegerField(
+        "Category Number",
+        null=True,
+        blank=True,
+        help_text="Six digits when present (DEC-023).",
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = MasterDataQuerySet.as_manager()
+
+    class Meta:
+        ordering = ("name",)
+        verbose_name = "User Specialty"
+        verbose_name_plural = "User Specialties"
+
+    def __str__(self) -> str:
+        return self.name
