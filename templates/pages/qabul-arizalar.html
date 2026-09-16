@@ -253,14 +253,31 @@ applications can share.
   // cloned here is the markup the server will read back - rather than a
   // second copy of it written by hand that drifts the first time a field
   // changes.
+  //
+  // The clone is a DOM one and the index is written into attributes, rather
+  // than the shorter version that reads innerHTML, replaces in the string and
+  // writes it back. That version parses HTML at runtime for no reason: the
+  // nodes already exist. The security scan flags the pattern, and it is right
+  // to - the string being parsed here is harmless, and the next person to
+  // reach for this as an example may be substituting something that is not.
+  const ROW_INDEX_PLACEHOLDER = /__prefix__/g;
+
   document.getElementById('add-item-row').addEventListener('click', () => {
     const total = document.getElementById('id_form-TOTAL_FORMS');
-    const template = document.getElementById('item-row-template').innerHTML;
-    const row = document.createElement('div');
+    const index = Number(total.value);
+    const row = document.getElementById('item-row-template').content.cloneNode(true);
 
-    row.innerHTML = template.replace(/__prefix__/g, total.value);
-    document.getElementById('item-rows-container').appendChild(row.firstElementChild);
-    total.value = Number(total.value) + 1;
+    row.querySelectorAll('[name], [id], [for]').forEach((field) => {
+      ['name', 'id', 'for'].forEach((attribute) => {
+        const value = field.getAttribute(attribute);
+        if (value) {
+          field.setAttribute(attribute, value.replace(ROW_INDEX_PLACEHOLDER, index));
+        }
+      });
+    });
+
+    document.getElementById('item-rows-container').appendChild(row);
+    total.value = index + 1;
   });
 </script>
 {% endblock %}
