@@ -53,6 +53,7 @@ variables in your shell or set them in your deployment's environment.
 | `DJANGO_SECRET_KEY` | a key generated at startup | **Set this for any real deployment.** The generated fallback changes on every restart, which invalidates sessions. |
 | `DJANGO_DEBUG` | off | Accepts `1`, `true`, `yes`, `on`. Anything unrecognised is treated as off. |
 | `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Comma separated. |
+| `DJANGO_SECURE_COOKIES` | off | **Turn this on for any deployment reachable over HTTPS.** It marks the session and CSRF cookies https-only. Off by default because development runs over plain HTTP. |
 
 Debug is off unless the environment turns it on, so an unconfigured deployment
 is the safe one rather than the permissive one.
@@ -60,9 +61,18 @@ is the safe one rather than the permissive one.
 ## Front-end assets
 
 The Bootstrap build, icon font and JavaScript supplied with the technical
-assignment live in `static/` and are served as-is. They are deliberately not
-rebuilt or minified again, so the interface the customer approved is the one
-that ships.
+assignment live in `static/` and are served as supplied. They are deliberately
+not rebuilt or minified again, so the interface the customer approved is the
+one that ships.
+
+One file is deliberately different. `js/main.js` shipped with a mock sign-in
+that kept four usernames and passwords in a file served to every browser;
+`TASK-UZK-008` removed it and its three call sites when real authentication
+arrived. Everything else in that file, and every other supplied asset, is
+byte for byte what was delivered.
+
+`js/sidebar.js` is still served but no longer loaded: `TASK-UZK-007` moved the
+navigation to the server.
 
 ```bash
 python manage.py collectstatic
@@ -118,8 +128,42 @@ served.
 Every entry is shown to everyone for now. Hiding the ones a role may not open
 is `TASK-UZK-012`.
 
+## Authentication
+
+Every session is Django's own. `/login/` renders the supplied sign-in page and
+`/logout/` ends the session on POST, so a link cannot sign somebody out.
+Rejections carry one message whatever was wrong, because an error that
+distinguishes an unknown username from a wrong password tells an attacker which
+accounts exist.
+
+The mocked sign-in that shipped with the front end is gone. It kept four
+usernames and passwords in `main.js` - a file served to every browser - and
+signed any visitor in as Admin when no session existed.
+
+Until `TASK-UZK-011` builds user administration, accounts are created on the
+command line:
+
+```bash
+python manage.py createsuperuser
+```
+
+`django.contrib.auth` provides that command; the Django admin site is still
+deliberately absent.
+
+Roles do not exist yet. Every signed-in user can open every page until
+`TASK-UZK-010` adds the role model and `TASK-UZK-012` enforces the permission
+matrix. Closing the pages to anonymous visitors is `TASK-UZK-009`.
+
+## Templates
+
+`templates/base_document.html` holds the document every page shares: the head,
+the supplied stylesheets, the title convention and the scripts. `base.html`
+adds the application chrome - sidebar, top header, page wrapper - on top of it.
+The login screen extends the document directly, because the supplied design
+gives it no sidebar.
+
 ## Project status
 
-Every page renders and is reachable, but none of them has data yet: the
-tables and forms are still the sample markup supplied with the assignment.
-Authentication arrives in `TASK-UZK-008`.
+Every page renders, is reachable, and sits behind a real login for anyone who
+has an account - but the pages have no data yet: their tables and forms are
+still the sample markup supplied with the assignment.

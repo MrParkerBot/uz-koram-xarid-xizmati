@@ -23,6 +23,11 @@ PAGE_TEMPLATE_DIR = Path(settings.BASE_DIR) / "templates" / "pages"
 
 HTML_LINK = re.compile(r'href="[^"]*\.html"')
 
+# Pages that exist but do not belong in the sidebar. The login screen is
+# the only one: it is where a visitor arrives before there is a sidebar to
+# put a link in.
+PAGES_OUTSIDE_THE_NAVIGATION = {"login"}
+
 
 class NavigationInventoryTests(SimpleTestCase):
     """The navigation, the URLs and the templates describe one set of pages."""
@@ -38,7 +43,10 @@ class NavigationInventoryTests(SimpleTestCase):
     def test_the_navigation_covers_every_page_template(self) -> None:
         templates_on_disk = {path.stem for path in PAGE_TEMPLATE_DIR.glob("*.html")}
 
-        self.assertEqual(set(navigation_url_names()), templates_on_disk)
+        self.assertEqual(
+            set(navigation_url_names()),
+            templates_on_disk - PAGES_OUTSIDE_THE_NAVIGATION,
+        )
 
     def test_no_entry_appears_in_the_sidebar_twice(self) -> None:
         url_names = navigation_url_names()

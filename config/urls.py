@@ -7,8 +7,13 @@ be traced from the specification to the URL without a lookup table.
 The pages are plain template views for now. A page grows a real view when the
 task that gives it data arrives; TASK-UZK-009 and TASK-UZK-012 attach
 authentication and permissions to these names.
+
+Login and logout are Django's own views. Writing them by hand would mean
+re-implementing session cycling and credential checking that django.contrib.auth
+already does correctly.
 """
 
+from django.contrib.auth.views import LoginView, LogoutView
 from django.urls import path
 from django.views.generic import TemplateView
 
@@ -43,6 +48,17 @@ def page_view(page_name: str) -> object:
 
 
 urlpatterns = [
+    path(
+        "login/",
+        LoginView.as_view(
+            template_name="pages/login.html",
+            redirect_authenticated_user=True,
+        ),
+        name="login",
+    ),
+    # Django's LogoutView only accepts POST, so a link - or a page that
+    # prefetches one - cannot end somebody's session.
+    path("logout/", LogoutView.as_view(), name="logout"),
     path("", page_view("dashboard"), name="dashboard"),
     *(
         path(route, page_view(page_name), name=page_name)
