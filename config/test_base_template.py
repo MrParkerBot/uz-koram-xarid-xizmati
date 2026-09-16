@@ -32,17 +32,25 @@ CHILD_CONTENT_MARKER = "child-page-marker"
 CHILD_HEAD_ASSET = "https://example.invalid/page-only.css"
 CHILD_SCRIPT_ASSET = "https://example.invalid/page-only.js"
 
-CHILD_TEMPLATE = """
-{% extends "base.html" %}
-{% block page_title %}Bo'limlar Xaridi{% endblock %}
-{% block breadcrumb %}Hisobotlar / Bo'limlar Xaridi{% endblock %}
-{% block page_heading %}Bo'limlar Xaridi{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="CHILD_HEAD_ASSET"/>{% endblock %}
-{% block content %}<p class="CHILD_CONTENT_MARKER">Sahifa tarkibi</p>{% endblock %}
-{% block extra_scripts %}<script src="CHILD_SCRIPT_ASSET"></script>{% endblock %}
-""".replace("CHILD_HEAD_ASSET", CHILD_HEAD_ASSET).replace(
-    "CHILD_SCRIPT_ASSET", CHILD_SCRIPT_ASSET
-).replace("CHILD_CONTENT_MARKER", CHILD_CONTENT_MARKER)
+# A page that fills every block, standing in for the real ones converted in
+# TASK-UZK-006. Written as concatenation rather than a formatted string,
+# because a template tag's "{%" is not something str.format or an f-string can
+# carry.
+CHILD_TEMPLATE = (
+    '{% extends "base.html" %}'
+    "{% block page_title %}Bo'limlar Xaridi{% endblock %}"
+    "{% block breadcrumb %}Hisobotlar / Bo'limlar Xaridi{% endblock %}"
+    "{% block page_heading %}Bo'limlar Xaridi{% endblock %}"
+    '{% block extra_head %}<link rel="stylesheet" href="'
+    + CHILD_HEAD_ASSET
+    + '"/>{% endblock %}'
+    '{% block content %}<p class="'
+    + CHILD_CONTENT_MARKER
+    + '">Sahifa tarkibi</p>{% endblock %}'
+    '{% block extra_scripts %}<script src="'
+    + CHILD_SCRIPT_ASSET
+    + '"></script>{% endblock %}'
+)
 
 REFERENCE_PATTERN = re.compile(r'(?:href|src)="([^"]+)"')
 
