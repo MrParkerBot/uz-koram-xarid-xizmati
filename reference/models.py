@@ -139,3 +139,48 @@ class ShartnomaStatus(models.Model):
     def badge_class(self) -> str:
         """The CSS class the page puts on this status's badge."""
         return badge_class_for(self.badge_colour)
+
+
+class MahsulotTuri(models.Model):
+    """A product category (section 3.6).
+
+    The first master data table in this application that is not shaped like
+    the two status tables. It has a description they do not, and neither the
+    badge colour nor the ordering position they do: the supplied page shows
+    neither, and a list of categories has no progression to order by.
+
+    Its category number is required and unique, which is stricter than the
+    specification states outright. It follows from the supplied form, which
+    marks the field required and calls it a code, and from TASK-UZK-046, which
+    reports purchases by category - two categories sharing a number would be
+    merged in that report, and one with no number would be missing from it.
+
+    The table ships empty. DEC-017 and DEC-010 name starting values for the
+    two status tables; nothing names any here, and the six in the prototype
+    are an illustration rather than a customer taxonomy.
+    """
+
+    category_number = models.PositiveIntegerField(
+        "Category Raqami",
+        unique=True,
+        help_text=(
+            "Six digits, and the code the department knows the category "
+            "by (DEC-023)."
+        ),
+    )
+    name = models.CharField("Category Nomi", max_length=128, unique=True)
+    description = models.TextField("Tavsif", blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = MasterDataQuerySet.as_manager()
+
+    class Meta:
+        # By the code, not the name. It is what the department identifies a
+        # category by and what the supplied table sorts on.
+        ordering = ("category_number",)
+        verbose_name = "Mahsulot Turi"
+        verbose_name_plural = "Mahsulot Turlari"
+
+    def __str__(self) -> str:
+        return f"{self.category_number} - {self.name}"

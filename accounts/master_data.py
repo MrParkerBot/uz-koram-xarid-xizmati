@@ -54,6 +54,25 @@ def category_number_field(label: str = "Category Number") -> forms.IntegerField:
     )
 
 
+
+def required_category_number_field(
+    label: str = "Category Raqami",
+) -> forms.IntegerField:
+    """The Category Number a master data form insists on.
+
+    The Mahsulot Turlari form marks it required and calls it a code, and
+    TASK-UZK-046 reports purchases by category - a category with no number
+    would have nothing to report under. The six-digit rule is the same rule,
+    taken from the same validators, so the required and optional forms of the
+    field cannot drift apart.
+    """
+    return forms.IntegerField(
+        label=label,
+        required=True,
+        validators=list(CATEGORY_NUMBER_VALIDATORS),
+        help_text="6 xonali kod (masalan 100042).",
+    )
+
 # The badge colours the supplied pages offer, mapped to the classes the
 # vendored style.css already defines. Stored as the page's own word rather than
 # the CSS class, so a restyle does not rewrite the data.
