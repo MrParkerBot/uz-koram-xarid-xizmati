@@ -52,7 +52,10 @@ CHILD_TEMPLATE = (
     + '"></script>{% endblock %}'
 )
 
-REFERENCE_PATTERN = re.compile(r'(?:href|src)="([^"]+)"')
+# Matches either quoting style. The shell is written with double quotes
+# throughout, but a guard that only sees one of the two would pass on
+# exactly the edit it exists to catch.
+REFERENCE_PATTERN = re.compile(r"""(?:href|src)=["']([^"']+)["']""")
 
 
 def render_shell() -> str:
