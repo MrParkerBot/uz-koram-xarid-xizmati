@@ -239,6 +239,79 @@ class AcceptingTwiceTests(AcceptanceTestCase):
         with self.assertRaises(ValueError):
             self.application.accept(by=self.decider)
 
+    def test_a_stale_page_is_told_what_happened_rather_than_forbidden(self):
+        # The reviewer of #26 objected to 403 here, and was right: whoever
+        # clicks Qabul on a row a colleague rejected while the page sat open
+        # had the permission they needed. What changed is the application.
+        self.application.stage = Application.Stage.REJECTED
+        self.application.save(update_fields=["stage"])
+
+        page = self.client.post(self.url, follow=True).content.decode()
+
+        self.assertIn("allaqachon hal qilingan", page)
+        self.assertEqual(self.reload().stage, Application.Stage.REJECTED)
+
+
+class ConcurrentAcceptanceTests(AcceptanceTestCase):
+    """Two people clicking Qabul at the same moment.
+
+    The finding this class exists for: accept() used to read the stage, decide
+    on that read, and then save unconditionally. Two requests could each read
+    "incoming", each pass the check and each write - and the second write
+    would overwrite the first one's date and acceptor, so the record named the
+    wrong person and both callers were told they had accepted it.
+
+    A sequential test cannot see that, because the second call reads what the
+    first one wrote. These tests reproduce the interleaving by holding a stale
+    instance across somebody else's decision, which is what a second request
+    that loaded the row a moment earlier actually has.
+    """
+
+    def stale_copy(self) -> Application:
+        """A second instance of the row, as a second request would hold."""
+        return Application.objects.get(pk=self.application.pk)
+
+    def test_only_one_of_two_simultaneous_callers_accepts_it(self) -> None:
+        first, second = self.stale_copy(), self.stale_copy()
+
+        self.assertTrue(first.accept(by=self.decider))
+        self.assertFalse(second.accept(by=make_user(MENEJER)))
+
+    def test_the_loser_does_not_overwrite_the_winners_decision(self) -> None:
+        first, second = self.stale_copy(), self.stale_copy()
+        loser = make_user(MENEJER)
+
+        first.accept(by=self.decider)
+        second.accept(by=loser)
+
+        settled = self.reload()
+        self.assertEqual(settled.accepted_by, self.decider)
+        self.assertEqual(settled.qabul_qilingan_sana, first.qabul_qilingan_sana)
+
+    def test_the_loser_ends_up_holding_the_truth(self) -> None:
+        # Whoever lost the race is about to render a page from this instance.
+        first, second = self.stale_copy(), self.stale_copy()
+
+        first.accept(by=self.decider)
+        second.accept(by=make_user(MENEJER))
+
+        self.assertEqual(second.accepted_by, self.decider)
+        self.assertEqual(second.stage, Application.Stage.ACCEPTED)
+
+    def test_a_caller_holding_a_stale_incoming_row_that_was_rejected(self):
+        stale = self.stale_copy()
+        self.application.stage = Application.Stage.REJECTED
+        self.application.save(update_fields=["stage"])
+
+        # The instance says incoming and the row says rejected. Deciding on
+        # the row is what makes this a refusal rather than an acceptance, and
+        # the refusal is the same one a caller with a fresh instance gets -
+        # the staleness must not change what happens.
+        with self.assertRaises(ValueError):
+            stale.accept(by=self.decider)
+
+        self.assertEqual(self.reload().stage, Application.Stage.REJECTED)
+
 
 class AccessTests(AcceptanceTestCase):
     """The action answers to the page that offers it."""
