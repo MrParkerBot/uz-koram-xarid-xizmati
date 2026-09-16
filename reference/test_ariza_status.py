@@ -351,6 +351,21 @@ class PermissionTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertFalse(ArizaStatus.objects.filter(name=ADDED_STATUS).exists())
 
+    def test_a_manager_may_not_edit(self) -> None:
+        # accounts/test_permissions.py walks the page views and the Users
+        # page's actions, but not a master data page's actions, so each of
+        # the four routes is proved here.
+        self.client.force_login(make_user(MENEJER))
+
+        response = self.client.post(
+            reverse("ariza-status-update", args=[self.status.pk]),
+            {"name": "Boshqa nom", "badge_colour": "blue", "category_number": ""},
+        )
+        self.status.refresh_from_db()
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.status.name, "Yangi")
+
     def test_a_manager_may_not_delete(self) -> None:
         self.client.force_login(make_user(MENEJER))
 
