@@ -68,8 +68,32 @@ that ships.
 python manage.py collectstatic
 ```
 
+## Page templates
+
+`templates/base.html` is the shell every page sits inside. Its markup is
+transcribed from the supplied static pages rather than rewritten, so the
+vendored `style.css` keeps working, and its asset references go through
+`{% static %}` instead of the relative paths the standalone pages used.
+
+A page extends it and fills the blocks it needs:
+
+| Block | What it holds |
+| --- | --- |
+| `page_title` | The part of `<title>` before the ` - Uz-Koram` suffix. |
+| `extra_head` | Stylesheets or head scripts only that page needs. |
+| `breadcrumb` | The small grey trail in the top header, e.g. `Umumiy / Dashboard`. |
+| `page_heading` | The bold line under the trail. |
+| `content` | The page itself, inside `.page-wrap`. |
+| `extra_scripts` | Scripts that run after the shared ones. |
+
+The sidebar's navigation list is deliberately left empty: the vendored
+`sidebar.js` fills it in the browser today, and `TASK-UZK-007` replaces that
+with server-side navigation. The user shown in the header and the sidebar
+footer is the placeholder from the supplied pages until `TASK-UZK-008` brings
+real authentication.
+
 ## Project status
 
-This is the application skeleton only. The root URL currently serves a
-placeholder; the real pages arrive with the template shell in `TASK-UZK-006`
-and `TASK-UZK-007`.
+This is the application skeleton plus the shared page shell. The root URL
+still serves a placeholder; the real pages arrive in `TASK-UZK-006` and
+`TASK-UZK-007`.
