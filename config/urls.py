@@ -48,6 +48,9 @@ from applications.views import (
     assign_application,
     assigned_list,
     incoming_list,
+    purchase_application_create,
+    purchase_application_list,
+    purchase_application_pdf,
     reject_application,
     set_application_status,
 )
@@ -67,7 +70,6 @@ PAGE_ROUTES: tuple[tuple[str, str], ...] = (
     ("bolimlar/", "bolimlar"),
     ("mahsulot-tur/", "mahsulot-tur"),
     ("mahsulotlar/", "mahsulotlar"),
-    ("xarid-ariza/", "xarid-ariza"),
     ("integration/", "integration"),
     ("logs/", "logs"),
 )
@@ -373,6 +375,25 @@ urlpatterns = [
         "tayinlangan/<int:pk>/holat/",
         require_page_permission("tayinlangan")(set_application_status),
         name="tayinlangan-holat",
+    ),
+    # The Xarid Arizasi page of section 4.9 (TASK-UZK-030). It left
+    # PAGE_ROUTES when it stopped being a template with no data behind it; the
+    # path and the name are the ones the sidebar and the permission matrix
+    # already use. It is the only page a Users requester has.
+    path(
+        "xarid-ariza/",
+        require_page_permission("xarid-ariza")(purchase_application_list),
+        name="xarid-ariza",
+    ),
+    path(
+        "xarid-ariza/yaratish/",
+        require_page_permission("xarid-ariza")(purchase_application_create),
+        name="xarid-ariza-yaratish",
+    ),
+    path(
+        "xarid-ariza/<int:pk>/pdf/",
+        require_page_permission("xarid-ariza")(purchase_application_pdf),
+        name="xarid-ariza-pdf",
     ),
     # Creating an application (TASK-UZK-026). The form is on the Qabul
     # qilingan page, so it answers to that page's permission like every other
