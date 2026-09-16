@@ -23,10 +23,10 @@ from accounts.master_data import (
     next_position,
     position_field,
 )
-from accounts.models import MasterDataQuerySet
+from accounts.models import MASTER_DATA_NAME_LENGTH, MasterDataRecord
 
 
-class ArizaStatus(models.Model):
+class ArizaStatus(MasterDataRecord):
     """A state an application can be in (section 3.5).
 
     DEC-017 makes these editable master data rather than a fixed list: the
@@ -36,20 +36,11 @@ class ArizaStatus(models.Model):
     resolves while the status leaves the page and every drop-down.
     """
 
-    name = models.CharField("Status Nomi", max_length=64, unique=True)
-    badge_colour = badge_colour_field()
-    category_number = models.PositiveIntegerField(
-        "Category Number",
-        null=True,
-        blank=True,
-        help_text="Six digits when present (DEC-023).",
+    name = models.CharField(
+        "Status Nomi", max_length=MASTER_DATA_NAME_LENGTH, unique=True
     )
+    badge_colour = badge_colour_field()
     position = position_field()
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    objects = MasterDataQuerySet.as_manager()
-
     class Meta:
         # By position, not by name. A status list describes a progression, and
         # sorting alphabetically puts "Bekor qilingan" first and the starting
@@ -60,9 +51,6 @@ class ArizaStatus(models.Model):
         ordering = ("position", "name")
         verbose_name = "Ariza Status"
         verbose_name_plural = "Ariza Statuslari"
-
-    def __str__(self) -> str:
-        return self.name
 
     def save(self, *args, **kwargs) -> None:
         """Place a new row at the end of the list when it was not placed.
@@ -81,7 +69,7 @@ class ArizaStatus(models.Model):
         return badge_class_for(self.badge_colour)
 
 
-class ShartnomaStatus(models.Model):
+class ShartnomaStatus(MasterDataRecord):
     """A state a contract can be in (section 3.5).
 
     DEC-010 settles the conflict between section 3.5, which makes these
@@ -96,20 +84,11 @@ class ShartnomaStatus(models.Model):
     deciding.
     """
 
-    name = models.CharField("Status Nomi", max_length=64, unique=True)
-    badge_colour = badge_colour_field()
-    category_number = models.PositiveIntegerField(
-        "Category Number",
-        null=True,
-        blank=True,
-        help_text="Six digits when present (DEC-023).",
+    name = models.CharField(
+        "Status Nomi", max_length=MASTER_DATA_NAME_LENGTH, unique=True
     )
+    badge_colour = badge_colour_field()
     position = position_field()
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    objects = MasterDataQuerySet.as_manager()
-
     class Meta:
         # By position, not by name. A status list describes a progression, and
         # sorting alphabetically puts "Bekor qilingan" first and the starting
@@ -120,9 +99,6 @@ class ShartnomaStatus(models.Model):
         ordering = ("position", "name")
         verbose_name = "Shartnoma Status"
         verbose_name_plural = "Shartnoma Statuslari"
-
-    def __str__(self) -> str:
-        return self.name
 
     def save(self, *args, **kwargs) -> None:
         """Place a new row at the end of the list when it was not placed.
@@ -141,7 +117,7 @@ class ShartnomaStatus(models.Model):
         return badge_class_for(self.badge_colour)
 
 
-class MahsulotTuri(models.Model):
+class MahsulotTuri(MasterDataRecord):
     """A product category (section 3.6).
 
     The first master data table in this application that is not shaped like
@@ -168,12 +144,10 @@ class MahsulotTuri(models.Model):
             "by (DEC-023)."
         ),
     )
-    name = models.CharField("Category Nomi", max_length=128, unique=True)
+    name = models.CharField(
+        "Category Nomi", max_length=MASTER_DATA_NAME_LENGTH, unique=True
+    )
     description = models.TextField("Tavsif", blank=True)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    objects = MasterDataQuerySet.as_manager()
 
     class Meta:
         # By the code, not the name. It is what the department identifies a
@@ -184,3 +158,26 @@ class MahsulotTuri(models.Model):
 
     def __str__(self) -> str:
         return f"{self.category_number} - {self.name}"
+
+
+class ShartnomaTuri(MasterDataRecord):
+    """A kind of contract (section 3.7).
+
+    The plainest master data table in the application: a name and nothing
+    else, which is all the supplied page shows.
+
+    DEC-023 settles CONFLICT-004 here. Section 3.7 makes contract type a
+    maintainable list while the section 4.8 contract form fixes it to Import
+    and Local; the decision is for section 3.7, with those two seeded as a
+    starting point. So nothing may treat the pair as exhaustive - TASK-UZK-034
+    and TASK-UZK-035 read this table.
+    """
+
+    name = models.CharField(
+        "Shartnoma Turi", max_length=MASTER_DATA_NAME_LENGTH, unique=True
+    )
+
+    class Meta:
+        ordering = ("name",)
+        verbose_name = "Shartnoma Turi"
+        verbose_name_plural = "Shartnoma Turlari"

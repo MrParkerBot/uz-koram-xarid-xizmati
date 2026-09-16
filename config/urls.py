@@ -42,11 +42,11 @@ from accounts.views import (
 from reference.ariza_status_views import ariza_status_page
 from reference.mahsulot_turi_views import mahsulot_turi_page
 from reference.shartnoma_status_views import shartnoma_status_page
+from reference.shartnoma_turi_views import shartnoma_turi_page
 
 # Every page except the dashboard, which answers at the site root. Each entry
 # is (url path, URL name); the template is pages/<name>.html.
 PAGE_ROUTES: tuple[tuple[str, str], ...] = (
-    ("shartnoma-turi/", "shartnoma-turi"),
     ("kelib-arizalar/", "kelib-arizalar"),
     ("qabul-arizalar/", "qabul-arizalar"),
     ("tayinlangan/", "tayinlangan"),
@@ -246,5 +246,35 @@ urlpatterns = [
             mahsulot_turi_page.delete_record
         ),
         name="mahsulot-turlari-delete",
+    ),
+    # The Shartnoma turi master data page (TASK-UZK-019). DEC-023 draws
+    # contract type from here rather than fixing it to Import and Local.
+    path(
+        "shartnoma-turi/",
+        require_page_permission("shartnoma-turi")(
+            shartnoma_turi_page.list_records
+        ),
+        name="shartnoma-turi",
+    ),
+    path(
+        "shartnoma-turi/add/",
+        require_page_permission("shartnoma-turi")(
+            shartnoma_turi_page.create_record
+        ),
+        name="shartnoma-turi-create",
+    ),
+    path(
+        "shartnoma-turi/<int:pk>/edit/",
+        require_page_permission("shartnoma-turi")(
+            shartnoma_turi_page.update_record
+        ),
+        name="shartnoma-turi-update",
+    ),
+    path(
+        "shartnoma-turi/<int:pk>/delete/",
+        require_page_permission("shartnoma-turi")(
+            shartnoma_turi_page.delete_record
+        ),
+        name="shartnoma-turi-delete",
     ),
 ]

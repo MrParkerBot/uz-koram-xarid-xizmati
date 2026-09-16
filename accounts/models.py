@@ -17,6 +17,12 @@ from django.db import models
 
 from accounts.master_data import badge_class_for, badge_colour_field
 
+# One length for every master data name column. It was 64 on three tables
+# and 128 on two, which was arbitrary rather than meaningful: nothing in
+# the specification distinguishes them, so the next table had no basis for
+# choosing. The wider of the two, because widening loses nothing.
+MASTER_DATA_NAME_LENGTH = 128
+
 
 class MasterDataQuerySet(models.QuerySet):
     """Queries every master data table answers.
@@ -34,15 +40,58 @@ class MasterDataQuerySet(models.QuerySet):
         return self.filter(is_active=True)
 
 
-class UserType(models.Model):
-    """A role, as the specification's User Types page defines one."""
+class MasterDataRecord(models.Model):
+    """What every master data table in the application has in common.
 
-    name = models.CharField("User Type", max_length=64, unique=True)
-    badge_colour = badge_colour_field()
+    Seven pages of the specification describe the same table seven times, and
+    six of them are built. What they genuinely share is small: they can be
+    deactivated rather than deleted (DEC-009), they know when they were
+    created, they answer objects.active(), and they print as their name.
+
+    Deliberately not here:
+
+    - name, because each table labels it in its own words - "Status Nomi",
+      "Specialty Nomi", "Category Nomi" - and a shared field with a generic
+      label would be worse than a line per table. The length is standard
+      across them, which is the part that was arbitrary.
+    - badge_colour and position, which only the two status tables have. A
+      status list has a progression and a colour; a list of specialties does
+      not.
+
+    category_number is here because DEC-023 gives it one meaning everywhere it
+    appears, and optional is the common case. Mahsulot Turlari overrides it:
+    there it is required and unique, because the supplied form calls it a code
+    and TASK-UZK-046 reports by it.
+
+    A subclass must declare name. __str__ reads it, which is the one thing
+    this base assumes rather than provides.
+    """
+
     category_number = models.PositiveIntegerField(
-        "Category Number", null=True, blank=True
+        "Category Number",
+        null=True,
+        blank=True,
+        help_text="Six digits when present (DEC-023).",
     )
     is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = MasterDataQuerySet.as_manager()
+
+    class Meta:
+        abstract = True
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class UserType(MasterDataRecord):
+    """A role, as the specification's User Types page defines one."""
+
+    name = models.CharField(
+        "User Type", max_length=MASTER_DATA_NAME_LENGTH, unique=True
+    )
+    badge_colour = badge_colour_field()
     is_system_role = models.BooleanField(
         default=False,
         help_text=(
@@ -51,17 +100,11 @@ class UserType(models.Model):
             "or deleted from the User Types page."
         ),
     )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    objects = MasterDataQuerySet.as_manager()
 
     class Meta:
         ordering = ("name",)
         verbose_name = "User Type"
         verbose_name_plural = "User Types"
-
-    def __str__(self) -> str:
-        return self.name
 
     @property
     def badge_class(self) -> str:
@@ -104,7 +147,7 @@ class UserProfile(models.Model):
         return f"{self.user.get_username()} ({self.user_type or 'no user type'})"
 
 
-class UserSpecialty(models.Model):
+class UserSpecialty(MasterDataRecord):
     """A specialty a member of the department holds (section 3.2).
 
     Master data, like UserType: a row an administrator maintains rather than a
@@ -113,22 +156,11 @@ class UserSpecialty(models.Model):
     leaves the lists and drop-downs.
     """
 
-    name = models.CharField("Specialty Nomi", max_length=128, unique=True)
-    category_number = models.PositiveIntegerField(
-        "Category Number",
-        null=True,
-        blank=True,
-        help_text="Six digits when present (DEC-023).",
+    name = models.CharField(
+        "Specialty Nomi", max_length=MASTER_DATA_NAME_LENGTH, unique=True
     )
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    objects = MasterDataQuerySet.as_manager()
 
     class Meta:
         ordering = ("name",)
         verbose_name = "User Specialty"
         verbose_name_plural = "User Specialties"
-
-    def __str__(self) -> str:
-        return self.name
