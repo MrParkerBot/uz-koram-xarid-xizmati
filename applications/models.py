@@ -4,8 +4,9 @@ accounts holds facts about people and reference holds the maintainable lists.
 An application is neither: it is a record with a life cycle, and it is the
 first thing here that has one.
 
-TASK-UZK-022 builds the record and the incoming list; TASK-UZK-023 to
-TASK-UZK-027 move it through the stages that follow.
+TASK-UZK-022 builds the record and the incoming list; TASK-UZK-023 and
+TASK-UZK-024 are the two decisions taken on it there, and TASK-UZK-025 to
+TASK-UZK-027 carry an accepted one onward.
 """
 
 from __future__ import annotations
@@ -149,6 +150,27 @@ class Application(models.Model):
         blank=True,
         verbose_name="Qabul qilgan",
     )
+    inkor_izohi = models.TextField(
+        "Inkor izohi",
+        blank=True,
+        help_text=(
+            "Why it was rejected. REQ-ARIZA-005 makes this compulsory at the "
+            "moment of rejection, which reject() enforces; the column is "
+            "blank rather than null because an application that was never "
+            "rejected has no comment, and that is an empty string."
+        ),
+    )
+    inkor_qilingan_sana = models.DateTimeField(
+        "Inkor qilingan sana", null=True, blank=True
+    )
+    rejected_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.PROTECT,
+        related_name="rejected_applications",
+        null=True,
+        blank=True,
+        verbose_name="Inkor qilgan",
+    )
     stage = models.CharField(
         max_length=16, choices=Stage.choices, default=Stage.INCOMING
     )
@@ -266,6 +288,86 @@ class Application(models.Model):
         self.stage = self.Stage.ACCEPTED
         self.qabul_qilingan_sana = decided_at
         self.accepted_by = by
+        self.status = status
+
+        return True
+
+    @transaction.atomic
+    def reject(self, by, comment: str) -> bool:
+        """Reject this application, once, with a reason.
+
+        REQ-ARIZA-005 makes the comment the point of the action rather than a
+        decoration on it: the sender is told why, so a rejection with no
+        reason is not a rejection this method will perform. The check is here
+        and not only in the form, because the reason has to exist wherever the
+        rejection is made from.
+
+        The cancelled status is found by its code, for the reason accept()
+        gives: DEC-017 invites an administrator to rename these rows.
+
+        Args:
+            by: the user rejecting it, recorded as the decider.
+            comment: why. Stored with its surrounding whitespace stripped.
+
+        Returns:
+            True when this call rejected it, and False when somebody else
+            already had - the second click of a double click, which is not an
+            error. The transition is a conditional write, so exactly one of
+            two simultaneous callers is told True.
+
+        Raises:
+            ValueError: when the comment is empty or only whitespace, or when
+                the application is at a stage rejection makes no sense from.
+                Both leave the record exactly as it was.
+        """
+        reason = (comment or "").strip()
+        if not reason:
+            raise ValueError(
+                f"{self.ariza_raqami} cannot be rejected without a comment."
+            )
+
+        # Decide on the row as it is now, not as the caller last saw it, and
+        # leave the caller holding that. Same reason as accept(): the view
+        # fetched this instance before the call started.
+        self.refresh_from_db()
+
+        if self.stage == self.Stage.REJECTED:
+            return False
+
+        if not self.is_incoming:
+            raise ValueError(
+                f"{self.ariza_raqami} is {self.stage}, not incoming, "
+                "so it cannot be rejected."
+            )
+
+        from reference.models import ArizaStatus
+
+        decided_at = timezone.now()
+        status = ArizaStatus.objects.filter(
+            code=ArizaStatus.Code.CANCELLED, is_active=True
+        ).first()
+
+        # The condition is part of the write, for the reason accept() gives at
+        # length: a check followed by an unconditional save lets the loser of
+        # a race overwrite the winner's decision.
+        rejected = type(self).objects.filter(
+            pk=self.pk, stage=self.Stage.INCOMING
+        ).update(
+            stage=self.Stage.REJECTED,
+            inkor_izohi=reason,
+            inkor_qilingan_sana=decided_at,
+            rejected_by=by,
+            status=status,
+        )
+
+        if not rejected:
+            self.refresh_from_db()
+            return False
+
+        self.stage = self.Stage.REJECTED
+        self.inkor_izohi = reason
+        self.inkor_qilingan_sana = decided_at
+        self.rejected_by = by
         self.status = status
 
         return True

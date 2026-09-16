@@ -43,6 +43,7 @@ from applications.views import (
     accept_application,
     application_pdf,
     incoming_list,
+    reject_application,
 )
 from reference.ariza_status_views import ariza_status_page
 from reference.department_views import department_page
@@ -352,5 +353,12 @@ urlpatterns = [
         "kelib-arizalar/<int:pk>/qabul/",
         require_page_permission("kelib-arizalar")(accept_application),
         name="ariza-qabul",
+    ),
+    # Rejecting, for the same reason and under the same permission
+    # (TASK-UZK-024).
+    path(
+        "kelib-arizalar/<int:pk>/inkor/",
+        require_page_permission("kelib-arizalar")(reject_application),
+        name="ariza-inkor",
     ),
 ]

@@ -4,9 +4,9 @@ A list with row actions and no form, which is why it does not use
 MasterDataPage: that abstraction is a table beside a form, and this is a table
 beside nothing.
 
-Accept and Reject are rendered as the specification describes them and are
-wired by TASK-UZK-023 and TASK-UZK-024. The filter bar the supplied page
-carries is left inert; TASK-UZK-041 builds filtering for every table at once.
+Accept and Reject are the two decisions section 4.1 describes, and both are
+wired (TASK-UZK-023, TASK-UZK-024). The filter bar the supplied page carries
+is left inert; TASK-UZK-041 builds filtering for every table at once.
 """
 
 from __future__ import annotations
@@ -36,8 +36,12 @@ INCOMING_TEMPLATE = "pages/kelib-arizalar.html"
 PAGE_SHOWING_STAGE: dict[str, str] = {
     Application.Stage.INCOMING: "kelib-arizalar",
     Application.Stage.ACCEPTED: "qabul-arizalar",
-    # A rejected application is off the workflow. Nothing lists it yet, so
-    # nobody may fetch its attachment; TASK-UZK-024 decides where it shows.
+    # A rejected application is off the workflow, and TASK-UZK-024 left it
+    # there: nothing in the specification lists rejected applications, so
+    # there is no page to answer for one and its attachment stops being
+    # reachable the moment it is rejected. Deliberate, and tested, so that
+    # whichever task adds a rejected list has to decide this rather than
+    # inherit it.
 }
 
 
@@ -126,6 +130,55 @@ def accept_application(request: HttpRequest, pk: int) -> HttpResponse:
     else:
         messages.info(
             request, f"{application.ariza_raqami} allaqachon qabul qilingan."
+        )
+
+    return redirect("kelib-arizalar")
+
+
+@require_POST
+def reject_application(request: HttpRequest, pk: int) -> HttpResponse:
+    """Reject one incoming application, with a reason (REQ-ARIZA-005).
+
+    The comment is what the sender is told, so a rejection without one is
+    refused rather than recorded empty - and refused here as well as in the
+    browser, because a required attribute is a convenience and not a rule.
+
+    POST only, and wrapped by the URL configuration in the permission of the
+    page that offers the button.
+    """
+    application = get_object_or_404(Application, pk=pk)
+
+    try:
+        rejected = application.reject(
+            by=request.user, comment=request.POST.get("inkor_izohi", "")
+        )
+    except ValueError:
+        if not application.is_incoming:
+            # A decision was taken on this application by somebody else while
+            # the page sat open. Reported the way accept_application reports
+            # it, and for the reason the #26 review gave: the caller had the
+            # permission they needed, and what changed is the application.
+            messages.error(
+                request,
+                f"{application.ariza_raqami} inkor etilmadi: ariza "
+                "allaqachon hal qilingan.",
+            )
+        else:
+            messages.error(
+                request,
+                f"{application.ariza_raqami} inkor etilmadi: izoh "
+                "kiritilishi shart.",
+            )
+
+        return redirect("kelib-arizalar")
+
+    if rejected:
+        messages.success(
+            request, f"{application.ariza_raqami} inkor etildi."
+        )
+    else:
+        messages.info(
+            request, f"{application.ariza_raqami} allaqachon inkor etilgan."
         )
 
     return redirect("kelib-arizalar")
