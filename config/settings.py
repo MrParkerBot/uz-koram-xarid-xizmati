@@ -110,6 +110,14 @@ LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "dashboard"
 LOGOUT_REDIRECT_URL = "login"
 
+# The session cookie now identifies a real user rather than a browser-side
+# mock, so it must not travel in the clear. Off by default because development
+# runs over plain HTTP and a cookie a browser refuses to send would make the
+# application look broken rather than insecure; any deployment reachable over
+# HTTPS must turn it on.
+SESSION_COOKIE_SECURE = read_boolean_setting("DJANGO_SECURE_COOKIES", default=False)
+CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.staticfiles import finders
 from django.test import TestCase
@@ -265,3 +266,16 @@ class LoginPageStructureTests(TestCase):
 
         self.assertContains(response, 'name="csrfmiddlewaretoken"')
         self.assertContains(response, 'method="post"')
+
+
+class SessionCookieTests(TestCase):
+    """The cookie now identifies a real user, so its flags matter."""
+
+    def test_the_session_cookie_is_not_readable_from_javascript(self) -> None:
+        self.assertTrue(settings.SESSION_COOKIE_HTTPONLY)
+
+    def test_https_only_cookies_can_be_turned_on_from_the_environment(self) -> None:
+        # Off by default because development runs over plain HTTP; a deployment
+        # reachable over HTTPS sets DJANGO_SECURE_COOKIES.
+        self.assertEqual(settings.SESSION_COOKIE_SECURE, settings.CSRF_COOKIE_SECURE)
+        self.assertFalse(settings.SESSION_COOKIE_SECURE)

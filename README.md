@@ -53,6 +53,7 @@ variables in your shell or set them in your deployment's environment.
 | `DJANGO_SECRET_KEY` | a key generated at startup | **Set this for any real deployment.** The generated fallback changes on every restart, which invalidates sessions. |
 | `DJANGO_DEBUG` | off | Accepts `1`, `true`, `yes`, `on`. Anything unrecognised is treated as off. |
 | `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Comma separated. |
+| `DJANGO_SECURE_COOKIES` | off | **Turn this on for any deployment reachable over HTTPS.** It marks the session and CSRF cookies https-only. Off by default because development runs over plain HTTP. |
 
 Debug is off unless the environment turns it on, so an unconfigured deployment
 is the safe one rather than the permissive one.
@@ -60,9 +61,18 @@ is the safe one rather than the permissive one.
 ## Front-end assets
 
 The Bootstrap build, icon font and JavaScript supplied with the technical
-assignment live in `static/` and are served as-is. They are deliberately not
-rebuilt or minified again, so the interface the customer approved is the one
-that ships.
+assignment live in `static/` and are served as supplied. They are deliberately
+not rebuilt or minified again, so the interface the customer approved is the
+one that ships.
+
+One file is deliberately different. `js/main.js` shipped with a mock sign-in
+that kept four usernames and passwords in a file served to every browser;
+`TASK-UZK-008` removed it and its three call sites when real authentication
+arrived. Everything else in that file, and every other supplied asset, is
+byte for byte what was delivered.
+
+`js/sidebar.js` is still served but no longer loaded: `TASK-UZK-007` moved the
+navigation to the server.
 
 ```bash
 python manage.py collectstatic
