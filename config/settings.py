@@ -62,6 +62,10 @@ INSTALLED_APPS = [
     # The department's own facts about a user: their type, and from
     # TASK-UZK-013 what they are permitted to edit.
     "accounts",
+    # The lists the work itself is described with - application statuses from
+    # TASK-UZK-016 onward. After accounts, which owns the shared master data
+    # module it is built on.
+    "reference",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",

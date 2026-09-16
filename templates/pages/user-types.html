@@ -47,7 +47,7 @@ than assembled in the browser.
                 <td style="text-align:center;white-space:nowrap;">
                   <a class="btn btn-outline-custom btn-xs" href="{% url 'user-types' %}?edit={{ user_type.pk }}"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</a>
                   {% if not user_type.is_system_role %}
-                  <form method="post" action="{% url 'user-types-delete' user_type.pk %}" style="display:inline;" onsubmit="return confirm('{{ user_type.name }} o&#39;chirilsinmi?');">
+                  <form method="post" action="{% url 'user-types-delete' user_type.pk %}" style="display:inline;" data-confirm="{{ user_type.name }} o'chirilsinmi?">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-outline-custom text-danger btn-xs" aria-label="O'chirish"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
                   </form>

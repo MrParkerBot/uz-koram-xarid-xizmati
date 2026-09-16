@@ -12,12 +12,25 @@ where a page has one.
 
 This module holds the parts that do not differ, so the eight pages differ only
 where the specification says they do. TASK-UZK-014 is the first of them.
+
+TASK-UZK-016 is the third, which is where the four views each page repeats -
+list, create, update, delete - moved here as MasterDataPage. The two pages
+written before it keep their own copies: they are merged and reviewed, and
+rewriting them with no behaviour change belongs in a diff a reviewer can read
+as a refactor rather than inside a feature.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from django import forms
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
+from django.db import models
+from django.http import Http404, HttpRequest, HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
 # DEC-023: a six-digit integer. Written as a range rather than a string
 # pattern because the field is a number, and 000123 is not six digits of a
@@ -39,6 +52,44 @@ def category_number_field(label: str = "Category Number") -> forms.IntegerField:
         validators=list(CATEGORY_NUMBER_VALIDATORS),
         help_text="6 xonali son (masalan 100123).",
     )
+
+
+# The badge colours the supplied pages offer, mapped to the classes the
+# vendored style.css already defines. Stored as the page's own word rather than
+# the CSS class, so a restyle does not rewrite the data.
+#
+# Shared here rather than owned by UserType because Ariza Status needs the same
+# palette. The order is the order the choices were first migrated in; changing
+# it would make Django ask for a migration that changes nothing.
+BADGE_COLOURS: dict[str, str] = {
+    "orange": "badge-primary",
+    "blue": "badge-info",
+    "green": "badge-approved",
+    "yellow": "badge-trial",
+    "gray": "badge-soft",
+}
+
+DEFAULT_BADGE_COLOUR = "orange"
+
+
+def badge_colour_field(label: str = "Badge Rangi") -> models.CharField:
+    """The badge colour column a master data table carries."""
+    return models.CharField(
+        label,
+        max_length=16,
+        choices=[(colour, colour) for colour in BADGE_COLOURS],
+        default=DEFAULT_BADGE_COLOUR,
+    )
+
+
+def badge_class_for(colour: str) -> str:
+    """The CSS class a page puts on a badge of this colour.
+
+    An unrecognised colour falls back to the neutral badge rather than
+    rendering an empty class attribute, so a row that somehow holds a retired
+    colour still looks like a badge.
+    """
+    return BADGE_COLOURS.get(colour, "badge-soft")
 
 
 def deactivate(record) -> None:
@@ -83,3 +134,134 @@ class MasterDataForm(forms.ModelForm):
             raise forms.ValidationError(self.NAME_ALREADY_USED)
 
         raise forms.ValidationError(self.NAME_HELD_BY_DELETED_RECORD)
+
+
+class MasterDataPage:
+    """The four views one master data page needs, built from what differs.
+
+    A page of this kind is a table beside a form. Everything about how they
+    behave is the same from page to page - Save adds a row and redirects, an
+    invalid Save re-renders the page with the errors still on the form, Edit
+    fills the form in from ?edit=, and Delete deactivates after a confirmation
+    the template asks for. What differs is only the table, the form, the
+    template and the name of the list the template reads.
+
+    The views are built once, in the constructor, so the URL configuration
+    refers to them as plain callables and the POST-only rule is attached where
+    it cannot be forgotten.
+    """
+
+    def __init__(
+        self,
+        *,
+        model: type[models.Model],
+        form_class: type[MasterDataForm],
+        template_name: str,
+        url_name: str,
+        context_object_name: str,
+    ) -> None:
+        """Describe one page.
+
+        Args:
+            model: the master data table this page maintains. It must carry
+                is_active and answer objects.active(), which is what DEC-009
+                deletion and every drop-down are built on.
+            form_class: the form that captures one row.
+            template_name: the template to render, which reads
+                context_object_name and edited_record.
+            url_name: the name of this page's own route, used for the
+                redirect after a successful Save and Delete.
+            context_object_name: what the template calls the list of rows.
+        """
+        self.model = model
+        self.form_class = form_class
+        self.template_name = template_name
+        self.url_name = url_name
+        self.context_object_name = context_object_name
+
+        self.list_records: Callable[..., HttpResponse] = self._list_records
+        self.create_record: Callable[..., HttpResponse] = require_POST(
+            self._create_record
+        )
+        self.update_record: Callable[..., HttpResponse] = require_POST(
+            self._update_record
+        )
+        self.delete_record: Callable[..., HttpResponse] = require_POST(
+            self._delete_record
+        )
+
+    def _render_page(
+        self,
+        request: HttpRequest,
+        form: MasterDataForm,
+        edited_record: models.Model | None = None,
+    ) -> HttpResponse:
+        """Render the page with the given form, filled in when editing.
+
+        edited_record is None when the form is a blank one for a new row, and
+        the template decides from it whether Save posts to create or update.
+        """
+        return render(
+            request,
+            self.template_name,
+            {
+                self.context_object_name: self.model.objects.active(),
+                "form": form,
+                "edited_record": edited_record,
+            },
+        )
+
+    def _active_record(self, pk: int | str) -> models.Model:
+        """One row that has not been deleted, or a 404.
+
+        A deleted row answers 404 rather than 403: it has left the page, and
+        saying it exists but may not be touched would contradict that.
+
+        pk arrives as an int from the URL converter on the edit and delete
+        routes, and as the raw string from ?edit= on the list route - which is
+        the one place it reaches the page without a converter having checked
+        it. A pk that is not a number is a 404 here rather than the ValueError
+        the query would otherwise raise, because ?edit=abc is a request for a
+        record that does not exist, not a server fault.
+        """
+        try:
+            return get_object_or_404(self.model, pk=pk, is_active=True)
+        except (ValueError, ValidationError) as not_a_pk:
+            raise Http404(
+                f"{pk!r} is not the id of a {self.model._meta.verbose_name}."
+            ) from not_a_pk
+
+    def _list_records(self, request: HttpRequest) -> HttpResponse:
+        """The table, with one row open for editing when asked."""
+        edit_id = request.GET.get("edit")
+        if edit_id:
+            edited = self._active_record(edit_id)
+            return self._render_page(request, self.form_class(instance=edited), edited)
+
+        return self._render_page(request, self.form_class())
+
+    def _create_record(self, request: HttpRequest) -> HttpResponse:
+        """Save adds the row to the list."""
+        form = self.form_class(request.POST)
+        if not form.is_valid():
+            return self._render_page(request, form)
+
+        form.save()
+        return redirect(self.url_name)
+
+    def _update_record(self, request: HttpRequest, pk: int) -> HttpResponse:
+        """Edit changes the row the form was opened on."""
+        edited = self._active_record(pk)
+
+        form = self.form_class(request.POST, instance=edited)
+        if not form.is_valid():
+            return self._render_page(request, form, edited)
+
+        form.save()
+        return redirect(self.url_name)
+
+    def _delete_record(self, request: HttpRequest, pk: int) -> HttpResponse:
+        """Delete deactivates the row (DEC-009)."""
+        deactivate(self._active_record(pk))
+
+        return redirect(self.url_name)

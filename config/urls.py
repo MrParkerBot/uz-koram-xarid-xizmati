@@ -39,11 +39,11 @@ from accounts.views import (
     user_list,
     user_update,
 )
+from reference.ariza_status_views import ariza_status_page
 
 # Every page except the dashboard, which answers at the site root. Each entry
 # is (url path, URL name); the template is pages/<name>.html.
 PAGE_ROUTES: tuple[tuple[str, str], ...] = (
-    ("ariza-status/", "ariza-status"),
     ("shartnoma-status/", "shartnoma-status"),
     ("mahsulot-turlari/", "mahsulot-turlari"),
     ("shartnoma-turi/", "shartnoma-turi"),
@@ -164,5 +164,27 @@ urlpatterns = [
         "users/<int:pk>/contract-editing/",
         require_page_permission("users")(user_contract_editing),
         name="user-contract-editing",
+    ),
+    # The Ariza Status master data page (TASK-UZK-016), the first page built
+    # out of MasterDataPage and the first table in the reference application.
+    path(
+        "ariza-status/",
+        require_page_permission("ariza-status")(ariza_status_page.list_records),
+        name="ariza-status",
+    ),
+    path(
+        "ariza-status/add/",
+        require_page_permission("ariza-status")(ariza_status_page.create_record),
+        name="ariza-status-create",
+    ),
+    path(
+        "ariza-status/<int:pk>/edit/",
+        require_page_permission("ariza-status")(ariza_status_page.update_record),
+        name="ariza-status-update",
+    ),
+    path(
+        "ariza-status/<int:pk>/delete/",
+        require_page_permission("ariza-status")(ariza_status_page.delete_record),
+        name="ariza-status-delete",
     ),
 ]

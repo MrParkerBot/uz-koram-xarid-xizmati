@@ -310,7 +310,7 @@ class UserDeletionTests(UsersPageTestCase):
         # DEC-009 requires a confirmation.
         page = self.client.get(reverse("users")).content.decode()
 
-        self.assertIn("onsubmit=\"return confirm(", page)
+        self.assertIn("data-confirm=", page)
 
     def test_deleting_someone_already_deleted_is_a_not_found(self) -> None:
         self.delete()
