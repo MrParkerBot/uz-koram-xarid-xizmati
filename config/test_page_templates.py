@@ -28,6 +28,8 @@ CONVERTED_PAGES = (
     # DEC-018 makes departments Admin-maintained and the specification gives
     # them no page. It carries the shell like the rest, so it is checked here.
     "bolim-royhati.html",
+    # Also added rather than supplied: TASK-UZK-021, DEC-011.
+    "firmalar.html",
     "bolimlar.html",
     "dashboard.html",
     "integration.html",

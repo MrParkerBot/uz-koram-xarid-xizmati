@@ -56,6 +56,10 @@ SIDEBAR_NAVIGATION: tuple[NavigationGroup, ...] = (
             # no page at all, and DEC-018 makes them Admin-maintained master
             # data. Without this they could only be created from a shell.
             NavigationEntry("Bo'limlar", "bi-diagram-3", "bolim-royhati"),
+            # Also not in the supplied sidebar, and for the same reason as
+            # Bo'limlar: DEC-011 makes suppliers master data and the
+            # specification gives them no page to maintain them on.
+            NavigationEntry("Firmalar", "bi-shop", "firmalar"),
         ),
     ),
     NavigationGroup(

@@ -1,6 +1,6 @@
 """What MasterDataRecord promises every master data table.
 
-Seven tables inherit it across two applications, and the promise is small: a row
+Eight tables inherit it across two applications, and the promise is small: a row
 can be deactivated rather than deleted (DEC-009), it leaves objects.active()
 when that happens, it stays in the table so anything already pointing at it
 still resolves, and it prints as its name.
@@ -28,6 +28,7 @@ MASTER_DATA_FIXTURES = (
     ("reference", "MahsulotTuri", {"name": "Sinov", "category_number": 900001}),
     ("reference", "ShartnomaTuri", {"name": "Framework"}),
     ("reference", "Department", {"name": "Texnik bo`lim"}),
+    ("reference", "Supplier", {"name": "Texnoprom LLC"}),
 )
 
 
