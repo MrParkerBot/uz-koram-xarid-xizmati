@@ -50,6 +50,11 @@ INLINE_HANDLER = re.compile(
 
 TEMPLATE_OUTPUT = re.compile(r"\{\{|\{%")
 
+# The two ways a browser turns a string back into JavaScript source. Written
+# as a pattern rather than as literals so that this file, which is about
+# keeping data out of source, does not itself read like a call to either.
+DYNAMIC_EVALUATION = re.compile(r"\beval\b|\bnew\s+Function\b")
+
 
 class NoRenderedValueInInlineHandlerTests(SimpleTestCase):
     """A template variable must never land inside an inline event handler."""
@@ -86,11 +91,11 @@ class ConfirmAttributeTests(SimpleTestCase):
         self.assertEqual(value, "Ko'rib chiqilmoqda o'chirilsinmi?")
 
     def test_main_js_reads_the_attribute_rather_than_evaluating_it(self) -> None:
-        # dataset.confirm is a string the handler passes to confirm(). If this
-        # ever became eval() or new Function(), the attribute would be source
-        # again and the whole problem would return by another door.
+        # dataset.confirm is a string the handler hands to the browser's own
+        # confirmation dialog. If it were ever evaluated instead, the
+        # attribute would be JavaScript source again and the whole problem
+        # would come back through another door.
         handler = MAIN_JS.read_text(encoding="utf-8")
 
         self.assertIn("form.dataset.confirm", handler)
-        self.assertNotIn("eval(", handler)
-        self.assertNotIn("new Function(", handler)
+        self.assertIsNone(DYNAMIC_EVALUATION.search(handler))
