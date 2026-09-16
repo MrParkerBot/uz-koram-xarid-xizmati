@@ -60,6 +60,19 @@ class AcceptanceTestCase(TestCase):
         self.application.refresh_from_db()
         return self.application
 
+    def table(self) -> str:
+        """The rows of the incoming list, without the page around them.
+
+        A test asking whether an application left the list has to read the
+        table and not the page: the page also carries the message saying the
+        application was accepted, which names it. Asserting over the whole
+        document would pass only while the view stayed silent.
+        """
+        page = self.client.get(reverse("kelib-arizalar")).content.decode()
+        body = page.split('<tbody id="ariza-tbody">', 1)[1]
+
+        return body.split("</tbody>", 1)[0]
+
 
 class SeededCodeTests(TestCase):
     """The migration gives the seeded statuses their codes, and only those."""
@@ -112,9 +125,12 @@ class TransitionTests(AcceptanceTestCase):
     def test_an_accepted_application_leaves_the_incoming_list(self) -> None:
         self.accept()
 
-        page = self.client.get(reverse("kelib-arizalar")).content.decode()
+        self.assertNotIn(self.application.ariza_raqami, self.table())
 
-        self.assertNotIn(self.application.ariza_raqami, page)
+    def test_the_list_is_empty_once_its_only_application_is_accepted(self):
+        self.accept()
+
+        self.assertIn("Hozircha kelib tushgan ariza", self.table())
 
     def test_accepting_stamps_the_date(self) -> None:
         # TASK-UZK-025 shows this as the Qabul qilingan sana column.
@@ -251,3 +267,36 @@ class AccessTests(AcceptanceTestCase):
         page = self.client.get(reverse("kelib-arizalar")).content.decode()
 
         self.assertIn("data-confirm=", page)
+
+
+class FeedbackTests(AcceptanceTestCase):
+    """What the view says has to arrive somewhere a person can read it.
+
+    A message the base template does not render is a message that is stored,
+    carried to the next request and silently dropped - which looks exactly
+    like a button that did nothing. These tests follow the redirect and read
+    the page, rather than reading the message store, because the store being
+    right is not the part that was missing.
+    """
+
+    def test_the_page_says_the_application_was_accepted(self) -> None:
+        page = self.client.post(self.url, follow=True).content.decode()
+
+        self.assertIn(f"{self.application.ariza_raqami} qabul qilindi.", page)
+
+    def test_the_page_says_when_it_was_already_accepted(self) -> None:
+        self.accept()
+
+        page = self.client.post(self.url, follow=True).content.decode()
+
+        self.assertIn("allaqachon qabul qilingan", page)
+
+    def test_the_message_is_rendered_as_an_alert_the_stylesheet_knows(self):
+        page = self.client.post(self.url, follow=True).content.decode()
+
+        self.assertIn('class="alert alert-success"', page)
+
+    def test_a_page_with_nothing_to_say_renders_no_message_region(self) -> None:
+        page = self.client.get(reverse("kelib-arizalar")).content.decode()
+
+        self.assertNotIn("page-messages", page)
