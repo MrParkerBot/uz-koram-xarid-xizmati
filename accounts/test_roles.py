@@ -12,6 +12,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError
+from django.template.loader import render_to_string
 from django.test import TestCase
 from django.utils.crypto import get_random_string
 
@@ -208,9 +209,11 @@ class DisplayTests(TestCase):
         self.assertContains(response, MENEJER)
 
     def test_the_header_falls_back_to_the_username_without_a_type(self) -> None:
+        # Rendered directly rather than fetched: since TASK-UZK-012 a user with
+        # no type may open no page, so the only way to see what the header
+        # shows them is to render the shell.
         user = make_user("fallback.user")
-        self.client.force_login(user)
 
-        response = self.client.get("/")
+        shell = render_to_string("base.html", {"user": user})
 
-        self.assertContains(response, "fallback.user")
+        self.assertIn("fallback.user", shell)

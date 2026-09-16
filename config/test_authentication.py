@@ -20,6 +20,8 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils.crypto import get_random_string
 
+from accounts.models import UserType
+from accounts.roles import ADMIN, assign_user_type
 from config.navigation import navigation_url_names
 
 USERNAME = "b.toshmatov"
@@ -49,6 +51,10 @@ class AuthenticationTestCase(TestCase):
             first_name=FIRST_NAME,
             last_name=LAST_NAME,
         )
+        # Admin, because these tests are about signing in rather than about
+        # who may open what: since TASK-UZK-012 an account with no type can
+        # reach no page at all, which would make every assertion here a 403.
+        assign_user_type(cls.user, UserType.objects.get(name=ADMIN))
 
     def sign_in(self, username: str = USERNAME, password: str = PASSWORD):
         """Post the login form and return the response."""
@@ -70,10 +76,19 @@ class LoginTests(AuthenticationTestCase):
 
         self.assertEqual(int(self.client.session["_auth_user_id"]), self.user.pk)
 
-    def test_valid_credentials_land_on_the_dashboard(self) -> None:
+    def test_valid_credentials_land_on_a_page_the_user_may_open(self) -> None:
+        # TASK-UZK-012 put a landing page between the login and the dashboard:
+        # three of the six User Types may not open the dashboard, so signing in
+        # correctly used to answer 403. This account is an Admin, so the
+        # landing page sends it to the dashboard.
         response = self.sign_in()
 
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertRedirects(
+            response, reverse("landing-page"), target_status_code=302
+        )
+        self.assertRedirects(
+            self.client.get(reverse("landing-page")), reverse("dashboard")
+        )
 
     def test_a_wrong_password_is_rejected(self) -> None:
         response = self.sign_in(password=WRONG_PASSWORD)
@@ -125,7 +140,9 @@ class LoginTests(AuthenticationTestCase):
 
         response = self.client.get(reverse("login"))
 
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertRedirects(
+            response, reverse("landing-page"), target_status_code=302
+        )
 
 
 class LogoutTests(AuthenticationTestCase):
@@ -230,7 +247,8 @@ class SignedInIdentityTests(AuthenticationTestCase):
         response = self.client.get(reverse("dashboard"))
 
         self.assertContains(response, f"{FIRST_NAME} {LAST_NAME}")
-        self.assertContains(response, USERNAME)
+        # TASK-UZK-010 put the User Type on the line that held the username.
+        self.assertContains(response, ADMIN)
 
     def test_the_avatar_shows_the_user_initials(self) -> None:
         self.sign_in()

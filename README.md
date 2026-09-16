@@ -175,8 +175,36 @@ A user with no type, a user whose type was deactivated, and an anonymous
 visitor all resolve to no role, and every role check refuses them. Nobody is
 waved through for want of an answer.
 
-Which pages each type may open is `TASK-UZK-012`; every signed-in user can
-still open all of them.
+## Page permissions
+
+`accounts/permissions.py` holds the matrix: which User Type may open which
+page. It is DEC-015, which supersedes section 11 of the specification - section
+11 lists three roles, numbered 3 and 4 with no 1 and 2, and assigns four pages
+to nobody.
+
+Admin opens everything. Every other type opens the pages the decision names and
+receives **403** for the rest - not a redirect, because the visitor is signed
+in and sending them back to the login page would suggest signing in again would
+help. A user with no type opens nothing.
+
+The sidebar shows only what the current user may open, and a group heading with
+no visible entries is dropped rather than left standing over nothing.
+
+Where DEC-015 says a role "additionally" has a page, the addition is read
+against what section 11 gave that same role. **That is an assumption, not a
+certainty** - DEC-013 splits "Bo`lim Boshligi - Menejer" into two roles that
+section 11 wrote as one - and it is written out at the top of
+`accounts/permissions.py`.
+
+A page added to the application without a row in the matrix fails a test rather
+than becoming Admin-only by accident, and a page view added without the
+decorator fails another: the check is applied by hand, so something has to
+verify it was applied.
+
+Signing in lands on `/kirish/`, which forwards to the first page the user's
+type may open, in the sidebar's own order. It is not the dashboard, because
+three of the six types may not open that one - they would sign in correctly and
+be told they are forbidden.
 
 ## Users
 
