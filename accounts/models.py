@@ -57,6 +57,14 @@ class UserType(models.Model):
         "Category Number", null=True, blank=True
     )
     is_active = models.BooleanField(default=True)
+    is_system_role = models.BooleanField(
+        default=False,
+        help_text=(
+            "One of the six DEC-013 fixes. accounts/permissions.py decides "
+            "what each may open by name, so a system role cannot be renamed "
+            "or deleted from the User Types page."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = MasterDataQuerySet.as_manager()

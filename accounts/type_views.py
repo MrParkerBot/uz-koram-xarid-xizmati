@@ -20,7 +20,6 @@ from django.views.decorators.http import require_POST
 
 from accounts.master_data import MasterDataForm, category_number_field, deactivate
 from accounts.models import UserType
-from accounts.roles import DEPARTMENT_USER_TYPES
 
 USER_TYPES_TEMPLATE = "pages/user-types.html"
 
@@ -28,10 +27,12 @@ USER_TYPES_TEMPLATE = "pages/user-types.html"
 def is_department_user_type(user_type: UserType) -> bool:
     """Whether this is one of the six roles DEC-013 fixes.
 
-    Those six are named in accounts/permissions.py, so their names are part of
-    the application rather than data an administrator maintains.
+    Read from the row's own flag rather than by comparing its name to a
+    constant. Recognising a system role by name would mean the protection
+    stopped applying the moment the name changed - which is the thing it
+    exists to prevent.
     """
-    return user_type.name in DEPARTMENT_USER_TYPES
+    return user_type.is_system_role
 
 
 class UserTypeForm(MasterDataForm):
@@ -71,7 +72,6 @@ def render_user_types_page(
             "user_types": UserType.objects.active(),
             "form": form,
             "edited_type_id": edited_type_id,
-            "department_user_types": DEPARTMENT_USER_TYPES,
         },
     )
 
@@ -103,11 +103,18 @@ def user_type_create(request: HttpRequest) -> HttpResponse:
 def user_type_update(request: HttpRequest, pk: int) -> HttpResponse:
     """Edit changes the type the form was opened on.
 
-    A disabled field keeps its stored value whatever is posted, so a rename of
-    one of the six arrives here and is ignored rather than refused - which is
-    what a form built from the instance should do.
+    A rename of a system role is refused rather than quietly dropped. The
+    form's disabled field would have ignored it, and a save that reports
+    success while discarding what was typed is the worst of the three
+    possible answers.
     """
     edited = get_object_or_404(UserType, pk=pk, is_active=True)
+
+    submitted_name = request.POST.get("name", edited.name)
+    if is_department_user_type(edited) and submitted_name != edited.name:
+        raise PermissionDenied(
+            f"{edited.name} - tizim roli, nomini o'zgartirib bo'lmaydi."
+        )
 
     form = UserTypeForm(request.POST, instance=edited)
     if not form.is_valid():

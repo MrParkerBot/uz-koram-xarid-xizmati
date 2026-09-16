@@ -133,11 +133,33 @@ class SystemRoleProtectionTests(UserTypesPageTestCase):
         )
 
     def test_the_name_of_a_system_role_cannot_be_changed(self) -> None:
-        self.edit_manager_type(name="Boshqa nom")
+        response = self.edit_manager_type(name="Boshqa nom")
 
         self.manager_type.refresh_from_db()
 
+        # Refused rather than quietly dropped: a save that reports success
+        # while discarding what was typed is the worst of the three answers.
+        self.assertEqual(response.status_code, 403)
         self.assertEqual(self.manager_type.name, MENEJER)
+
+    def test_a_system_role_is_recognised_by_its_flag_not_its_name(self) -> None:
+        # Recognising one by name would mean the protection stopped applying
+        # the moment a name changed, which is what it exists to prevent.
+        self.assertTrue(self.manager_type.is_system_role)
+
+        self.manager_type.name = "Renamed outside the page"
+        self.manager_type.save(update_fields=["name"])
+
+        response = self.client.post(
+            reverse("user-types-delete", args=[self.manager_type.pk])
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_a_type_the_installation_added_is_not_a_system_role(self) -> None:
+        self.create()
+
+        self.assertFalse(UserType.objects.get(name=ADDED_TYPE).is_system_role)
 
     def test_renaming_does_not_take_anybody_access_away(self) -> None:
         # The point of the protection: the permission matrix is written

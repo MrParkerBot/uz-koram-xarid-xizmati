@@ -42,11 +42,11 @@ than assembled in the browser.
             {% for user_type in user_types %}
               <tr data-id="{{ user_type.pk }}">
                 <td>{{ forloop.counter }}</td>
-                <td>{{ user_type.name }}{% if user_type.name in department_user_types %} <span class="muted small">tizim roli</span>{% endif %}</td>
+                <td>{{ user_type.name }}{% if user_type.is_system_role %} <span class="muted small">tizim roli</span>{% endif %}</td>
                 <td style="text-align:center;"><span class="badge {{ user_type.badge_class }}">{{ user_type.name }}</span></td>
                 <td style="text-align:center;white-space:nowrap;">
                   <a class="btn btn-outline-custom btn-xs" href="{% url 'user-types' %}?edit={{ user_type.pk }}"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</a>
-                  {% if user_type.name not in department_user_types %}
+                  {% if not user_type.is_system_role %}
                   <form method="post" action="{% url 'user-types-delete' user_type.pk %}" style="display:inline;" onsubmit="return confirm('{{ user_type.name }} o&#39;chirilsinmi?');">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-outline-custom text-danger btn-xs" aria-label="O'chirish"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
