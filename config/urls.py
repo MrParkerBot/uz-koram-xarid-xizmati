@@ -40,12 +40,12 @@ from accounts.views import (
     user_update,
 )
 from reference.ariza_status_views import ariza_status_page
+from reference.mahsulot_turi_views import mahsulot_turi_page
 from reference.shartnoma_status_views import shartnoma_status_page
 
 # Every page except the dashboard, which answers at the site root. Each entry
 # is (url path, URL name); the template is pages/<name>.html.
 PAGE_ROUTES: tuple[tuple[str, str], ...] = (
-    ("mahsulot-turlari/", "mahsulot-turlari"),
     ("shartnoma-turi/", "shartnoma-turi"),
     ("kelib-arizalar/", "kelib-arizalar"),
     ("qabul-arizalar/", "qabul-arizalar"),
@@ -216,5 +216,35 @@ urlpatterns = [
             shartnoma_status_page.delete_record
         ),
         name="shartnoma-status-delete",
+    ),
+    # The Mahsulot Turlari master data page (TASK-UZK-018). Ships empty: no
+    # decision names a starting set of product categories.
+    path(
+        "mahsulot-turlari/",
+        require_page_permission("mahsulot-turlari")(
+            mahsulot_turi_page.list_records
+        ),
+        name="mahsulot-turlari",
+    ),
+    path(
+        "mahsulot-turlari/add/",
+        require_page_permission("mahsulot-turlari")(
+            mahsulot_turi_page.create_record
+        ),
+        name="mahsulot-turlari-create",
+    ),
+    path(
+        "mahsulot-turlari/<int:pk>/edit/",
+        require_page_permission("mahsulot-turlari")(
+            mahsulot_turi_page.update_record
+        ),
+        name="mahsulot-turlari-update",
+    ),
+    path(
+        "mahsulot-turlari/<int:pk>/delete/",
+        require_page_permission("mahsulot-turlari")(
+            mahsulot_turi_page.delete_record
+        ),
+        name="mahsulot-turlari-delete",
     ),
 ]

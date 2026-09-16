@@ -54,6 +54,25 @@ def category_number_field(label: str = "Category Number") -> forms.IntegerField:
     )
 
 
+
+def required_category_number_field(
+    label: str = "Category Raqami",
+) -> forms.IntegerField:
+    """The Category Number a master data form insists on.
+
+    The Mahsulot Turlari form marks it required and calls it a code, and
+    TASK-UZK-046 reports purchases by category - a category with no number
+    would have nothing to report under. The six-digit rule is the same rule,
+    taken from the same validators, so the required and optional forms of the
+    field cannot drift apart.
+    """
+    return forms.IntegerField(
+        label=label,
+        required=True,
+        validators=list(CATEGORY_NUMBER_VALIDATORS),
+        help_text="6 xonali kod (masalan 100042).",
+    )
+
 # The badge colours the supplied pages offer, mapped to the classes the
 # vendored style.css already defines. Stored as the page's own word rather than
 # the CSS class, so a restyle does not rewrite the data.
@@ -174,22 +193,54 @@ class MasterDataForm(forms.ModelForm):
         """
         return self.cleaned_data.get("position") or UNPLACED
 
-    def clean_name(self) -> str:
-        """Refuse a name already taken, case-insensitively."""
-        name = self.cleaned_data["name"]
+    def refuse_a_clash(
+        self,
+        value,
+        *,
+        lookup: str,
+        already_used: str,
+        held_by_deleted_record: str,
+    ):
+        """Return value, or raise saying which kind of clash it hit.
 
-        taken = self._meta.model.objects.filter(name__iexact=name)
+        Django refuses a duplicate on its own, but with one message for two
+        situations that need different answers from the person reading it.
+        DEC-009 keeps a deleted row in the table, so a value can be taken by a
+        record that is nowhere on the page - and being told it already exists,
+        while looking at a list that does not contain it, is the one case
+        worth spelling out.
+
+        Args:
+            value: the submitted value, returned unchanged when it is free.
+            lookup: the queryset lookup that finds a clash, such as
+                name__iexact or category_number.
+            already_used: what to say when the clash is with a visible row.
+            held_by_deleted_record: what to say when it is with a deleted one.
+
+        Raises:
+            forms.ValidationError: when the value is taken, either way.
+        """
+        taken = self._meta.model.objects.filter(**{lookup: value})
         if self.instance.pk is not None:
             taken = taken.exclude(pk=self.instance.pk)
 
         clash = taken.first()
         if clash is None:
-            return name
+            return value
 
         if clash.is_active:
-            raise forms.ValidationError(self.NAME_ALREADY_USED)
+            raise forms.ValidationError(already_used)
 
-        raise forms.ValidationError(self.NAME_HELD_BY_DELETED_RECORD)
+        raise forms.ValidationError(held_by_deleted_record)
+
+    def clean_name(self) -> str:
+        """Refuse a name already taken, case-insensitively."""
+        return self.refuse_a_clash(
+            self.cleaned_data["name"],
+            lookup="name__iexact",
+            already_used=self.NAME_ALREADY_USED,
+            held_by_deleted_record=self.NAME_HELD_BY_DELETED_RECORD,
+        )
 
 
 class MasterDataPage:
