@@ -43,6 +43,7 @@ from applications.forms import (
 from applications.models import (
     Application,
     ApplicationItem,
+    Contract,
     PurchaseApplication,
     PurchaseApplicationItem,
 )
@@ -62,6 +63,7 @@ INCOMING_TEMPLATE = "pages/kelib-arizalar.html"
 ACCEPTED_TEMPLATE = "pages/qabul-arizalar.html"
 ASSIGNED_TEMPLATE = "pages/tayinlangan.html"
 PURCHASE_TEMPLATE = "pages/xarid-ariza.html"
+AGREED_CONTRACTS_TEMPLATE = "pages/kelishinlingan.html"
 
 # Which page shows an application at each stage. The attachment follows the
 # record rather than the route: a PDF is downloadable by whoever may open the
@@ -706,6 +708,56 @@ def assign_application(request: HttpRequest, pk: int) -> HttpResponse:
         )
 
     return redirect("qabul-arizalar")
+
+
+def agreed_contracts() -> QuerySet[Contract]:
+    """The contracts on the Kelishinlingan Shartnoma page (REQ-SHARTNOMA-004).
+
+    Filtered on the stage code rather than on a ShartnomaStatus name, for the
+    reason every list here gives: DEC-010 makes the statuses examples the
+    department extends, so a list reading one quietly empties the day
+    somebody retires it.
+
+    Everything the row renders is joined and nothing else. The application and
+    its department for the first two columns, the supplier for Firma nomi, the
+    status for Holati, and the person who made it for Kim shartnoma qilgan.
+    The application's order lines are prefetched because Buyurtma nomi comes
+    from them - a contract does not repeat what was ordered, it points at the
+    application that asked.
+    """
+    return (
+        Contract.objects.filter(stage=Contract.Stage.AGREED)
+        .select_related(
+            "application",
+            "application__department",
+            "supplier",
+            "status",
+            "created_by",
+        )
+        .prefetch_related(
+            Prefetch(
+                "application__items",
+                queryset=ApplicationItem.objects.select_related(
+                    "mahsulot_turi"
+                ),
+            )
+        )
+    )
+
+
+def agreed_contracts_list(request: HttpRequest) -> HttpResponse:
+    """The Kelishinlingan Shartnoma table.
+
+    Shartnoma Kiritish, View and Send are on the page and do nothing yet -
+    TASK-UZK-035, TASK-UZK-037 and TASK-UZK-038 build them. Rendered visibly
+    waiting rather than hidden, the way every page here has left a control
+    that belongs to a later task.
+    """
+    return render(
+        request,
+        AGREED_CONTRACTS_TEMPLATE,
+        {"contracts": agreed_contracts()},
+    )
 
 
 def purchase_applications() -> QuerySet[PurchaseApplication]:

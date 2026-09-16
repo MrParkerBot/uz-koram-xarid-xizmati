@@ -43,6 +43,7 @@ from applications.views import (
     accept_application,
     accept_assigned_application,
     accepted_list,
+    agreed_contracts_list,
     application_create,
     application_pdf,
     approve_purchase_application,
@@ -67,7 +68,6 @@ from reference.supplier_views import supplier_page
 # Every page except the dashboard, which answers at the site root. Each entry
 # is (url path, URL name); the template is pages/<name>.html.
 PAGE_ROUTES: tuple[tuple[str, str], ...] = (
-    ("kelishinlingan/", "kelishinlingan"),
     ("tuzilgan/", "tuzilgan"),
     ("xodimlar-yuklamasi/", "xodimlar-yuklamasi"),
     ("bolimlar/", "bolimlar"),
@@ -378,6 +378,15 @@ urlpatterns = [
         "tayinlangan/<int:pk>/holat/",
         require_page_permission("tayinlangan")(set_application_status),
         name="tayinlangan-holat",
+    ),
+    # The Kelishinlingan Shartnoma page of section 4.6 (TASK-UZK-034). It
+    # left PAGE_ROUTES when it stopped being a template with no data behind
+    # it; the path and the name are the ones the sidebar and the permission
+    # matrix already use.
+    path(
+        "kelishinlingan/",
+        require_page_permission("kelishinlingan")(agreed_contracts_list),
+        name="kelishinlingan",
     ),
     # The Xarid Arizasi page of section 4.9 (TASK-UZK-030). It left
     # PAGE_ROUTES when it stopped being a template with no data behind it; the
