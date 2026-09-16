@@ -25,6 +25,9 @@ from accounts.models import UserProfile, UserType
 from accounts.roles import ADMIN, MENEJER, assign_user_type, department_of
 from reference.models import Department
 
+# Without the apostrophe the real name would carry ("Texnik bo`lim"): the
+# page escapes one to &#x27;, which would turn every assertion about the
+# rendered name into an assertion about HTML escaping.
 ADDED_DEPARTMENT = "Texnik bolim"
 
 
@@ -175,6 +178,22 @@ class UserLinkTests(TestCase):
         self.create_user(department="")
 
         self.assertIsNone(self.created_profile().department)
+
+    def test_the_table_shows_which_department_a_user_is_in(self) -> None:
+        # Otherwise the page captures the department and then hides it, and
+        # the only way to check who is where is to open every row in turn.
+        self.create_user()
+
+        page = self.client.get(reverse("users")).content.decode()
+
+        self.assertIn(ADDED_DEPARTMENT, page)
+
+    def test_the_table_says_so_when_a_user_has_no_department(self) -> None:
+        self.create_user(department="")
+
+        page = self.client.get(reverse("users")).content.decode()
+
+        self.assertIn("Belgilanmagan", page)
 
     def test_the_form_offers_only_active_departments(self) -> None:
         retired = Department.objects.create(name="Eski bolim")
