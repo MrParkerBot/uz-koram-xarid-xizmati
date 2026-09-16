@@ -16,10 +16,15 @@ the point:
 - Tayinlangan xodim, Choose user and Tayinlash are the assignment REQ-ARIZA-006
   describes, and TASK-UZK-027 wires them. Until then the column is empty on
   every row, which is by design rather than by fault.
-- The prototype's "Ariza Yaratish" modal is gone. It is the section 4.2
-  creation form, which is TASK-UZK-026, and it posted nowhere. An inert
-  creation form on a page that is otherwise real reads as a broken feature
-  rather than as a placeholder.
+The prototype's "Ariza Yaratish" modal is back, and posts (TASK-UZK-026). It
+was removed by TASK-UZK-025 because it posted nowhere, and an inert creation
+form on a page that is otherwise real reads as a broken feature rather than as
+a placeholder.
+
+The table shows one row per order line rather than one per application, with
+the application's own cells spanning its lines. An application can order
+several things since TASK-UZK-026, and a table that showed only the first line
+would be hiding an order somebody has to fill.
 
 Qabul qilingan sana is the date acceptance happened - Application.
 qabul_qilingan_sana, stamped by TASK-UZK-023 - and not the date the
@@ -44,6 +49,7 @@ week.
     <div class="panel" style="margin-bottom:24px;">
       <!-- FILTER BAR -->
       <div class="toolbar"><div class="toolbar-group">
+        <button class="btn btn-primary-custom btn-sm" type="button" onclick="Modal.open('create-modal')"><i class="bi bi-plus-lg" aria-hidden="true"></i> Ariza Yaratish</button>
         <span class="toolbar-label">Filter:</span>
         <select class="form-control" id="f-bolim" style="width:150px;" disabled>
           <option value="">Bo'lim: barchasi</option>
@@ -77,31 +83,39 @@ week.
           </tr></thead>
           <tbody id="qabul-tbody">
           {% for ariza in applications %}
+            {% with lines=ariza.items.all %}
+            {% for qator in lines %}
             <tr data-id="{{ ariza.pk }}">
-              <td>{{ forloop.counter }}</td>
-              <td class="mono-cell">{{ ariza.ariza_raqami }}</td>
-              <td>{{ ariza.department.name }}</td>
-              <td style="font-size:11px;" class="mono-cell">{{ ariza.mahsulot_turi.category_number }} &mdash; {{ ariza.mahsulot_turi.name }}</td>
-              <td style="font-weight:500;">{{ ariza.buyurtma_nomi }}</td>
-              <td style="font-weight:600;color:var(--color-primary);">{{ ariza.soni_display }}</td>
-              <td>{{ ariza.olchov_birligi }}</td>
-              <td>
+              {% if forloop.first %}
+              <td rowspan="{{ lines|length }}">{{ forloop.parentloop.counter }}</td>
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.ariza_raqami }}</td>
+              <td rowspan="{{ lines|length }}">{{ ariza.department.name }}</td>
+              {% endif %}
+              <td style="font-size:11px;" class="mono-cell">{{ qator.mahsulot_turi.category_number }} &mdash; {{ qator.mahsulot_turi.name }}</td>
+              <td style="font-weight:500;">{{ qator.buyurtma_nomi }}</td>
+              <td style="font-weight:600;color:var(--color-primary);">{{ qator.soni_display }}</td>
+              <td>{{ qator.olchov_birligi }}</td>
+              {% if forloop.first %}
+              <td rowspan="{{ lines|length }}">
                 {% if ariza.pdf %}
                   <a class="pdf-badge" href="{% url 'ariza-pdf' ariza.pk %}" title="{{ ariza.ariza_raqami }}.pdf"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></a>
                 {% else %}
                   <span class="muted small">&mdash;</span>
                 {% endif %}
               </td>
-              <td class="mono-cell">{{ ariza.qabul_qilingan_sana|date:"Y-m-d" }}</td>
-              <td>
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.qabul_qilingan_sana|date:"Y-m-d" }}</td>
+              <td rowspan="{{ lines|length }}">
                 <select class="form-control" style="width:140px;padding:5px 8px;font-size:11px;" disabled title="TASK-UZK-027 tayinlashni quradi">
                   <option value="">&mdash; Tanlang &mdash;</option>
                 </select>
               </td>
-              <td style="text-align:center;white-space:nowrap;">
+              <td style="text-align:center;white-space:nowrap;" rowspan="{{ lines|length }}">
                 <button class="btn btn-primary-custom btn-xs" disabled title="TASK-UZK-027 tayinlashni quradi">Tayinlash</button>
               </td>
+              {% endif %}
             </tr>
+            {% endfor %}
+            {% endwith %}
           {% empty %}
             <tr><td colspan="11" class="muted" style="text-align:center;">Hozircha qabul qilingan ariza yo'q.</td></tr>
           {% endfor %}
@@ -110,4 +124,143 @@ week.
       </div>
     </div>
 
+{% endblock %}
+{% block extra_scripts %}
+<!-- CREATE ARIZA MODAL (TASK-UZK-026) -->
+{% comment %}
+The prototype's Ariza Yaratish modal, now posting somewhere.
+
+Open when the form has errors, so a refused submission comes back with what
+was typed still in it rather than behind a closed modal the person has to
+reopen and fill in again.
+
+Ariza raqami and Yaratilingan sana are shown and not editable. The number is
+allocated by DEC-022 when the record is written, so there is nothing to show
+before that and the field says so; a number somebody can type is a number two
+applications can share.
+{% endcomment %}
+<div id="create-modal" class="modal-overlay{% if not open_form %} hidden{% endif %}">
+  <div class="modal-box modal-lg" style="max-width:720px;">
+    <form method="post" action="{% url 'ariza-yaratish' %}" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="modal-title"><i class="bi bi-clipboard" aria-hidden="true"></i> Ariza Yaratish Formasi</div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Ariza Raqami</label>
+          <input type="text" class="form-control mono" value="Saqlashda beriladi" disabled/>
+          <div class="form-hint">Raqam saqlanganda avtomatik beriladi (DEC-022).</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Yaratilingan Sana</label>
+          <input type="text" class="form-control" value="{% now 'Y-m-d' %}" disabled/>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="{{ form.department.id_for_label }}">Bo'lim Nomi <span style="color:var(--color-danger)">*</span></label>
+          {{ form.department }}
+          <div class="form-error">{{ form.department.errors|striptags }}</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ form.buyurtmachi_ismi.id_for_label }}">Buyurtmachi Ismi <span style="color:var(--color-danger)">*</span></label>
+          {{ form.buyurtmachi_ismi }}
+          <div class="form-error">{{ form.buyurtmachi_ismi.errors|striptags }}</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Buyurtma qatorlari <span style="color:var(--color-danger)">*</span></label>
+        <div class="form-error">{{ item_formset.non_form_errors|striptags }}</div>
+        {{ item_formset.management_form }}
+        <div id="item-rows-container">
+          {% for qator_form in item_formset %}
+          <div class="form-row-items-4" style="margin-bottom:10px;">
+            {{ qator_form.id }}
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label" for="{{ qator_form.mahsulot_turi.id_for_label }}">Mahsulot Turi</label>
+              {{ qator_form.mahsulot_turi }}
+              <div class="form-error">{{ qator_form.mahsulot_turi.errors|striptags }}</div>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label" for="{{ qator_form.buyurtma_nomi.id_for_label }}">Buyurtma Nomi</label>
+              {{ qator_form.buyurtma_nomi }}
+              <div class="form-error">{{ qator_form.buyurtma_nomi.errors|striptags }}</div>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label" for="{{ qator_form.buyurtma_soni.id_for_label }}">Soni</label>
+              {{ qator_form.buyurtma_soni }}
+              <div class="form-error">{{ qator_form.buyurtma_soni.errors|striptags }}</div>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label" for="{{ qator_form.olchov_birligi.id_for_label }}">O'lchov</label>
+              {{ qator_form.olchov_birligi }}
+              <div class="form-error">{{ qator_form.olchov_birligi.errors|striptags }}</div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        <button type="button" class="btn btn-outline-custom btn-xs" id="add-item-row">+ Qator qo'shish</button>
+      </div>
+
+      <div class="form-group" style="margin-top:16px;">
+        <label class="form-label" for="{{ form.pdf.id_for_label }}">Ilova (PDF) <span style="color:var(--color-danger)">*</span></label>
+        {{ form.pdf }}
+        <div class="form-hint">PDF, eng ko'pi bilan 10 MB (DEC-019).</div>
+        <div class="form-error">{{ form.pdf.errors|striptags }}</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="{{ form.izoh.id_for_label }}">Izoh</label>
+        {{ form.izoh }}
+        <div class="form-error">{{ form.izoh.errors|striptags }}</div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-custom" data-close-modal="create-modal"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</button>
+        <button type="submit" class="btn btn-primary-custom"><i class="bi bi-check-lg" aria-hidden="true"></i> Yaratish</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<template id="item-row-template">
+  <div class="form-row-items-4" style="margin-bottom:10px;">
+    {{ item_formset.empty_form.id }}
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label">Mahsulot Turi</label>
+      {{ item_formset.empty_form.mahsulot_turi }}
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label">Buyurtma Nomi</label>
+      {{ item_formset.empty_form.buyurtma_nomi }}
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label">Soni</label>
+      {{ item_formset.empty_form.buyurtma_soni }}
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label">O'lchov</label>
+      {{ item_formset.empty_form.olchov_birligi }}
+    </div>
+  </div>
+</template>
+
+<script>
+  // REQ-ARIZA-010's plus button. The row it adds is the one Django renders as
+  // empty_form, with __prefix__ standing in for the index, so the markup
+  // cloned here is the markup the server will read back - rather than a
+  // second copy of it written by hand that drifts the first time a field
+  // changes.
+  document.getElementById('add-item-row').addEventListener('click', () => {
+    const total = document.getElementById('id_form-TOTAL_FORMS');
+    const template = document.getElementById('item-row-template').innerHTML;
+    const row = document.createElement('div');
+
+    row.innerHTML = template.replace(/__prefix__/g, total.value);
+    document.getElementById('item-rows-container').appendChild(row.firstElementChild);
+    total.value = Number(total.value) + 1;
+  });
+</script>
 {% endblock %}

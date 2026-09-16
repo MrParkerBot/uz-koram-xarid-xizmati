@@ -46,16 +46,29 @@ class ApplicationTestCase(TestCase):
         self.client.force_login(make_user(ADMIN))
 
     def raise_application(self, **overrides) -> Application:
-        fields = {
-            "department": self.department,
+        """One application with one order line, both taking overrides.
+
+        The order-line fields moved onto ApplicationItem in TASK-UZK-026 and
+        the callers of this helper did not: it still takes buyurtma_nomi and
+        the rest as keywords and sends each to whichever record now holds it.
+        """
+        line = {
             "mahsulot_turi": self.category,
             "buyurtma_nomi": "Bolt M12",
             "buyurtma_soni": 500,
             "olchov_birligi": "ta",
+        }
+        fields = {
+            "department": self.department,
             "izoh": "Zanglamaydigan",
         }
-        fields.update(overrides)
-        return Application.raise_application(**fields)
+        for name, value in overrides.items():
+            if name in line:
+                line[name] = value
+            else:
+                fields[name] = value
+
+        return Application.raise_application(items=[line], **fields)
 
     def page(self) -> str:
         return self.client.get(reverse("kelib-arizalar")).content.decode()
@@ -200,10 +213,6 @@ class NumberingTests(ApplicationTestCase):
         Application.objects.create(
             ariza_raqami="ARZ-2025-00007",
             department=self.department,
-            mahsulot_turi=self.category,
-            buyurtma_nomi="Eski ariza",
-            buyurtma_soni=1,
-            olchov_birligi="ta",
         )
 
         self.assertEqual(
@@ -214,10 +223,6 @@ class NumberingTests(ApplicationTestCase):
         Application.objects.create(
             ariza_raqami="ARZ-2026-00007",
             department=self.department,
-            mahsulot_turi=self.category,
-            buyurtma_nomi="Oldingi ariza",
-            buyurtma_soni=1,
-            olchov_birligi="ta",
         )
 
         self.assertEqual(
@@ -233,10 +238,6 @@ class NumberingTests(ApplicationTestCase):
             Application.objects.create(
                 ariza_raqami=first.ariza_raqami,
                 department=self.department,
-                mahsulot_turi=self.category,
-                buyurtma_nomi="Takroriy",
-                buyurtma_soni=1,
-                olchov_birligi="ta",
             )
 
 

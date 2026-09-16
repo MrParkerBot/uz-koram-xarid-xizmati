@@ -60,15 +60,26 @@ class AcceptedListTestCase(TestCase):
         )
 
     def raise_application(self, **overrides) -> Application:
-        fields = {
-            "department": self.department,
+        """One application with one order line, both taking overrides.
+
+        The order-line fields moved onto ApplicationItem in TASK-UZK-026 and
+        the callers of this helper did not: it still takes buyurtma_nomi and
+        the rest as keywords and sends each to whichever record now holds it.
+        """
+        line = {
             "mahsulot_turi": self.category,
             "buyurtma_nomi": "Bolt M12",
             "buyurtma_soni": 500,
             "olchov_birligi": "ta",
         }
-        fields.update(overrides)
-        return Application.raise_application(**fields)
+        fields = {"department": self.department}
+        for name, value in overrides.items():
+            if name in line:
+                line[name] = value
+            else:
+                fields[name] = value
+
+        return Application.raise_application(items=[line], **fields)
 
     def accepted_application(self, **overrides) -> Application:
         application = self.raise_application(**overrides)
@@ -227,14 +238,20 @@ class AssignmentControlsTests(AcceptedListTestCase):
         self.assertEqual(table.count("disabled"), 2 * rows)
         self.assertEqual(table.count("TASK-UZK-027"), 2 * rows)
 
-    def test_the_prototypes_creation_form_is_gone(self) -> None:
-        # It is the section 4.2 form, which is TASK-UZK-026, and it posted
-        # nowhere. An inert creation form on a page that is otherwise real
-        # reads as a broken feature rather than as a placeholder.
+    def test_the_creation_form_is_back_and_posts(self) -> None:
+        # TASK-UZK-025 removed the prototype's modal because it posted
+        # nowhere, and said TASK-UZK-026 owned it. It does: the form is here
+        # and its action is the create route, which is the difference between
+        # a feature and a placeholder.
         page = self.page()
 
-        self.assertNotIn("create-modal", page)
-        self.assertNotIn("Ariza Yaratish", page)
+        self.assertIn("create-modal", page)
+        self.assertIn("Ariza Yaratish", page)
+        self.assertIn(reverse("ariza-yaratish"), page)
+
+    def test_the_creation_form_starts_closed(self) -> None:
+        # Nobody opening the list asked to create anything.
+        self.assertIn('id="create-modal" class="modal-overlay hidden"', self.page())
 
 
 class AttachmentTests(AcceptedListTestCase):
@@ -372,11 +389,24 @@ class QueryTests(AcceptedListTestCase):
 
         self.assertNotIn("auth_user", str(accepted_applications().query))
 
-    def test_the_department_and_category_are_joined(self) -> None:
-        # Both are rendered on every row, so they must not be a query each.
+    def test_the_department_is_joined(self) -> None:
+        # Rendered on every row, so it must not be a query each.
         from applications.views import accepted_applications
 
-        sql = str(accepted_applications().query)
+        self.assertIn("reference_department", str(accepted_applications().query))
 
-        self.assertIn("reference_department", sql)
-        self.assertIn("reference_mahsulotturi", sql)
+    def test_the_lines_and_their_categories_are_fetched_in_two_queries(
+        self,
+    ) -> None:
+        # The category moved onto the line in TASK-UZK-026, so it is no longer
+        # a join on this query - it is a join on the prefetch. What matters is
+        # unchanged: rendering the page must not cost a query per row.
+        from applications.views import accepted_applications
+
+        for nomi in ("Birinchi", "Ikkinchi", "Uchinchi"):
+            self.accepted_application(buyurtma_nomi=nomi)
+
+        with self.assertNumQueries(2):
+            for application in accepted_applications():
+                for line in application.items.all():
+                    str(line.mahsulot_turi.name)

@@ -128,12 +128,16 @@ class DownloadTestCase(TestCase):
 
         self.application = Application.raise_application(
             department=Department.objects.create(name="Texnik bolim"),
-            mahsulot_turi=MahsulotTuri.objects.create(
-                category_number=100042, name="Metallurgiya"
-            ),
-            buyurtma_nomi="Bolt M12",
-            buyurtma_soni=500,
-            olchov_birligi="ta",
+            items=[
+                {
+                    "mahsulot_turi": MahsulotTuri.objects.create(
+                        category_number=100042, name="Metallurgiya"
+                    ),
+                    "buyurtma_nomi": "Bolt M12",
+                    "buyurtma_soni": 500,
+                    "olchov_birligi": "ta",
+                }
+            ],
             pdf=a_pdf(),
         )
         self.url = reverse("ariza-pdf", args=[self.application.pk])
