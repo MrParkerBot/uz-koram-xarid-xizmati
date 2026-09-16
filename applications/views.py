@@ -416,6 +416,32 @@ def reject_application(request: HttpRequest, pk: int) -> HttpResponse:
     return redirect("kelib-arizalar")
 
 
+def chosen_specialist(chosen: str | None):
+    """The specialist a submitted choice names, or None when it names none.
+
+    The lookup is by primary key, and a primary key lookup coerces what it is
+    given: handing it a value that is not a number raises out of the ORM and
+    the request answers 500. The #35 review found that, and the fix is here
+    rather than at the call site because "what did they choose" is one
+    question with one answer - somebody, or nobody.
+
+    Anything that is not a number is nobody. So is a number naming an account
+    that is not a Katta Mutaxasis, or one that has left: the chooser only
+    ever offers specialists, so a request naming anybody else did not come
+    from it.
+
+    Args:
+        chosen: the raw form value, which may be absent, empty or nonsense.
+
+    Returns:
+        The user, or None.
+    """
+    if not chosen or not chosen.isdigit():
+        return None
+
+    return assignable_specialists().filter(pk=int(chosen)).first()
+
+
 @require_POST
 def assign_application(request: HttpRequest, pk: int) -> HttpResponse:
     """Give one accepted application to a specialist (REQ-ARIZA-007).
@@ -434,9 +460,7 @@ def assign_application(request: HttpRequest, pk: int) -> HttpResponse:
     application.
     """
     application = get_object_or_404(Application, pk=pk)
-    specialist = assignable_specialists().filter(
-        pk=request.POST.get("xodim") or 0
-    ).first()
+    specialist = chosen_specialist(request.POST.get("xodim"))
 
     try:
         assigned = application.assign(by=request.user, specialist=specialist)
