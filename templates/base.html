@@ -1,4 +1,4 @@
-{% load static %}<!DOCTYPE html>
+{% load static navigation %}<!DOCTYPE html>
 {% comment %}
 The shell every page of the application sits inside.
 
@@ -32,13 +32,13 @@ A page fills these blocks:
 <body>
 <div class="app-shell">
 {% comment %}
-The navigation list is left empty on purpose. The vendored sidebar.js fills it
-on DOMContentLoaded today; TASK-UZK-007 replaces that with server-side
-navigation. The footer identity below is likewise the placeholder shipped with
-the supplied pages, overwritten at runtime by the same script. TASK-UZK-008
-brings real authentication and owns replacing both with the signed-in user.
+The navigation is rendered from config/navigation.py, so every link points at
+a URL this application serves and the current page is marked here rather than
+in the browser. The footer identity is still the placeholder shipped with the
+supplied pages: TASK-UZK-008 brings real authentication and owns replacing it
+with the signed-in user.
 {% endcomment %}
-<aside class="sidebar"><nav class="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user"><div class="sidebar-avatar">AK</div><div class="sidebar-user-info"><div class="name">Admin</div><div class="role">Admin</div></div></div></div></aside>
+<aside class="sidebar"><nav class="sidebar-nav">{% sidebar_navigation %}</nav><div class="sidebar-footer"><div class="sidebar-user"><div class="sidebar-avatar">AK</div><div class="sidebar-user-info"><div class="name">Admin</div><div class="role">Admin</div></div></div></div></aside>
 <main class="main-shell">
   <header class="top-header">
     <div class="sidebar-brand"><div class="d-flex align-items-center gap-3"><div class="brand-mark">UK</div><div><div class="h6 mb-1">Uz-Koram</div><p class="mb-0 muted small">Xarid Xizmati Bo'limi</p></div></div></div>
@@ -52,7 +52,13 @@ brings real authentication and owns replacing both with the signed-in user.
 </div>
 <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
 <script src="{% static 'js/main.js' %}"></script>
-<script src="{% static 'js/sidebar.js' %}"></script>
+{% comment %}
+js/sidebar.js is deliberately not loaded. It rebuilt this navigation in the
+browser from a list of .html filenames and would overwrite the server-rendered
+links a moment after the page appeared. The file stays in static/ because it
+was supplied with the assignment and TASK-UZK-004 asserts every supplied asset
+is served.
+{% endcomment %}
 {% block extra_scripts %}{% endblock %}
 </body>
 </html>

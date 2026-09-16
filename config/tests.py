@@ -1,4 +1,9 @@
-"""Tests for the application skeleton delivered by TASK-UZK-001."""
+"""Tests for the application skeleton delivered by TASK-UZK-001.
+
+The root URL assertions were rewritten by TASK-UZK-007, which replaced the
+plain-text placeholder with the dashboard. What they pin is unchanged: the
+site root answers, and an unknown URL is a 404 rather than a crash.
+"""
 
 from __future__ import annotations
 
@@ -38,9 +43,16 @@ class ServiceRootTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_root_url_is_reachable_by_its_route_name(self) -> None:
-        response = self.client.get(reverse("service-root"))
+        response = self.client.get(reverse("dashboard"))
 
         self.assertEqual(response.status_code, 200)
+
+    def test_root_url_serves_the_dashboard(self) -> None:
+        # TASK-UZK-001 answered here with plain text and said so in the README:
+        # the placeholder lasts until the pages have URLs. They do now.
+        response = self.client.get("/")
+
+        self.assertTemplateUsed(response, "pages/dashboard.html")
 
     def test_unknown_url_returns_not_found_rather_than_an_error(self) -> None:
         response = self.client.get("/a-url-that-does-not-exist/")

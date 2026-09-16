@@ -57,6 +57,8 @@ ALLOWED_HOSTS = read_list_setting(
 # administration surface would sit outside the permission matrix TASK-UZK-012
 # builds. Add it only if a requirement asks for it.
 INSTALLED_APPS = [
+    # The project package itself, so its template tag library is discoverable.
+    "config",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
