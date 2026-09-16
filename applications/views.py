@@ -25,6 +25,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from accounts.permissions import may_open
+from accounts.roles import assignable_specialists
 from applications.attachments import attachment_response
 from applications.forms import ApplicationForm, ApplicationItemFormSet
 from applications.models import Application, ApplicationItem
@@ -54,6 +55,13 @@ ACCEPTED_TEMPLATE = "pages/qabul-arizalar.html"
 PAGE_SHOWING_STAGE: dict[str, str] = {
     Application.Stage.INCOMING: "kelib-arizalar",
     Application.Stage.ACCEPTED: "qabul-arizalar",
+    # Tayinlangan, and deliberately not qabul-arizalar although an assigned
+    # application is still listed there. DEC-015 gives Katta Mutaxasis the
+    # Tayinlangan page and not the Qabul qilingan one, so pointing an
+    # assigned application at the accepted page would hand a specialist work
+    # whose attachment they cannot open. Nobody loses by this: every type
+    # that may open qabul-arizalar may open tayinlangan too.
+    Application.Stage.ASSIGNED: "tayinlangan",
     # A rejected application is off the workflow, and TASK-UZK-024 left it
     # there: nothing in the specification lists rejected applications, so
     # there is no page to answer for one and its attachment stops being
@@ -91,7 +99,13 @@ def incoming_applications() -> QuerySet[Application]:
 
 
 def accepted_applications() -> QuerySet[Application]:
-    """The applications that were accepted and are waiting to be given out.
+    """The applications on the Qabul qilingan page: accepted, and assigned.
+
+    Assigned ones stay rather than leaving, because REQ-ARIZA-007 puts
+    re-assignment on this row: the specialist's name replaces the chooser and
+    a Qayta tayinlash control replaces the Tayinlash button. A list that
+    dropped an application the moment it was given out would take the
+    re-assignment control with it.
 
     Ordered by when they were accepted, newest first, rather than by when they
     arrived: this page is worked through in the order decisions were taken,
@@ -107,18 +121,41 @@ def accepted_applications() -> QuerySet[Application]:
     #29 review pointed out this function claimed and did not have.
     """
     return (
-        Application.objects.filter(stage=Application.Stage.ACCEPTED)
+        Application.objects.filter(
+            stage__in=(Application.Stage.ACCEPTED, Application.Stage.ASSIGNED)
+        )
         # accepted_by is deliberately not selected: nothing on this page
         # renders the acceptor, so joining auth_user would fetch a password
-        # hash per row for a column that does not exist. TASK-UZK-027 assigns
-        # a specialist, who is somebody else, so it will not need this either.
-        .select_related("department")
+        # hash per row for a column that does not exist. assigned_to is
+        # selected because the row does render that name, which is the
+        # difference between the two.
+        .select_related("department", "assigned_to")
         .prefetch_related(application_lines())
         .order_by(
             F("qabul_qilingan_sana").desc(nulls_last=True),
             "-kelib_tushgan_sana",
             "-id",
         )
+    )
+
+
+def assigned_applications(specialist) -> QuerySet[Application]:
+    """The applications one specialist has been given (REQ-ARIZA-007).
+
+    What the Tayinlangan Arizalar page lists. That page is TASK-UZK-028 and
+    is still the prototype, so this is written and tested here and rendered
+    there - the assignment is not finished if nothing can read it back.
+
+    Filtered on assigned_to rather than on the stage alone, because the stage
+    says somebody has it and this asks who.
+    """
+    return (
+        Application.objects.filter(
+            stage=Application.Stage.ASSIGNED, assigned_to=specialist
+        )
+        .select_related("department")
+        .prefetch_related(application_lines())
+        .order_by(F("tayinlangan_sana").desc(nulls_last=True), "-id")
     )
 
 
@@ -177,6 +214,10 @@ def accepted_page(
         # so a refused submission comes back with what was typed still in it
         # rather than behind a closed modal.
         "open_form": form is not None,
+        # The people an application may be given to (DEC-024). One query for
+        # the page rather than one per row: the same list is rendered in
+        # every unassigned row's chooser.
+        "specialists": assignable_specialists(),
     }
 
 
@@ -373,3 +414,61 @@ def reject_application(request: HttpRequest, pk: int) -> HttpResponse:
         )
 
     return redirect("kelib-arizalar")
+
+
+@require_POST
+def assign_application(request: HttpRequest, pk: int) -> HttpResponse:
+    """Give one accepted application to a specialist (REQ-ARIZA-007).
+
+    POST only, and wrapped by the URL configuration in the permission of the
+    page offering the control, so an application cannot be given out by
+    somebody who may not see it.
+
+    The same route does assignment and re-assignment. DEC-024 makes them the
+    same act - Admin may move an application at any time, including after the
+    specialist accepted it - and a separate route would only be the same code
+    with a different name on it.
+
+    A page that went stale is reported the way accept_application reports one:
+    the caller had the permission they needed, and what changed is the
+    application.
+    """
+    application = get_object_or_404(Application, pk=pk)
+    specialist = assignable_specialists().filter(
+        pk=request.POST.get("xodim") or 0
+    ).first()
+
+    try:
+        assigned = application.assign(by=request.user, specialist=specialist)
+    except ValueError:
+        if specialist is None:
+            # Either nothing was chosen, or what was chosen is not somebody
+            # this application may be given to. The two are one message: the
+            # chooser only ever offers specialists, so a request naming
+            # anybody else did not come from it.
+            messages.error(
+                request,
+                f"{application.ariza_raqami} tayinlanmadi: Katta Mutaxasis "
+                "tanlanishi shart.",
+            )
+        else:
+            messages.error(
+                request,
+                f"{application.ariza_raqami} tayinlanmadi: ariza qabul "
+                "qilinmagan.",
+            )
+
+        return redirect("qabul-arizalar")
+
+    if assigned:
+        name = specialist.get_full_name() or specialist.username
+        messages.success(
+            request, f"{application.ariza_raqami} {name}ga tayinlandi."
+        )
+    else:
+        messages.info(
+            request,
+            f"{application.ariza_raqami} allaqachon shu xodimga tayinlangan.",
+        )
+
+    return redirect("qabul-arizalar")

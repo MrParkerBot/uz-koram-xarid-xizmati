@@ -91,6 +91,7 @@ class Application(models.Model):
 
         INCOMING = "incoming", "Kelib tushgan"
         ACCEPTED = "accepted", "Qabul qilingan"
+        ASSIGNED = "assigned", "Tayinlangan"
         REJECTED = "rejected", "Inkor etilgan"
 
     ariza_raqami = models.CharField("Ariza raqami", max_length=32, unique=True)
@@ -175,6 +176,44 @@ class Application(models.Model):
         blank=True,
         verbose_name="Inkor qilgan",
     )
+    assigned_to = models.ForeignKey(
+        "auth.User",
+        on_delete=models.PROTECT,
+        related_name="assigned_applications",
+        null=True,
+        blank=True,
+        verbose_name="Tayinlangan xodim",
+        help_text=(
+            "The Katta Mutaxasis this application is for (REQ-ARIZA-007). "
+            "Null until somebody is chosen, which is what an unassigned row "
+            "on the Qabul qilingan page is."
+        ),
+    )
+    tayinlangan_sana = models.DateTimeField(
+        "Tayinlangan sana",
+        null=True,
+        blank=True,
+        help_text=(
+            "When the current assignment was made. Re-assignment replaces it "
+            "rather than keeping the first, because DEC-024 makes the "
+            "assignment a fact about now and the history belongs in the "
+            "section 10 log."
+        ),
+    )
+    assigned_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.PROTECT,
+        related_name="applications_assigned_by_me",
+        null=True,
+        blank=True,
+        verbose_name="Tayinlagan",
+        help_text=(
+            "Who made the current assignment. Recorded here because DEC-024 "
+            "wants every move in the log and TASK-UZK-052 builds the log: "
+            "the record knows who and when, so the entry can be written when "
+            "there is somewhere to write it."
+        ),
+    )
     stage = models.CharField(
         max_length=16, choices=Stage.choices, default=Stage.INCOMING
     )
@@ -193,6 +232,11 @@ class Application(models.Model):
     def is_incoming(self) -> bool:
         """Whether this application is still waiting to be decided."""
         return self.stage == self.Stage.INCOMING
+
+    @property
+    def is_assigned(self) -> bool:
+        """Whether somebody is currently working on this application."""
+        return self.stage == self.Stage.ASSIGNED
 
     @transaction.atomic
     def accept(self, by) -> bool:
@@ -354,6 +398,88 @@ class Application(models.Model):
         self.inkor_qilingan_sana = decided_at
         self.rejected_by = by
         self.status = status
+
+        return True
+
+    @transaction.atomic
+    def assign(self, by, specialist) -> bool:
+        """Give this application to a specialist, or to a different one.
+
+        Not a one-way move the way accept() is. DEC-024 lets Admin re-assign
+        at any time, including after the specialist has accepted, so the
+        assigned stage is both a destination and a starting point and the
+        same method does both.
+
+        The stamp is replaced rather than added to: tayinlangan_sana is when
+        the current assignment was made, and who held it before belongs in
+        the section 10 log that TASK-UZK-052 builds. The record carries who
+        and when so that entry can be written when there is a log.
+
+        Args:
+            by: the user making the assignment, recorded on the record.
+            specialist: who it is for. Must be one of the people
+                assignable_specialists() names.
+
+        Returns:
+            True when this call moved it, and False when it was already with
+            that specialist - the second click of a double click, which is
+            not an error and does not re-stamp the date.
+
+        Raises:
+            ValueError: when the specialist is not a Katta Mutaxasis, or the
+                application is at a stage assignment makes no sense from.
+                Both leave the record exactly as it was.
+        """
+        from accounts.roles import assignable_specialists
+
+        if specialist is None or not assignable_specialists().filter(
+            pk=specialist.pk
+        ).exists():
+            raise ValueError(
+                f"{specialist} is not a Katta Mutaxasis, so "
+                f"{self.ariza_raqami} cannot be assigned to them."
+            )
+
+        # Decide on the row as it is now, not as the caller last saw it. Same
+        # reason accept() gives: the view fetched this instance before the
+        # call started.
+        self.refresh_from_db()
+
+        if self.assigned_to_id == specialist.pk:
+            return False
+
+        assignable = (self.Stage.ACCEPTED, self.Stage.ASSIGNED)
+        if self.stage not in assignable:
+            raise ValueError(
+                f"{self.ariza_raqami} is {self.stage}, so it cannot be "
+                "assigned: only an accepted application is given out, and "
+                "only an assigned one is given to somebody else."
+            )
+
+        decided_at = timezone.now()
+
+        # The condition is part of the write, for the reason accept() gives at
+        # length. Here it also carries the specialist: two managers assigning
+        # the same application to two different people at once must not both
+        # be told they did it, and the row the second one updates no longer
+        # matches the stage and holder it read.
+        assigned = type(self).objects.filter(
+            pk=self.pk, stage__in=assignable, assigned_to=self.assigned_to
+        ).update(
+            stage=self.Stage.ASSIGNED,
+            assigned_to=specialist,
+            assigned_by=by,
+            tayinlangan_sana=decided_at,
+        )
+
+        if not assigned:
+            self.refresh_from_db()
+            return False
+
+        self.stage = self.Stage.ASSIGNED
+        self.assigned_to = specialist
+        self.assigned_by = by
+        self.tayinlangan_sana = decided_at
 
         return True
 

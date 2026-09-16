@@ -214,7 +214,7 @@ class StageNotStatusTests(AcceptedListTestCase):
 
 
 class AssignmentControlsTests(AcceptedListTestCase):
-    """The controls REQ-ARIZA-006 names are there, visibly waiting."""
+    """The controls REQ-ARIZA-006 names, wired by TASK-UZK-027."""
 
     def test_every_row_offers_the_controls(self) -> None:
         self.accepted_application()
@@ -223,20 +223,22 @@ class AssignmentControlsTests(AcceptedListTestCase):
         self.assertIn("Tayinlash", row)
         self.assertIn("<select", row)
 
-    def test_they_are_disabled_rather_than_pretending_to_work(self) -> None:
-        # Two controls per row, both disabled, both saying which task wires
-        # them. Counted per row rather than as a fixed number: the #29 review
-        # pointed out that an exact count over the whole table body passes
-        # only while the case has exactly one application in it, and fails
-        # for the wrong reason the moment somebody adds a second.
+    def test_they_work_rather_than_naming_the_task_that_will_wire_them(
+        self,
+    ) -> None:
+        # They were rendered disabled with a title naming TASK-UZK-027 until
+        # TASK-UZK-027 arrived. Counted per row rather than as a fixed number,
+        # for the reason the #29 review gave: an exact count over the whole
+        # table body passes only while the case has exactly one application
+        # in it.
         rows = 3
         for index in range(rows):
             self.accepted_application(buyurtma_nomi=f"Ariza {index}")
 
         table = self.table()
 
-        self.assertEqual(table.count("disabled"), 2 * rows)
-        self.assertEqual(table.count("TASK-UZK-027"), 2 * rows)
+        self.assertNotIn("TASK-UZK-027", table)
+        self.assertEqual(table.count('action="/qabul-arizalar/'), rows)
 
     def test_the_creation_form_is_back_and_posts(self) -> None:
         # TASK-UZK-025 removed the prototype's modal because it posted
@@ -381,13 +383,20 @@ class OrderingTests(AcceptedListTestCase):
 class QueryTests(AcceptedListTestCase):
     """What the page fetches, and what it does not."""
 
-    def test_the_acceptor_is_not_joined(self) -> None:
-        # Nothing renders who accepted the application, so joining auth_user
-        # would fetch a password hash per row for a column that does not
-        # exist. The #29 review found the join; this keeps it gone.
+    def test_only_the_name_the_page_renders_is_joined(self) -> None:
+        # The #29 review found this query joining auth_user for the acceptor,
+        # whom nothing on the page renders - a password hash fetched per row
+        # for a column that does not exist. TASK-UZK-027 renders one name,
+        # the assigned specialist, so there is one join now rather than none.
+        # Asserting on the count rather than on the table name is what keeps
+        # the original finding pinned: a second join means somebody selected
+        # a person the page does not show.
         from applications.views import accepted_applications
 
-        self.assertNotIn("auth_user", str(accepted_applications().query))
+        sql = str(accepted_applications().query)
+
+        self.assertEqual(sql.count('INNER JOIN "auth_user"'), 0)
+        self.assertEqual(sql.count('LEFT OUTER JOIN "auth_user"'), 1)
 
     def test_the_department_is_joined(self) -> None:
         # Rendered on every row, so it must not be a query each.

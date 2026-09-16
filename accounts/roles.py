@@ -10,7 +10,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractBaseUser, AnonymousUser
+from django.db.models import QuerySet
 
 from accounts.models import UserProfile, UserType
 from reference.models import Department
@@ -129,3 +131,27 @@ def department_of(
         return None
 
     return department
+
+
+def assignable_specialists() -> QuerySet:
+    """The users an application may be given to (DEC-024).
+
+    Katta Mutaxasis and nobody else: the drop-down REQ-ARIZA-007 describes
+    names specialists, and a manager who can pick anybody can pick somebody
+    who has no Tayinlangan page to see the work on.
+
+    Active accounts only, so a person who has left is not offered new work.
+    An assignment already made is left alone when an account is deactivated -
+    taking work off somebody's list without saying so hides it from everybody
+    rather than from them.
+
+    Ordered by name, because a drop-down of people is read rather than
+    scanned.
+    """
+    return (
+        get_user_model()
+        .objects.filter(
+            is_active=True, profile__user_type__name=KATTA_MUTAXASIS
+        )
+        .order_by("first_name", "last_name", "username")
+    )
