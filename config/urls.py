@@ -18,6 +18,7 @@ from django.contrib.auth.views import LoginView, LogoutView
 from django.urls import path
 from django.views.generic import TemplateView
 
+from accounts.permissions import require_page_permission
 from accounts.views import user_create, user_delete, user_list, user_update
 
 # Every page except the dashboard, which answers at the site root. Each entry
@@ -45,8 +46,10 @@ PAGE_ROUTES: tuple[tuple[str, str], ...] = (
 
 
 def page_view(page_name: str) -> object:
-    """A view rendering one converted page through the shared shell."""
-    return TemplateView.as_view(template_name=f"pages/{page_name}.html")
+    """A view rendering one converted page, open to the types DEC-015 permits."""
+    return require_page_permission(page_name)(
+        TemplateView.as_view(template_name=f"pages/{page_name}.html")
+    )
 
 
 urlpatterns = [
@@ -74,8 +77,23 @@ urlpatterns = [
     # The Users page has real views rather than a template: it is the first
     # page with data behind it (TASK-UZK-011). The list keeps the name the
     # sidebar and the page inventory already use.
-    path("users/", user_list, name="users"),
-    path("users/add/", user_create, name="user-create"),
-    path("users/<int:pk>/edit/", user_update, name="user-update"),
-    path("users/<int:pk>/delete/", user_delete, name="user-delete"),
+    # The Users page and everything it does answer to the same permission as
+    # the page itself: an action must not be reachable by somebody who may not
+    # open the page that offers it.
+    path("users/", require_page_permission("users")(user_list), name="users"),
+    path(
+        "users/add/",
+        require_page_permission("users")(user_create),
+        name="user-create",
+    ),
+    path(
+        "users/<int:pk>/edit/",
+        require_page_permission("users")(user_update),
+        name="user-update",
+    ),
+    path(
+        "users/<int:pk>/delete/",
+        require_page_permission("users")(user_delete),
+        name="user-delete",
+    ),
 ]

@@ -121,8 +121,9 @@ class ActiveEntryTests(SignedInTestCase):
 
     def test_nothing_is_active_when_rendering_without_a_request(self) -> None:
         # A page rendered to a string outside a view has no resolved URL. It
-        # must still produce a navigation rather than an error.
-        shell = render_to_string("base.html")
+        # must still render rather than raise - and since TASK-UZK-012 the
+        # links it shows depend on the user, so one is supplied here.
+        shell = render_to_string("base.html", {"user": self.user})
 
         self.assertIn('class="nav-link"', shell)
         self.assertNotIn("nav-link active", shell)

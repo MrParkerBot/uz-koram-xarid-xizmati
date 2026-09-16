@@ -15,7 +15,7 @@ from django.utils.crypto import get_random_string
 
 from accounts.forms import derive_username
 from accounts.models import UserProfile, UserType
-from accounts.roles import ADMIN, MENEJER
+from accounts.roles import ADMIN, MENEJER, assign_user_type
 
 NEW_PASSWORD = get_random_string(24)
 REPLACEMENT_PASSWORD = get_random_string(24)
@@ -34,6 +34,9 @@ class UsersPageTestCase(TestCase):
         )
         cls.admin_type = UserType.objects.get(name=ADMIN)
         cls.manager_type = UserType.objects.get(name=MENEJER)
+        # The Users page is Admin-only under DEC-015, so the account running
+        # these tests has to be one.
+        assign_user_type(cls.administrator, cls.admin_type)
 
     def setUp(self) -> None:
         super().setUp()

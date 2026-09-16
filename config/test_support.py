@@ -11,13 +11,18 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils.crypto import get_random_string
 
+from accounts.models import UserType
+from accounts.roles import ADMIN, assign_user_type
+
 
 class SignedInTestCase(TestCase):
-    """A test case whose client is already signed in.
+    """A test case whose client is signed in as an Admin.
 
-    The account is an ordinary one: no role, no permissions beyond having a
-    session. Role-based access arrives with TASK-UZK-010 and TASK-UZK-012, and
-    tests written then will need accounts that differ from one another.
+    Admin because TASK-UZK-012 closed every page to the types DEC-015 permits,
+    and the tests that use this base are about pages rather than about
+    permissions: they need an account that can reach what they are testing.
+    The permission matrix itself is tested in accounts/test_permissions.py,
+    with an account per type.
     """
 
     @classmethod
@@ -29,6 +34,7 @@ class SignedInTestCase(TestCase):
             first_name="Test",
             last_name="User",
         )
+        assign_user_type(cls.user, UserType.objects.get(name=ADMIN))
 
     def setUp(self) -> None:
         super().setUp()

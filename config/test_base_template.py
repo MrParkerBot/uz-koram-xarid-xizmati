@@ -104,14 +104,16 @@ class ShellRenderingTests(SimpleTestCase):
             with self.subTest(landmark=landmark):
                 self.assertIn(f'class="{landmark}"', page)
 
-    def test_the_navigation_list_is_filled_by_the_server(self) -> None:
+    def test_the_navigation_list_is_rendered_by_the_server(self) -> None:
         # TASK-UZK-005 pinned this element as empty and named TASK-UZK-007 as
-        # the task that would fill it. It does, from config/navigation.py.
+        # the task that would fill it. TASK-UZK-012 then made its contents
+        # depend on who is asking: rendered with no user, as here, it is empty
+        # because nobody unidentified may open anything. The filled case is
+        # asserted in accounts/test_permissions.py, against a real account.
         shell = render_shell()
 
         self.assertIn('<nav class="sidebar-nav">', shell)
-        self.assertIn('class="nav-section-label"', shell)
-        self.assertIn('class="nav-link"', shell)
+        self.assertNotIn('class="nav-link"', shell)
 
 
 class PageBlockTests(SimpleTestCase):
