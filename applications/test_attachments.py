@@ -30,13 +30,8 @@ from applications.attachments import (
     validate_pdf,
 )
 from applications.models import Application
+from applications.test_support import PDF_BYTES, a_pdf
 from reference.models import Department, MahsulotTuri
-
-PDF_BYTES = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF\n"
-
-
-def a_pdf(name: str = "ariza.pdf") -> SimpleUploadedFile:
-    return SimpleUploadedFile(name, PDF_BYTES, content_type="application/pdf")
 
 
 def make_user(type_name: str = ADMIN):

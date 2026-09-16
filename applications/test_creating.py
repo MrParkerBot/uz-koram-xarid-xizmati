@@ -26,7 +26,8 @@ from django.utils.crypto import get_random_string
 
 from accounts.models import UserType
 from accounts.roles import ADMIN, DIREKTOR, assign_user_type
-from applications.models import Application, ApplicationItem
+from applications.models import SMALLEST_QUANTITY, Application, ApplicationItem
+from applications.test_support import a_pdf
 from reference.models import ArizaStatus, Department, MahsulotTuri
 
 
@@ -39,11 +40,6 @@ def make_user(type_name: str = ADMIN):
     )
     assign_user_type(user, UserType.objects.get(name=type_name))
     return user
-
-
-def a_pdf(name: str = "ariza.pdf") -> SimpleUploadedFile:
-    """A file that is a PDF by name and by its first bytes."""
-    return SimpleUploadedFile(name, b"%PDF-1.7\nariza", content_type="application/pdf")
 
 
 class CreateApplicationTests(TestCase):
@@ -193,6 +189,32 @@ class CreateApplicationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Application.objects.exists())
 
+    def test_a_negative_quantity_is_refused(self) -> None:
+        """The #33 review found this stored as an order for minus five."""
+        response = self.create(**{"form-0-buyurtma_soni": "-5"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Application.objects.exists())
+        self.assertFalse(ApplicationItem.objects.exists())
+
+    def test_a_zero_quantity_is_refused(self) -> None:
+        """An order for none of something is a line somebody meant to delete."""
+        response = self.create(**{"form-0-buyurtma_soni": "0"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Application.objects.exists())
+
+    def test_the_smallest_order_the_column_stores_is_allowed(self) -> None:
+        # The floor is the smallest storable quantity, not a round number, so
+        # the boundary itself has to be accepted rather than refused by one
+        # thousandth.
+        self.create(**{"form-0-buyurtma_soni": str(SMALLEST_QUANTITY)})
+
+        self.assertEqual(
+            Application.objects.get().items.get().buyurtma_soni,
+            SMALLEST_QUANTITY,
+        )
+
     def test_without_a_line_nothing_is_created(self) -> None:
         response = self.create(lines=0, **{"form-TOTAL_FORMS": "0"})
 
@@ -324,6 +346,28 @@ class RaiseApplicationTests(TestCase):
         application.delete()
 
         self.assertFalse(ApplicationItem.objects.exists())
+
+    def test_a_negative_quantity_is_refused_by_the_database_too(self) -> None:
+        """The form is not the only way in, so the rule is not only on it.
+
+        raise_application() bulk_creates, which runs no validator at all - so
+        without the constraint the #33 finding would be fixed on the page and
+        open from code.
+        """
+        from django.db.utils import IntegrityError
+
+        with self.assertRaises(IntegrityError):
+            Application.raise_application(
+                items=[
+                    {
+                        "mahsulot_turi": self.category,
+                        "buyurtma_nomi": "Bolt M12",
+                        "buyurtma_soni": -5,
+                        "olchov_birligi": "ta",
+                    }
+                ],
+                department=self.department,
+            )
 
     def test_a_category_in_use_on_a_line_cannot_be_deleted(self) -> None:
         """PROTECT: master data somebody else maintains, as before the move."""
