@@ -19,6 +19,12 @@ from django.urls import path
 from django.views.generic import TemplateView
 
 from accounts.permissions import require_page_permission
+from accounts.specialty_views import (
+    specialty_create,
+    specialty_delete,
+    specialty_list,
+    specialty_update,
+)
 from accounts.views import (
     landing_page,
     user_contract_editing,
@@ -31,7 +37,6 @@ from accounts.views import (
 # Every page except the dashboard, which answers at the site root. Each entry
 # is (url path, URL name); the template is pages/<name>.html.
 PAGE_ROUTES: tuple[tuple[str, str], ...] = (
-    ("user-specialty/", "user-specialty"),
     ("user-types/", "user-types"),
     ("ariza-status/", "ariza-status"),
     ("shartnoma-status/", "shartnoma-status"),
@@ -105,6 +110,28 @@ urlpatterns = [
         "users/<int:pk>/delete/",
         require_page_permission("users")(user_delete),
         name="user-delete",
+    ),
+    # The User Specialty master data page (TASK-UZK-014), the first of the
+    # eight pages section 3 describes in the same shape.
+    path(
+        "user-specialty/",
+        require_page_permission("user-specialty")(specialty_list),
+        name="user-specialty",
+    ),
+    path(
+        "user-specialty/add/",
+        require_page_permission("user-specialty")(specialty_create),
+        name="user-specialty-create",
+    ),
+    path(
+        "user-specialty/<int:pk>/edit/",
+        require_page_permission("user-specialty")(specialty_update),
+        name="user-specialty-update",
+    ),
+    path(
+        "user-specialty/<int:pk>/delete/",
+        require_page_permission("user-specialty")(specialty_delete),
+        name="user-specialty-delete",
     ),
     path(
         "users/<int:pk>/contract-editing/",
