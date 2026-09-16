@@ -205,16 +205,26 @@ class Application(models.Model):
             by: the user accepting it, recorded as the acceptor.
 
         Returns:
-            True when this call accepted it, and False when it was already
-            accepted. False rather than an exception because the second click
+            True when this call accepted it, and False when somebody else
+            already had - whether before this call started or while it was
+            running. False rather than an exception because the second click
             of a double click is not an error, and the caller wants to say
             "already accepted" rather than show a crash.
+
+            The transition is a conditional write, so exactly one of two
+            simultaneous callers is told True.
 
         Raises:
             ValueError: when the application is at a stage acceptance makes no
                 sense from - a rejected one. That is not a double click; it is
                 a request for something that should not happen.
         """
+        # Whatever the caller is holding may be a moment old - the view
+        # fetched it before this call started. Decide on the row as it is now,
+        # and leave the caller holding that too: they are about to render a
+        # page from this instance.
+        self.refresh_from_db()
+
         if self.stage == self.Stage.ACCEPTED:
             return False
 
@@ -226,17 +236,37 @@ class Application(models.Model):
 
         from reference.models import ArizaStatus
 
-        self.stage = self.Stage.ACCEPTED
-        self.qabul_qilingan_sana = timezone.now()
-        self.accepted_by = by
-        self.status = ArizaStatus.objects.filter(
+        decided_at = timezone.now()
+        status = ArizaStatus.objects.filter(
             code=ArizaStatus.Code.ACCEPTED, is_active=True
         ).first()
-        self.save(
-            update_fields=[
-                "stage", "qabul_qilingan_sana", "accepted_by", "status"
-            ]
+
+        # The condition is part of the write, not a question asked before it.
+        # A check followed by an unconditional save decides on a row that
+        # another request may already have moved, and the loser of that race
+        # overwrites the winner's date and acceptor - so the record would name
+        # the wrong person, and both callers would be told they accepted it.
+        # Here the database compares the stage while it holds the row, and the
+        # count it returns is the answer to "did this call do it".
+        accepted = type(self).objects.filter(
+            pk=self.pk, stage=self.Stage.INCOMING
+        ).update(
+            stage=self.Stage.ACCEPTED,
+            qabul_qilingan_sana=decided_at,
+            accepted_by=by,
+            status=status,
         )
+
+        if not accepted:
+            # Somebody else got there between the read above and this write.
+            # Whatever they did, this call did not accept it.
+            self.refresh_from_db()
+            return False
+
+        self.stage = self.Stage.ACCEPTED
+        self.qabul_qilingan_sana = decided_at
+        self.accepted_by = by
+        self.status = status
 
         return True
 

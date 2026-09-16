@@ -99,13 +99,25 @@ def accept_application(request: HttpRequest, pk: int) -> HttpResponse:
     The second click of a double click is not an error: the record says it was
     already accepted and the page says so too, rather than accepting it twice
     or showing a crash.
+
+    Nor is a page that went stale. Somebody who opens the list, goes to lunch
+    and comes back to click Qabul on an application a colleague rejected in
+    the meantime had the permission they needed - what changed is the
+    application. They are told that and sent back to a list that now shows the
+    truth, rather than shown a Forbidden page that sends whoever investigates
+    to the permission matrix for something that has nothing to do with it.
     """
     application = get_object_or_404(Application, pk=pk)
 
     try:
         accepted = application.accept(by=request.user)
-    except ValueError as wrong_stage:
-        raise PermissionDenied(str(wrong_stage)) from wrong_stage
+    except ValueError:
+        messages.error(
+            request,
+            f"{application.ariza_raqami} qabul qilinmadi: ariza allaqachon "
+            "hal qilingan.",
+        )
+        return redirect("kelib-arizalar")
 
     if accepted:
         messages.success(
