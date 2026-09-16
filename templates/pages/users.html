@@ -81,7 +81,7 @@ page says who holds it above the table.
               </td>
               <td style="text-align:center;">
                 <a class="btn btn-outline-custom btn-xs" href="{% url 'users' %}?edit={{ listed_user.pk }}" aria-label="Tahrirlash"><i class="bi bi-pencil" aria-hidden="true"></i></a>
-                <form method="post" action="{% url 'user-delete' listed_user.pk %}" style="display:inline;" onsubmit="return confirm('{{ listed_user.get_full_name|default:listed_user.get_username }} o&#39;chirilsinmi?');">
+                <form method="post" action="{% url 'user-delete' listed_user.pk %}" style="display:inline;" data-confirm="{{ listed_user.get_full_name|default:listed_user.get_username }} o'chirilsinmi?">
                   {% csrf_token %}
                   <button type="submit" class="btn btn-outline-custom btn-xs text-danger" aria-label="O'chirish"><i class="bi bi-trash" aria-hidden="true"></i></button>
                 </form>

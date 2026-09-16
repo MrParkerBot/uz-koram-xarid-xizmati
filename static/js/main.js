@@ -569,8 +569,29 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', () => Drawer.close(btn.dataset.closeDrawer));
   });
 
+  initConfirmedForms();
+
   // Logout is a form posting to the server; there is nothing to bind here.
 });
+
+// ─── FORMS THAT ASK BEFORE THEY SUBMIT ───
+// A form carrying data-confirm asks the question in that attribute before it
+// submits. The question lives in an attribute rather than in an inline
+// onsubmit handler because a server-rendered name has to be escaped for one
+// context or the other, and it cannot be both: the browser decodes character
+// references in an attribute value before the JavaScript engine reads the
+// source, so a name containing an apostrophe would close the string literal.
+// The same decoding is exactly right for an attribute the handler reads back.
+//
+// Delegated from the document so rows rendered after load are covered too.
+function initConfirmedForms() {
+  document.addEventListener('submit', (event) => {
+    const form = event.target.closest('form[data-confirm]');
+    if (form && !window.confirm(form.dataset.confirm)) {
+      event.preventDefault();
+    }
+  });
+}
 
 // ─── SHARED CONFIRM MODAL HTML ─── (injected on every page)
 (function injectGlobalElements() {

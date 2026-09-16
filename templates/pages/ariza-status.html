@@ -47,7 +47,7 @@ the customer wants arbitrary colours is recorded as a question for them.
                 <td style="text-align:center;"><span class="badge {{ status.badge_class }}">{{ status.name }}</span></td>
                 <td style="text-align:center;white-space:nowrap;">
                   <a class="btn btn-outline-custom btn-xs" href="{% url 'ariza-status' %}?edit={{ status.pk }}"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</a>
-                  <form method="post" action="{% url 'ariza-status-delete' status.pk %}" style="display:inline;" onsubmit="return confirm('{{ status.name }} o&#39;chirilsinmi?');">
+                  <form method="post" action="{% url 'ariza-status-delete' status.pk %}" style="display:inline;" data-confirm="{{ status.name }} o'chirilsinmi?">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-outline-custom text-danger btn-xs" aria-label="O'chirish"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
                   </form>

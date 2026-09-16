@@ -299,7 +299,7 @@ class DeletionTests(ArizaStatusPageTestCase):
         )
 
     def test_the_page_asks_before_deleting(self) -> None:
-        self.assertIn("onsubmit=\"return confirm(", self.page())
+        self.assertIn("data-confirm=", self.page())
 
     def test_deletion_needs_a_post(self) -> None:
         response = self.client.get(
