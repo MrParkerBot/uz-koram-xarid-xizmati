@@ -207,6 +207,26 @@ class WhenItStampsTests(StampTestCase):
 
         self.assertEqual(pages, 1)
 
+    def test_only_the_first_page_of_a_long_attachment_is_stamped(
+        self,
+    ) -> None:
+        # An explicit branch in stamp_with_qr, and nothing pinned it - the
+        # #46 review found it correct and untested, which is the kind of
+        # thing that survives until somebody simplifies the loop.
+        application = self.raise_request(pdf=a_pdf(pages=3))
+
+        self.approve_fully(application)
+
+        application.pdf.open("rb")
+        try:
+            pages = PdfReader(BytesIO(application.pdf.read())).pages
+            images_per_page = [len(list(page.images)) for page in pages]
+        finally:
+            application.pdf.close()
+
+        self.assertEqual(len(pages), 3)
+        self.assertEqual(images_per_page, [1, 0, 0])
+
     def test_the_department_application_carries_the_stamped_document(
         self,
     ) -> None:
@@ -233,6 +253,61 @@ class WhenItStampsTests(StampTestCase):
             paperless.stage, PurchaseApplication.Stage.APPROVED
         )
         self.assertIsNotNone(paperless.raised_application)
+
+
+class OriginalDownloadTests(StampTestCase):
+    """The original is kept so it can be produced, so it has to be reachable."""
+
+    def test_the_original_can_be_downloaded_after_approval(self) -> None:
+        # The #46 review found it retained where nothing could produce it.
+        # DEC-019 makes the download view the only way to a file, so a file
+        # with no view is a file nobody has.
+        self.approve_fully()
+        self.client.force_login(self.direktor)
+
+        response = self.client.get(
+            reverse("xarid-ariza-asl-pdf", args=[self.application.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_what_comes_back_is_unstamped(self) -> None:
+        self.approve_fully()
+        self.client.force_login(self.direktor)
+
+        response = self.client.get(
+            reverse("xarid-ariza-asl-pdf", args=[self.application.pk])
+        )
+        downloaded = BytesIO(b"".join(response.streaming_content))
+
+        page = PdfReader(downloaded).pages[0]
+        self.assertEqual(len(list(page.images)), 0)
+
+    def test_an_unapproved_application_has_no_original_to_download(
+        self,
+    ) -> None:
+        # Until an approval stamps it, pdf is the original - there is no
+        # second file, and saying so with a 404 is truer than serving the
+        # same bytes from two addresses.
+        self.client.force_login(self.direktor)
+
+        response = self.client.get(
+            reverse("xarid-ariza-asl-pdf", args=[self.application.pk])
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_somebody_who_may_not_open_the_page_may_not_download_it(
+        self,
+    ) -> None:
+        self.approve_fully()
+        self.client.logout()
+
+        response = self.client.get(
+            reverse("xarid-ariza-asl-pdf", args=[self.application.pk])
+        )
+
+        self.assertEqual(response.status_code, 302)
 
 
 class StampFailureTests(StampTestCase):
