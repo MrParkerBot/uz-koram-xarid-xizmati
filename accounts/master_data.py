@@ -190,7 +190,7 @@ class MasterDataPage:
             self._delete_record
         )
 
-    def render(
+    def _render_page(
         self,
         request: HttpRequest,
         form: MasterDataForm,
@@ -236,15 +236,15 @@ class MasterDataPage:
         edit_id = request.GET.get("edit")
         if edit_id:
             edited = self._active_record(edit_id)
-            return self.render(request, self.form_class(instance=edited), edited)
+            return self._render_page(request, self.form_class(instance=edited), edited)
 
-        return self.render(request, self.form_class())
+        return self._render_page(request, self.form_class())
 
     def _create_record(self, request: HttpRequest) -> HttpResponse:
         """Save adds the row to the list."""
         form = self.form_class(request.POST)
         if not form.is_valid():
-            return self.render(request, form)
+            return self._render_page(request, form)
 
         form.save()
         return redirect(self.url_name)
@@ -255,7 +255,7 @@ class MasterDataPage:
 
         form = self.form_class(request.POST, instance=edited)
         if not form.is_valid():
-            return self.render(request, form, edited)
+            return self._render_page(request, form, edited)
 
         form.save()
         return redirect(self.url_name)
