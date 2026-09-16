@@ -175,9 +175,34 @@ A user with no type, a user whose type was deactivated, and an anonymous
 visitor all resolve to no role, and every role check refuses them. Nobody is
 waved through for want of an answer.
 
-Assigning a type is `accounts.roles.assign_user_type` until `TASK-UZK-011`
-builds the Users page. Which pages each type may open is `TASK-UZK-012`; every
-signed-in user can still open all of them.
+Which pages each type may open is `TASK-UZK-012`; every signed-in user can
+still open all of them.
+
+## Users
+
+The Users page at `/users/` creates, edits and deletes accounts, and assigns
+each one a User Type.
+
+The specification's form captures a first name, a last name, a password, a
+phone number and a type - but no username, although the login page asks for
+one. A username is derived from the name (`Bobur Toshmatov` becomes
+`bobur.toshmatov`, and a second one `bobur.toshmatov2`) and shown in the table,
+since nobody can sign in with a name they were never told. **This is an open
+question for the customer, not a decision:** they may want to enter usernames
+themselves.
+
+Passwords follow DEC-020: hashed, never rendered, and never returned to the
+form. Editing a user leaves the password field empty, and leaving it empty
+keeps the password they already have - changing somebody's phone number must
+not lock them out.
+
+Deleting follows DEC-009: the account is deactivated, so it leaves the list and
+can no longer sign in while everything that already refers to it still
+resolves. The page asks before doing it.
+
+The Edit Permission column is rendered but inert; `TASK-UZK-013` owns the
+toggle and the exclusivity rule behind it. The page is open to any signed-in
+user until `TASK-UZK-012` restricts it to Admin.
 
 ## Templates
 
