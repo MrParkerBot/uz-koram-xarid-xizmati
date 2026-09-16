@@ -154,7 +154,13 @@ def assigned_applications(specialist) -> QuerySet[Application]:
         Application.objects.filter(
             stage=Application.Stage.ASSIGNED, assigned_to=specialist
         )
-        .select_related("department")
+        # status is joined because the Holat column renders its name. The
+        # #38 review found it fetched one query per row - the #29 finding in
+        # the other direction, a column rendered with no join rather than a
+        # join for a column nothing renders. assigned_to is still left out:
+        # this page has no holder column, and the discipline is to join what
+        # is rendered and nothing else.
+        .select_related("department", "status")
         .prefetch_related(application_lines())
         .order_by(F("tayinlangan_sana").desc(nulls_last=True), "-id")
     )
@@ -171,7 +177,9 @@ def all_assigned_applications() -> QuerySet[Application]:
     """
     return (
         Application.objects.filter(stage=Application.Stage.ASSIGNED)
-        .select_related("department", "assigned_to")
+        # status for the Holat column, assigned_to for the holder column.
+        # Both are rendered on this page, and nothing else is joined.
+        .select_related("department", "assigned_to", "status")
         .prefetch_related(application_lines())
         .order_by(F("tayinlangan_sana").desc(nulls_last=True), "-id")
     )
