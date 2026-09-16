@@ -12,8 +12,11 @@ the point:
 - The filter bar is inert. TASK-UZK-041 builds filtering for every table at
   once, and four controls that look like they work but do not would be worse
   than four that are visibly waiting.
-- Reject is the action section 4.1 describes and TASK-UZK-024 wires it.
-  Accept is wired (TASK-UZK-023).
+- Accept and Reject are both wired (TASK-UZK-023, TASK-UZK-024). Reject
+  opens the comment window REQ-ARIZA-005 describes: one modal for the page
+  rather than one per row, with the row it belongs to carried in data
+  attributes. An application number must never reach JavaScript source, which
+  is what config/test_delete_confirmation.py is there to keep true.
 
 DEC-016 also puts a requester, their Bo`lim Boshlig`i and a Direktor in front
 of this list. None of that is built either, so an application here is one that
@@ -99,7 +102,7 @@ somebody put into the database, not one that came through an approval chain.
                   {% csrf_token %}
                   <button type="submit" class="btn btn-outline-custom text-success btn-xs"><i class="bi bi-check-lg" aria-hidden="true"></i> Qabul</button>
                 </form>
-                <button class="btn btn-outline-custom text-danger btn-xs" disabled title="TASK-UZK-024 inkor etishni quradi"><i class="bi bi-x-lg" aria-hidden="true"></i> Inkor</button>
+                <button type="button" class="btn btn-outline-custom text-danger btn-xs js-reject" data-reject-url="{% url 'ariza-inkor' ariza.pk %}" data-reject-ariza="{{ ariza.ariza_raqami }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Inkor</button>
               </td>
             </tr>
           {% empty %}
@@ -110,4 +113,45 @@ somebody put into the database, not one that came through an approval chain.
       </div>
     </div>
 
+{% endblock %}
+{% block extra_scripts %}
+{% comment %}
+The comment window REQ-ARIZA-005 asks for. One per page, not one per row: the
+row it is about is written into the form's action when it opens, so a list of
+two hundred applications does not render two hundred dialogs.
+
+Nothing here interpolates a value into JavaScript source. The number and the
+URL travel on the button as data attributes, which the handler reads back -
+the same rule config/test_delete_confirmation.py enforces for delete, and for
+the same reason.
+{% endcomment %}
+<div id="reject-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <form method="post" id="reject-form">
+      {% csrf_token %}
+      <div class="modal-title"><i class="bi bi-x-circle" aria-hidden="true"></i> Arizani inkor etish</div>
+      <p class="modal-desc muted">Ariza <span id="reject-ariza" class="mono-cell"></span> inkor etiladi. Sababi jo'natuvchiga yetkaziladi.</p>
+      <div class="form-group">
+        <label class="form-label" for="reject-izoh">Izoh <span style="color:var(--color-danger)">*</span></label>
+        <textarea class="form-control" id="reject-izoh" name="inkor_izohi" rows="4" placeholder="Nima uchun inkor etilmoqda?" required></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-custom" data-close-modal="reject-modal">Bekor qilish</button>
+        <button type="submit" class="btn btn-outline-custom text-danger">OK</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest('.js-reject');
+    if (!button) return;
+    const form = document.getElementById('reject-form');
+    form.action = button.dataset.rejectUrl;
+    form.reset();
+    document.getElementById('reject-ariza').textContent = button.dataset.rejectAriza;
+    Modal.open('reject-modal');
+    document.getElementById('reject-izoh').focus();
+  });
+</script>
 {% endblock %}
