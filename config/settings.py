@@ -104,6 +104,12 @@ DATABASES = {
     }
 }
 
+# Where an unauthenticated visitor is sent, and where each end of the session
+# lands. TASK-UZK-009 makes the first of these apply to every page.
+LOGIN_URL = "login"
+LOGIN_REDIRECT_URL = "dashboard"
+LOGOUT_REDIRECT_URL = "login"
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},

@@ -1,11 +1,16 @@
-{% load static navigation %}<!DOCTYPE html>
+{% extends "base_document.html" %}
+{% load navigation %}
 {% comment %}
-The shell every page of the application sits inside.
+The chrome every application page sits inside: the sidebar, the top header and
+the page wrapper.
 
 The markup is transcribed from the static pages supplied with the technical
 assignment rather than rewritten, because the vendored style.css was written
 against these exact class names and a renamed element fails silently in the
 browser instead of failing a test.
+
+The document itself - head, assets, title - is in base_document.html, which
+the login screen shares without taking the chrome with it.
 
 A page fills these blocks:
 
@@ -16,49 +21,25 @@ A page fills these blocks:
   content        the page itself, inside .page-wrap
   extra_scripts  scripts that run after the shared ones
 {% endcomment %}
-<html lang="uz">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>{% block page_title %}Xarid Xizmati Bo'limi{% endblock %} - Uz-Koram</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-<link href="{% static 'css/bootstrap.min.css' %}" rel="stylesheet"/>
-<link href="{% static 'css/bootstrap-icons.css' %}" rel="stylesheet"/>
-<link rel="stylesheet" href="{% static 'css/style.css' %}"/>
-{% block extra_head %}{% endblock %}
-</head>
-<body>
+{% block body %}
 <div class="app-shell">
 {% comment %}
 The navigation is rendered from config/navigation.py, so every link points at
 a URL this application serves and the current page is marked here rather than
-in the browser. The footer identity is still the placeholder shipped with the
-supplied pages: TASK-UZK-008 brings real authentication and owns replacing it
-with the signed-in user.
+in the browser. The identity below is the signed-in user, falling back to the
+supplied placeholder when a template is rendered without one. The second line
+shows the username: roles do not exist until TASK-UZK-010.
 {% endcomment %}
-<aside class="sidebar"><nav class="sidebar-nav">{% sidebar_navigation %}</nav><div class="sidebar-footer"><div class="sidebar-user"><div class="sidebar-avatar">AK</div><div class="sidebar-user-info"><div class="name">Admin</div><div class="role">Admin</div></div></div></div></aside>
+<aside class="sidebar"><nav class="sidebar-nav">{% sidebar_navigation %}</nav><div class="sidebar-footer"><div class="sidebar-user"><div class="sidebar-avatar">{{ user|user_initials }}</div><div class="sidebar-user-info"><div class="name">{% firstof user.get_full_name user.get_username "Foydalanuvchi" %}</div><div class="role">{% firstof user.get_username "" %}</div></div></div></div></aside>
 <main class="main-shell">
   <header class="top-header">
     <div class="sidebar-brand"><div class="d-flex align-items-center gap-3"><div class="brand-mark">UK</div><div><div class="h6 mb-1">Uz-Koram</div><p class="mb-0 muted small">Xarid Xizmati Bo'limi</p></div></div></div>
     <div><div class="small muted">{% block breadcrumb %}{% endblock %}</div><div class="fw-semibold">{% block page_heading %}{% endblock %}</div></div>
-    <div class="d-flex align-items-center gap-3"><div class="user-chip"><div class="av">AK</div><div><div class="uname">Admin</div><div class="urole">Admin</div></div><span class="arrow"><i class="bi bi-chevron-down" aria-hidden="true"></i></span><div class="account-menu hidden"><button class="dropdown-item" id="logout-btn"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> Chiqish</button></div></div></div>
+    <div class="d-flex align-items-center gap-3"><div class="user-chip"><div class="av">{{ user|user_initials }}</div><div><div class="uname">{% firstof user.get_full_name user.get_username "Foydalanuvchi" %}</div><div class="urole">{% firstof user.get_username "" %}</div></div><span class="arrow"><i class="bi bi-chevron-down" aria-hidden="true"></i></span><div class="account-menu hidden"><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="dropdown-item"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> Chiqish</button></form></div></div></div>
   </header>
   <div class="page-wrap">
 {% block content %}{% endblock %}
   </div>
 </main>
 </div>
-<script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
-<script src="{% static 'js/main.js' %}"></script>
-{% comment %}
-js/sidebar.js is deliberately not loaded. It rebuilt this navigation in the
-browser from a list of .html filenames and would overwrite the server-rendered
-links a moment after the page appeared. The file stays in static/ because it
-was supplied with the assignment and TASK-UZK-004 asserts every supplied asset
-is served.
-{% endcomment %}
-{% block extra_scripts %}{% endblock %}
-</body>
-</html>
+{% endblock %}

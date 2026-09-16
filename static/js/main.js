@@ -5,50 +5,11 @@
 
 'use strict';
 
-// ─── MOCK AUTH STATE ───
-const Auth = {
-  users: [
-    { id:1, username:'admin',     password:'admin123',  name:'Abdulloh Karimov',  role:'Admin',           initials:'AK' },
-    { id:2, username:'manager',   password:'manager123',name:'Bobur Toshmatov',   role:'Manager',         initials:'BT' },
-    { id:3, username:'specialist',password:'spec123',   name:'Dilnoza Yusupova',  role:'Specialist',      initials:'DY' },
-    { id:4, username:'director',  password:'dir123',    name:'Islom Mirzaev',     role:'Director',        initials:'IM' },
-  ],
-  currentUser: null,
-
-  login(username, password) {
-    const user = this.users.find(u => u.username === username && u.password === password);
-    if (user) {
-      this.currentUser = user;
-      sessionStorage.setItem('uzkoram_user', JSON.stringify(user));
-      return true;
-    }
-    return false;
-  },
-
-  logout() {
-    this.currentUser = null;
-    sessionStorage.removeItem('uzkoram_user');
-    window.location.href = 'login.html';
-  },
-
-  init() {
-    const stored = sessionStorage.getItem('uzkoram_user');
-    if (stored) {
-      this.currentUser = JSON.parse(stored);
-      return true;
-    }
-    return false;
-  },
-
-  requireAuth() {
-    if (!this.init()) {
-      // Allow demo mode — pre-set admin
-      this.currentUser = this.users[0];
-      sessionStorage.setItem('uzkoram_user', JSON.stringify(this.currentUser));
-    }
-    return this.currentUser;
-  }
-};
+// The mock Auth object that used to live here was removed by
+// TASK-UZK-008. It kept four usernames and passwords in a file served to
+// every browser and signed any visitor in as Admin. Django's session
+// authentication replaced it; the signed-in user is rendered by the
+// server.
 
 // ─── TOAST NOTIFICATIONS ───
 const Toast = {
@@ -194,16 +155,8 @@ const UserChip = {
       if (menu) menu.classList.add('hidden');
     });
 
-    // Fill user info
-    const user = Auth.requireAuth();
-    if (user) {
-      const uname = chip.querySelector('.uname');
-      const urole = chip.querySelector('.urole');
-      const av    = chip.querySelector('.av');
-      if (uname) uname.textContent = user.name;
-      if (urole) urole.textContent = user.role;
-      if (av)    av.textContent    = user.initials;
-    }
+    // The identity in the chip is rendered by the server. Nothing here
+    // rewrites it.
   }
 };
 
@@ -596,7 +549,6 @@ const Charts = {
 
 // ─── GLOBAL INIT ───
 document.addEventListener('DOMContentLoaded', () => {
-  Auth.requireAuth();
   Sidebar.init();
   UserChip.init();
   initPasswordToggle();
@@ -617,8 +569,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', () => Drawer.close(btn.dataset.closeDrawer));
   });
 
-  // Logout button
-  document.querySelector('#logout-btn')?.addEventListener('click', () => Auth.logout());
+  // Logout is a form posting to the server; there is nothing to bind here.
 });
 
 // ─── SHARED CONFIRM MODAL HTML ─── (injected on every page)

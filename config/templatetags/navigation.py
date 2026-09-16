@@ -30,3 +30,20 @@ def sidebar_navigation(context: template.Context) -> dict[str, Any]:
         "navigation_groups": SIDEBAR_NAVIGATION,
         "active_url_name": active_url_name(context),
     }
+
+
+@register.filter
+def user_initials(user: Any) -> str:
+    """The two letters the supplied design shows in the avatar circle.
+
+    Built from the first and last name when the account has them, from the
+    username otherwise, and left as a single neutral letter for a visitor who
+    is not signed in - the circle is never empty in the supplied design.
+    """
+    first_name = getattr(user, "first_name", "") or ""
+    last_name = getattr(user, "last_name", "") or ""
+    if first_name and last_name:
+        return (first_name[0] + last_name[0]).upper()
+
+    username = getattr(user, "get_username", str)() or ""
+    return username[:2].upper() or "U"

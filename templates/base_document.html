@@ -1,0 +1,45 @@
+{% load static %}<!DOCTYPE html>
+{% comment %}
+The document every page shares: the head, the supplied stylesheets, the title
+convention and the scripts that run on every page.
+
+It exists because the login screen has no sidebar and no top header - the
+supplied design puts the sign-in form on a page of its own - and wrapping it
+in the application chrome would be wrong. So the chrome lives one level up, in
+base.html, and both pages share this.
+
+Application pages extend base.html, not this file.
+
+  page_title     the part of <title> before the " - Uz-Koram" suffix
+  extra_head     stylesheets or head scripts only that page needs
+  body_class     a class on <body>; the login page uses it for .login-body
+  body           the whole body, which base.html fills with the chrome
+  extra_scripts  scripts that run after the shared ones
+{% endcomment %}
+<html lang="uz">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>{% block page_title %}Xarid Xizmati Bo'limi{% endblock %} - Uz-Koram</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="{% static 'css/bootstrap.min.css' %}" rel="stylesheet"/>
+<link href="{% static 'css/bootstrap-icons.css' %}" rel="stylesheet"/>
+<link rel="stylesheet" href="{% static 'css/style.css' %}"/>
+{% block extra_head %}{% endblock %}
+</head>
+<body{% block body_class %}{% endblock %}>
+{% block body %}{% endblock %}
+<script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
+<script src="{% static 'js/main.js' %}"></script>
+{% comment %}
+js/sidebar.js is deliberately not loaded. It rebuilt the navigation in the
+browser from a list of .html filenames and would overwrite the server-rendered
+links a moment after the page appeared. The file stays in static/ because it
+was supplied with the assignment and TASK-UZK-004 asserts every supplied asset
+is served.
+{% endcomment %}
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

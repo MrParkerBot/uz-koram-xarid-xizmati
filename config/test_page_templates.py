@@ -45,6 +45,11 @@ CONVERTED_PAGES = (
     "xodimlar-yuklamasi.html",
 )
 
+# Pages that render through the shared document but not the application
+# chrome. The supplied design gives the sign-in screen no sidebar and no top
+# header, so TASK-UZK-008 extended base_document.html instead of base.html.
+PAGES_WITHOUT_CHROME = ("login.html",)
+
 # Markup that belongs to base.html. A converted page carrying any of it would
 # be rendering a second shell inside the first.
 SHELL_MARKUP = (
@@ -74,7 +79,7 @@ class ConvertedPageInventoryTests(SimpleTestCase):
     def test_no_page_template_is_unaccounted_for(self) -> None:
         on_disk = {path.name for path in PAGE_TEMPLATE_DIR.glob("*.html")}
 
-        self.assertEqual(on_disk, set(CONVERTED_PAGES))
+        self.assertEqual(on_disk, set(CONVERTED_PAGES) | set(PAGES_WITHOUT_CHROME))
 
 
 class ConvertedPageRenderingTests(SimpleTestCase):

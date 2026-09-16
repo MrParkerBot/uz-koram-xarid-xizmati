@@ -36,7 +36,6 @@
           <thead><tr>
             <th style="width:40px;">#</th>
             <th>To'liq Ism</th>
-            <th>Parol</th>
             <th>Telefon</th>
             <th>User Type</th>
             <th style="text-align:center;">Tahrirlash ruxsati</th>
@@ -128,10 +127,10 @@
 const roleColors = {Admin:'badge-primary',Manager:'badge-info',Specialist:'badge-approved',Director:'badge-trial'};
 let editingId = null;
 let users = [
-  {id:1,first:'Abdulloh',last:'Karimov',  password:'admin123',  phone:'90 111 22 33',role:'Admin',      editPerm:true},
-  {id:2,first:'Bobur',   last:'Toshmatov',password:'manager123',phone:'91 222 33 44',role:'Manager',    editPerm:false},
-  {id:3,first:'Dilnoza', last:'Yusupova', password:'spec123',   phone:'93 333 44 55',role:'Specialist', editPerm:false},
-  {id:4,first:'Islom',   last:'Mirzaev',  password:'dir123',    phone:'94 444 55 66',role:'Director',   editPerm:false},
+  {id:1,first:'Abdulloh',last:'Karimov',  phone:'90 111 22 33',role:'Admin',      editPerm:true},
+  {id:2,first:'Bobur',   last:'Toshmatov',phone:'91 222 33 44',role:'Manager',    editPerm:false},
+  {id:3,first:'Dilnoza', last:'Yusupova', phone:'93 333 44 55',role:'Specialist', editPerm:false},
+  {id:4,first:'Islom',   last:'Mirzaev',  phone:'94 444 55 66',role:'Director',   editPerm:false},
 ];
 let nextId = 5;
 
@@ -155,7 +154,7 @@ function editUser(id) {
   document.getElementById('user-modal-title').textContent = 'Foydalanuvchini Tahrirlash';
   document.getElementById('u-firstname').value = user.first;
   document.getElementById('u-lastname').value  = user.last;
-  document.getElementById('u-password').value  = user.password;
+  document.getElementById('u-password').value  = '';
   document.getElementById('u-phone').value     = user.phone;
   document.getElementById('u-role').value      = user.role;
   document.getElementById('u-edit-perm').checked = user.editPerm;
@@ -211,12 +210,6 @@ function deleteUser(id) {
   });
 }
 
-function togglePwd(id) {
-  const el = document.getElementById('pwd-'+id);
-  if (el.textContent === '••••••') el.textContent = users.find(u=>u.id===id)?.password || '';
-  else el.textContent = '••••••';
-}
-
 function filterTable() {
   const roleVal = document.getElementById('role-filter').value.toLowerCase();
   document.querySelectorAll('#users-tbody tr').forEach(row => {
@@ -235,12 +228,6 @@ function renderTable() {
         <div class="user-avatar-cell">
           <div class="user-avatar">${u.first[0]}${u.last[0]}</div>
           <span>${u.first} ${u.last}</span>
-        </div>
-      </td>
-      <td>
-        <div class="pwd-cell">
-          <span class="pwd-mask" id="pwd-${u.id}">••••••</span>
-          <button class="btn btn-outline-custom btn-xs" onclick="togglePwd(${u.id})" aria-label="Ko'rish"><i class="bi bi-eye" aria-hidden="true"></i></button>
         </div>
       </td>
       <td class="mono-cell">+998 ${u.phone}</td>

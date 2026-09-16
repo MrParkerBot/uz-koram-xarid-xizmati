@@ -118,8 +118,42 @@ served.
 Every entry is shown to everyone for now. Hiding the ones a role may not open
 is `TASK-UZK-012`.
 
+## Authentication
+
+Every session is Django's own. `/login/` renders the supplied sign-in page and
+`/logout/` ends the session on POST, so a link cannot sign somebody out.
+Rejections carry one message whatever was wrong, because an error that
+distinguishes an unknown username from a wrong password tells an attacker which
+accounts exist.
+
+The mocked sign-in that shipped with the front end is gone. It kept four
+usernames and passwords in `main.js` - a file served to every browser - and
+signed any visitor in as Admin when no session existed.
+
+Until `TASK-UZK-011` builds user administration, accounts are created on the
+command line:
+
+```bash
+python manage.py createsuperuser
+```
+
+`django.contrib.auth` provides that command; the Django admin site is still
+deliberately absent.
+
+Roles do not exist yet. Every signed-in user can open every page until
+`TASK-UZK-010` adds the role model and `TASK-UZK-012` enforces the permission
+matrix. Closing the pages to anonymous visitors is `TASK-UZK-009`.
+
+## Templates
+
+`templates/base_document.html` holds the document every page shares: the head,
+the supplied stylesheets, the title convention and the scripts. `base.html`
+adds the application chrome - sidebar, top header, page wrapper - on top of it.
+The login screen extends the document directly, because the supplied design
+gives it no sidebar.
+
 ## Project status
 
-Every page renders and is reachable, but none of them has data yet: the
-tables and forms are still the sample markup supplied with the assignment.
-Authentication arrives in `TASK-UZK-008`.
+Every page renders, is reachable, and sits behind a real login for anyone who
+has an account - but the pages have no data yet: their tables and forms are
+still the sample markup supplied with the assignment.
