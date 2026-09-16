@@ -42,6 +42,7 @@ from accounts.views import (
 from applications.views import (
     accept_application,
     accepted_list,
+    application_create,
     application_pdf,
     incoming_list,
     reject_application,
@@ -345,6 +346,14 @@ urlpatterns = [
         "qabul-arizalar/",
         require_page_permission("qabul-arizalar")(accepted_list),
         name="qabul-arizalar",
+    ),
+    # Creating an application (TASK-UZK-026). The form is on the Qabul
+    # qilingan page, so it answers to that page's permission like every other
+    # action: whoever may not see the page may not create a record on it.
+    path(
+        "qabul-arizalar/yaratish/",
+        require_page_permission("qabul-arizalar")(application_create),
+        name="ariza-yaratish",
     ),
     # Not wrapped in require_page_permission: the view asks about the page
     # that currently shows this application, because the attachment has to

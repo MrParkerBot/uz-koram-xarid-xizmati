@@ -30,13 +30,8 @@ from applications.attachments import (
     validate_pdf,
 )
 from applications.models import Application
+from applications.test_support import PDF_BYTES, a_pdf
 from reference.models import Department, MahsulotTuri
-
-PDF_BYTES = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF\n"
-
-
-def a_pdf(name: str = "ariza.pdf") -> SimpleUploadedFile:
-    return SimpleUploadedFile(name, PDF_BYTES, content_type="application/pdf")
 
 
 def make_user(type_name: str = ADMIN):
@@ -128,12 +123,16 @@ class DownloadTestCase(TestCase):
 
         self.application = Application.raise_application(
             department=Department.objects.create(name="Texnik bolim"),
-            mahsulot_turi=MahsulotTuri.objects.create(
-                category_number=100042, name="Metallurgiya"
-            ),
-            buyurtma_nomi="Bolt M12",
-            buyurtma_soni=500,
-            olchov_birligi="ta",
+            items=[
+                {
+                    "mahsulot_turi": MahsulotTuri.objects.create(
+                        category_number=100042, name="Metallurgiya"
+                    ),
+                    "buyurtma_nomi": "Bolt M12",
+                    "buyurtma_soni": 500,
+                    "olchov_birligi": "ta",
+                }
+            ],
             pdf=a_pdf(),
         )
         self.url = reverse("ariza-pdf", args=[self.application.pk])

@@ -17,14 +17,27 @@ from __future__ import annotations
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
-from django.db.models import F, QuerySet
+from django.db import transaction
+from django.db.models import F, Prefetch, QuerySet
 from django.http import FileResponse, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from accounts.permissions import may_open
 from applications.attachments import attachment_response
-from applications.models import Application
+from applications.forms import ApplicationForm, ApplicationItemFormSet
+from applications.models import Application, ApplicationItem
+from reference.models import ArizaStatus
+
+# The four columns one order line is made of, named once so the creation
+# view and the line model cannot drift apart.
+ORDER_LINE_FIELDS = (
+    "mahsulot_turi",
+    "buyurtma_nomi",
+    "buyurtma_soni",
+    "olchov_birligi",
+)
 
 INCOMING_TEMPLATE = "pages/kelib-arizalar.html"
 ACCEPTED_TEMPLATE = "pages/qabul-arizalar.html"
@@ -50,6 +63,19 @@ PAGE_SHOWING_STAGE: dict[str, str] = {
 }
 
 
+def application_lines() -> Prefetch:
+    """The order lines of an application, with the category each names.
+
+    Both lists render one row per line, so both fetch the lines the same way:
+    one query for every application's lines and one join for their categories,
+    rather than two queries per row.
+    """
+    return Prefetch(
+        "items",
+        queryset=ApplicationItem.objects.select_related("mahsulot_turi"),
+    )
+
+
 def incoming_applications() -> QuerySet[Application]:
     """The applications still waiting to be accepted or rejected.
 
@@ -57,9 +83,11 @@ def incoming_applications() -> QuerySet[Application]:
     DEC-017 lets an administrator rename or delete any status row and this
     list would then quietly empty.
     """
-    return Application.objects.filter(
-        stage=Application.Stage.INCOMING
-    ).select_related("department", "mahsulot_turi")
+    return (
+        Application.objects.filter(stage=Application.Stage.INCOMING)
+        .select_related("department")
+        .prefetch_related(application_lines())
+    )
 
 
 def accepted_applications() -> QuerySet[Application]:
@@ -84,7 +112,8 @@ def accepted_applications() -> QuerySet[Application]:
         # renders the acceptor, so joining auth_user would fetch a password
         # hash per row for a column that does not exist. TASK-UZK-027 assigns
         # a specialist, who is somebody else, so it will not need this either.
-        .select_related("department", "mahsulot_turi")
+        .select_related("department")
+        .prefetch_related(application_lines())
         .order_by(
             F("qabul_qilingan_sana").desc(nulls_last=True),
             "-kelib_tushgan_sana",
@@ -113,12 +142,119 @@ def accepted_list(request: HttpRequest) -> HttpResponse:
     Tayinlangan xodim and the assignment controls are on every row and do
     nothing yet: TASK-UZK-027 wires them. Rendered visibly waiting rather than
     hidden, the way TASK-UZK-022 left the filter bar.
+
+    The page also carries the TASK-UZK-026 creation form, empty. A bound one
+    arrives here from application_create() when what somebody submitted did
+    not validate, which is why the form is a parameter rather than something
+    this function makes.
     """
-    return render(
-        request,
-        ACCEPTED_TEMPLATE,
-        {"applications": accepted_applications()},
+    return render(request, ACCEPTED_TEMPLATE, accepted_page())
+
+
+def accepted_page(
+    form: ApplicationForm | None = None,
+    items: ApplicationItemFormSet | None = None,
+) -> dict[str, object]:
+    """Everything the Qabul qilingan page renders.
+
+    One function, so that a failed creation re-renders the same page the
+    person was looking at rather than a stripped version of it. An unbound
+    form is built when none is passed, which is the ordinary GET.
+
+    Args:
+        form: the bound application form to re-render with its errors.
+        items: the bound order lines, likewise.
+    """
+    return {
+        "applications": accepted_applications(),
+        "form": form if form is not None else ApplicationForm(),
+        "item_formset": (
+            items
+            if items is not None
+            else ApplicationItemFormSet(queryset=ApplicationItem.objects.none())
+        ),
+        # The modal starts open only when there is something in it to correct,
+        # so a refused submission comes back with what was typed still in it
+        # rather than behind a closed modal.
+        "open_form": form is not None,
+    }
+
+
+def ordered_lines(items: ApplicationItemFormSet) -> list[dict[str, object]]:
+    """The order lines somebody actually filled in, in the order they gave.
+
+    A formset always carries at least one spare row - that is what the plus
+    button clones - and a spare nobody typed into is not an order. Those come
+    back with empty cleaned_data and are dropped here.
+
+    Only the four order-line fields are taken. A model formset also puts a
+    hidden id on every form, and passing that through to a new line would be
+    handing the database a primary key from a form.
+    """
+    return [
+        {field: line.cleaned_data[field] for field in ORDER_LINE_FIELDS}
+        for line in items.forms
+        if line.cleaned_data
+    ]
+
+
+@require_POST
+def application_create(request: HttpRequest) -> HttpResponse:
+    """Create an application and its order lines (REQ-ARIZA-008 to 011).
+
+    POST only, and wrapped by the URL configuration in the qabul-arizalar
+    permission, because that is the page offering the form.
+
+    Everything is written inside one transaction, or nothing is. An
+    application whose lines failed half way through is an order nobody can
+    fill, and an application saved without the attachment REQ-ARIZA-009
+    demands is one nobody can check - so the record, its lines and the file
+    are one write.
+
+    The application is created already accepted. The form is on the Qabul
+    qilingan page and its button is Yaratish va Tayinlash: what it produces is
+    something ready to be given to a specialist, not something waiting to be
+    decided on a page it was never on. Recorded in the plan as the reading to
+    challenge if it is wrong.
+
+    Cancel is not a route. It closes the form in the browser, and because
+    nothing is written until this view runs, there is nothing for it to undo.
+    """
+    form = ApplicationForm(request.POST, request.FILES)
+    items = ApplicationItemFormSet(
+        request.POST, queryset=ApplicationItem.objects.none()
     )
+
+    if not (form.is_valid() and items.is_valid()):
+        messages.error(request, "Ariza yaratilmadi: formani tekshiring.")
+        return render(
+            request,
+            ACCEPTED_TEMPLATE,
+            accepted_page(form=form, items=items),
+        )
+
+    with transaction.atomic():
+        # The status is found by its code rather than its name, for the reason
+        # accept() gives: DEC-017 lets an administrator rename these rows, and
+        # a creation that fails because somebody renamed a status is a master
+        # data page breaking the department's work.
+        application = Application.raise_application(
+            items=ordered_lines(items),
+            department=form.cleaned_data["department"],
+            buyurtmachi_ismi=form.cleaned_data["buyurtmachi_ismi"],
+            izoh=form.cleaned_data["izoh"],
+            pdf=form.cleaned_data["pdf"],
+            stage=Application.Stage.ACCEPTED,
+            qabul_qilingan_sana=timezone.now(),
+            accepted_by=request.user,
+            status=ArizaStatus.objects.filter(
+                code=ArizaStatus.Code.ACCEPTED, is_active=True
+            ).first(),
+        )
+
+    messages.success(request, f"{application.ariza_raqami} yaratildi.")
+
+    return redirect("qabul-arizalar")
 
 
 def application_pdf(request: HttpRequest, pk: int) -> FileResponse:

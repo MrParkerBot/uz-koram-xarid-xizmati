@@ -7,13 +7,19 @@ first thing here that has one.
 TASK-UZK-022 builds the record and the incoming list; TASK-UZK-023 and
 TASK-UZK-024 are the two decisions taken on it there, and TASK-UZK-025 to
 TASK-UZK-027 carry an accepted one onward.
+
+TASK-UZK-026 splits the record in two. What an application orders is an
+ApplicationItem now rather than four columns on the application, because
+REQ-ARIZA-010's plus button means one application can order several things.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from datetime import date
 from decimal import Decimal
 
+from django.core.validators import MinValueValidator
 from django.db import models, transaction
 from django.utils import timezone
 
@@ -22,6 +28,12 @@ from applications.attachments import application_pdf_field
 # DEC-022: ARZ-2026-00001, five digits, resetting each year.
 ARIZA_NUMBER_PREFIX = "ARZ"
 ARIZA_NUMBER_DIGITS = 5
+
+# The smallest order anybody can place: one thousandth, which is the finest
+# the quantity column stores. Written as the smallest storable amount rather
+# than as zero, so that the floor moves with decimal_places if that ever
+# changes, and so that an order for none of something is refused too.
+SMALLEST_QUANTITY = Decimal("0.001")
 
 
 def next_ariza_raqami(today: date | None = None) -> str:
@@ -88,24 +100,16 @@ class Application(models.Model):
         related_name="applications",
         verbose_name="Bo`lim nomi",
     )
-    mahsulot_turi = models.ForeignKey(
-        "reference.MahsulotTuri",
-        on_delete=models.PROTECT,
-        related_name="applications",
-        verbose_name="Mahsulot Turi",
-    )
-    buyurtma_nomi = models.CharField("Buyurtma nomi", max_length=255)
-    # Decimal rather than float: REQ-ARIZA-003 allows a fractional quantity,
-    # and a quantity that is nearly 0.3 is not a quantity anybody ordered.
-    buyurtma_soni = models.DecimalField(
-        "Buyurtma soni", max_digits=12, decimal_places=3
-    )
-    olchov_birligi = models.CharField(
-        "O`lchov birligi",
-        max_length=16,
+    buyurtmachi_ismi = models.CharField(
+        "Buyurtmachi ismi",
+        max_length=255,
+        blank=True,
         help_text=(
-            "ta, kg, m and so on. Free text: REQ-ARIZA-003 gives examples and "
-            "no page maintains a list of units."
+            "Who asked for this, as REQ-ARIZA-008 collects it: a name typed "
+            "on the form rather than a user chosen from a list. DEC-016's "
+            "approval chain would identify a person, and it is not built - "
+            "which is the same reason sender is nullable. Blank because every "
+            "application that existed before the form predates the question."
         ),
     )
     izoh = models.TextField("Izoh", blank=True)
@@ -183,26 +187,7 @@ class Application(models.Model):
         verbose_name_plural = "Arizalar"
 
     def __str__(self) -> str:
-        return f"{self.ariza_raqami} - {self.buyurtma_nomi}"
-
-    @property
-    def soni_display(self) -> Decimal:
-        """The quantity without the trailing zeros the column stores.
-
-        Three decimal places are stored because REQ-ARIZA-003 allows a
-        fractional quantity, but rendering them always is actively
-        misleading here: LANGUAGE_CODE is uz, so the decimal separator is a
-        comma, and 2.500 prints as "2,500" - which reads as two and a half
-        thousand rather than as two and a half.
-
-        normalize() strips the zeros, and the quantize guards the other end:
-        it turns Decimal("500").normalize(), which is 5E+2, back into 500.
-        """
-        quantity = self.buyurtma_soni.normalize()
-        if quantity.as_tuple().exponent > 0:
-            return quantity.quantize(Decimal(1))
-
-        return quantity
+        return self.ariza_raqami
 
     @property
     def is_incoming(self) -> bool:
@@ -374,13 +359,144 @@ class Application(models.Model):
 
     @classmethod
     @transaction.atomic
-    def raise_application(cls, **fields) -> Application:
-        """Create an application, allocating its DEC-022 number.
+    def raise_application(
+        cls, items: Sequence[Mapping[str, object]], **fields
+    ) -> Application:
+        """Create an application and its order lines, in one transaction.
 
         The only way an application should be created, so that nothing ends up
         without a number. Atomic with the number lookup, so two callers at once
-        cannot read the same highest number and both use it.
+        cannot read the same highest number and both use it - and atomic with
+        the lines, so a failure part way through the order leaves no
+        application rather than one nobody can fill.
+
+        Args:
+            items: one mapping of ApplicationItem fields per order line, in
+                the order they should be read. REQ-ARIZA-010's plus button is
+                what produces more than one.
+            **fields: the application's own columns.
+
+        Returns:
+            The created application. Its lines are written but not fetched;
+            read them through .items.
+
+        Raises:
+            ValueError: when items is empty. An application with nothing
+                ordered on it is not a record this department has a use for,
+                and the form refuses it too - here as well, because the
+                database has no way to express "at least one row".
         """
-        return cls.objects.create(
+        if not items:
+            raise ValueError(
+                "An application needs at least one order line (REQ-ARIZA-010)."
+            )
+
+        application = cls.objects.create(
             ariza_raqami=next_ariza_raqami(), **fields
         )
+        ApplicationItem.objects.bulk_create(
+            [
+                ApplicationItem(application=application, **line)
+                for line in items
+            ]
+        )
+
+        return application
+
+
+class ApplicationItem(models.Model):
+    """One line of what an application orders (REQ-ARIZA-010).
+
+    These four fields sat on Application until TASK-UZK-026, because until
+    there was a form there was no way to enter a second line and one order per
+    application was indistinguishable from the truth. The plus button is what
+    separates them: a person adding a row means one application, several
+    things ordered, and columns on the record cannot hold that.
+
+    CASCADE rather than PROTECT, which is the opposite of how this module
+    treats every other relation: a line is part of its application rather than
+    a thing the application refers to, and an order line outliving the order
+    is not a record worth keeping. The category it points at is PROTECTed as
+    usual, because that is master data somebody else maintains.
+    """
+
+    application = models.ForeignKey(
+        Application,
+        on_delete=models.CASCADE,
+        related_name="items",
+        verbose_name="Ariza",
+    )
+    mahsulot_turi = models.ForeignKey(
+        "reference.MahsulotTuri",
+        on_delete=models.PROTECT,
+        related_name="application_items",
+        verbose_name="Mahsulot Turi",
+    )
+    buyurtma_nomi = models.CharField("Buyurtma nomi", max_length=255)
+    # Decimal rather than float: REQ-ARIZA-003 allows a fractional quantity,
+    # and a quantity that is nearly 0.3 is not a quantity anybody ordered.
+    #
+    # The floor is on the column rather than on the form, because the rule is
+    # about what an order line may be and not about what one page accepts.
+    # The #33 review found the form's min attribute doing this job alone,
+    # which meant a posted -5 was stored as an order for minus five bolts.
+    # SMALLEST_QUANTITY excludes zero as well: an order for none of something
+    # is not an order, it is a line somebody meant to delete.
+    buyurtma_soni = models.DecimalField(
+        "Buyurtma soni",
+        max_digits=12,
+        decimal_places=3,
+        validators=[MinValueValidator(SMALLEST_QUANTITY)],
+    )
+    olchov_birligi = models.CharField(
+        "O`lchov birligi",
+        max_length=16,
+        help_text=(
+            "ta, kg, m and so on. Free text: REQ-ARIZA-003 gives examples and "
+            "no page maintains a list of units."
+        ),
+    )
+
+    class Meta:
+        # The order they were entered in, which is the order the person who
+        # wrote the application meant them to be read.
+        ordering = ("id",)
+        verbose_name = "Ariza qatori"
+        verbose_name_plural = "Ariza qatorlari"
+        # The validator above is what a person filling in the form sees, and
+        # it only runs when something calls full_clean(). raise_application()
+        # does not - it bulk_creates - so the validator alone would leave the
+        # #33 finding half fixed: refused on the page, accepted from code.
+        # The constraint is the rule itself, held by the database on every
+        # path into the table.
+        constraints = (
+            models.CheckConstraint(
+                condition=models.Q(buyurtma_soni__gte=SMALLEST_QUANTITY),
+                name="order_line_quantity_is_positive",
+                violation_error_message=(
+                    "Buyurtma soni noldan katta bo`lishi kerak."
+                ),
+            ),
+        )
+
+    def __str__(self) -> str:
+        return f"{self.buyurtma_nomi} - {self.soni_display} {self.olchov_birligi}"
+
+    @property
+    def soni_display(self) -> Decimal:
+        """The quantity without the trailing zeros the column stores.
+
+        Three decimal places are stored because REQ-ARIZA-003 allows a
+        fractional quantity, but rendering them always is actively
+        misleading here: LANGUAGE_CODE is uz, so the decimal separator is a
+        comma, and 2.500 prints as "2,500" - which reads as two and a half
+        thousand rather than as two and a half.
+
+        normalize() strips the zeros, and the quantize guards the other end:
+        it turns Decimal("500").normalize(), which is 5E+2, back into 500.
+        """
+        quantity = self.buyurtma_soni.normalize()
+        if quantity.as_tuple().exponent > 0:
+            return quantity.quantize(Decimal(1))
+
+        return quantity

@@ -46,12 +46,16 @@ class RejectionTestCase(TestCase):
         self.client.force_login(self.decider)
         self.application = Application.raise_application(
             department=Department.objects.create(name="Texnik bolim"),
-            mahsulot_turi=MahsulotTuri.objects.create(
-                category_number=100042, name="Metallurgiya"
-            ),
-            buyurtma_nomi="Bolt M12",
-            buyurtma_soni=500,
-            olchov_birligi="ta",
+            items=[
+                {
+                    "mahsulot_turi": MahsulotTuri.objects.create(
+                        category_number=100042, name="Metallurgiya"
+                    ),
+                    "buyurtma_nomi": "Bolt M12",
+                    "buyurtma_soni": 500,
+                    "olchov_birligi": "ta",
+                }
+            ],
         )
         self.url = reverse("ariza-inkor", args=[self.application.pk])
 

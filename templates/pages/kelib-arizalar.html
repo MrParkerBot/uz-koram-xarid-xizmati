@@ -80,31 +80,39 @@ somebody put into the database, not one that came through an approval chain.
           </tr></thead>
           <tbody id="ariza-tbody">
           {% for ariza in applications %}
+            {% with lines=ariza.items.all %}
+            {% for qator in lines %}
             <tr data-id="{{ ariza.pk }}">
-              <td>{{ forloop.counter }}</td>
-              <td class="mono-cell">{{ ariza.ariza_raqami }}</td>
-              <td>{{ ariza.department.name }}</td>
-              <td style="font-size:11px;" class="mono-cell">{{ ariza.mahsulot_turi.category_number }} &mdash; {{ ariza.mahsulot_turi.name }}</td>
-              <td>{{ ariza.buyurtma_nomi }}</td>
-              <td style="font-weight:600;color:var(--color-primary);">{{ ariza.soni_display }}</td>
-              <td>{{ ariza.olchov_birligi }}</td>
-              <td style="font-size:11px;color:var(--color-text-muted);">{{ ariza.izoh|default:"&mdash;" }}</td>
-              <td>
+              {% if forloop.first %}
+              <td rowspan="{{ lines|length }}">{{ forloop.parentloop.counter }}</td>
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.ariza_raqami }}</td>
+              <td rowspan="{{ lines|length }}">{{ ariza.department.name }}</td>
+              {% endif %}
+              <td style="font-size:11px;" class="mono-cell">{{ qator.mahsulot_turi.category_number }} &mdash; {{ qator.mahsulot_turi.name }}</td>
+              <td>{{ qator.buyurtma_nomi }}</td>
+              <td style="font-weight:600;color:var(--color-primary);">{{ qator.soni_display }}</td>
+              <td>{{ qator.olchov_birligi }}</td>
+              {% if forloop.first %}
+              <td style="font-size:11px;color:var(--color-text-muted);" rowspan="{{ lines|length }}">{{ ariza.izoh|default:"&mdash;" }}</td>
+              <td rowspan="{{ lines|length }}">
                 {% if ariza.pdf %}
                   <a class="pdf-badge" href="{% url 'ariza-pdf' ariza.pk %}" title="{{ ariza.ariza_raqami }}.pdf"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></a>
                 {% else %}
                   <span class="muted small">&mdash;</span>
                 {% endif %}
               </td>
-              <td class="mono-cell">{{ ariza.kelib_tushgan_sana|date:"Y-m-d" }}</td>
-              <td style="text-align:center;white-space:nowrap;">
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.kelib_tushgan_sana|date:"Y-m-d" }}</td>
+              <td style="text-align:center;white-space:nowrap;" rowspan="{{ lines|length }}">
                 <form method="post" action="{% url 'ariza-qabul' ariza.pk %}" style="display:inline;" data-confirm="{{ ariza.ariza_raqami }} qabul qilinsinmi?">
                   {% csrf_token %}
                   <button type="submit" class="btn btn-outline-custom text-success btn-xs"><i class="bi bi-check-lg" aria-hidden="true"></i> Qabul</button>
                 </form>
                 <button type="button" class="btn btn-outline-custom text-danger btn-xs js-reject" data-reject-url="{% url 'ariza-inkor' ariza.pk %}" data-reject-ariza="{{ ariza.ariza_raqami }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Inkor</button>
               </td>
+              {% endif %}
             </tr>
+            {% endfor %}
+            {% endwith %}
           {% empty %}
             <tr><td colspan="11" class="muted" style="text-align:center;">Hozircha kelib tushgan ariza yo'q.</td></tr>
           {% endfor %}
