@@ -23,7 +23,7 @@ from django.core.validators import MinValueValidator
 from django.db import models, transaction
 from django.utils import timezone
 
-from applications.attachments import application_pdf_field
+from applications.attachments import application_pdf_field, attachment_storage
 
 # DEC-022: ARZ-2026-00001, five digits, resetting each year.
 ARIZA_NUMBER_PREFIX = "ARZ"
@@ -888,6 +888,18 @@ class PurchaseApplication(models.Model):
     )
     izoh = models.TextField("Izoh", blank=True)
     pdf = application_pdf_field()
+    asl_pdf = models.FileField(
+        "Asl ilova (PDF)",
+        upload_to="arizalar/asl/%Y/%m",
+        storage=attachment_storage,
+        blank=True,
+        help_text=(
+            "The attachment exactly as it was uploaded. Blank until an "
+            "approval stamps pdf, and kept from then on: the stamp rewrites "
+            "the document, and what a requester submitted should still be "
+            "producible afterwards."
+        ),
+    )
     status = models.ForeignKey(
         "reference.ArizaStatus",
         on_delete=models.PROTECT,
@@ -1103,6 +1115,14 @@ class PurchaseApplication(models.Model):
 
             return True
 
+        # Stamped before the department's application is created, so what
+        # that record shares is the approved document rather than the one the
+        # requester uploaded. Stamped before the stage is written too: this
+        # raises rather than returning a failure, and an approval that
+        # swallowed it would mark an application approved with an unstamped
+        # document, which REQ-ARIZA-019 is precisely about.
+        self.stamp_approval(by, decided_at)
+
         raised = self.raise_department_application()
         moved = type(self).objects.filter(pk=self.pk, stage=was).update(
             stage=self.Stage.APPROVED,
@@ -1122,6 +1142,46 @@ class PurchaseApplication(models.Model):
         self.tasdiqlagan_direktor = by
         self.direktor_sanasi = decided_at
         self.raised_application = raised
+
+        return True
+
+    def stamp_approval(self, by, approved_at) -> bool:
+        """Put the approval onto the document (REQ-ARIZA-019, DEC-027).
+
+        The original is kept in asl_pdf the first time this runs, because the
+        stamp rewrites what the requester uploaded and that should still be
+        producible.
+
+        Args:
+            by: the approving manager, whose name goes into the code.
+            approved_at: when they approved it.
+
+        Returns:
+            True when a stamp was applied, and False when there was nothing to
+            stamp. An application with no attachment is not refused over it:
+            DEC-016 lets a paper application through the department's own
+            form, and refusing an approval here would make the attachment
+            compulsory somewhere nothing says it is.
+        """
+        from applications.stamping import approval_payload, stamp_with_qr
+
+        if not self.pdf:
+            return False
+
+        payload = approval_payload(self.xarid_raqami, by, approved_at)
+        stamped = stamp_with_qr(
+            self.pdf, payload, f"{self.xarid_raqami}-tasdiqlangan.pdf"
+        )
+
+        if not self.asl_pdf:
+            # Point at the same stored file rather than copying its bytes:
+            # it is the file, and the stamped one is written beside it.
+            self.asl_pdf.name = self.pdf.name
+
+        self.pdf.save(stamped.name, stamped, save=False)
+        type(self).objects.filter(pk=self.pk).update(
+            pdf=self.pdf.name, asl_pdf=self.asl_pdf.name
+        )
 
         return True
 

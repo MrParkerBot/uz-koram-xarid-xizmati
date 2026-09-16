@@ -182,6 +182,13 @@ class AcceptanceDateTests(AcceptedListTestCase):
     """Qabul qilingan sana is when it was accepted, not when it arrived."""
 
     def test_the_date_shown_is_the_acceptance_date(self) -> None:
+        # The dates are compared in the timezone the template renders in.
+        # TIME_ZONE is Asia/Tashkent and USE_TZ is on, so a stored instant
+        # between 19:00 and midnight UTC is already the next day on the page,
+        # and comparing against the raw UTC date made this test fail for five
+        # hours a day. It was written in TASK-UZK-025 and found by the
+        # TASK-UZK-032 validation run, which happened to be inside that
+        # window; nothing about either task caused it.
         application = self.accepted_application()
         arrived = timezone.now() - timedelta(days=9)
         decided = timezone.now() - timedelta(days=2)
@@ -191,8 +198,8 @@ class AcceptanceDateTests(AcceptedListTestCase):
 
         row = self.table()
 
-        self.assertIn(decided.strftime("%Y-%m-%d"), row)
-        self.assertNotIn(arrived.strftime("%Y-%m-%d"), row)
+        self.assertIn(timezone.localdate(decided).isoformat(), row)
+        self.assertNotIn(timezone.localdate(arrived).isoformat(), row)
 
 
 class StageNotStatusTests(AcceptedListTestCase):

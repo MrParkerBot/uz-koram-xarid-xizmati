@@ -1,3 +1,11 @@
 # Runtime dependencies for the Uz-Koram Xarid Xizmati Bo'limi application.
 # Pinned so that an empty environment installs exactly what was validated.
 Django==5.1.1
+
+# Generating the approval QR code and putting it on the PDF
+# (TASK-UZK-032, REQ-ARIZA-019, DEC-027). qrcode draws the code and
+# pypdf merges it onto the attachment; Pillow, which Django already
+# requires, is what turns the image into a page, so no PDF drawing
+# library is needed for what amounts to placing a square.
+qrcode==8.2
+pypdf==6.6.0
