@@ -585,9 +585,11 @@ class Application(models.Model):
             status.
 
         Raises:
-            ValueError: when status is None or is not active. Choosing
-                nothing is not a way of clearing the status, and an inactive
-                row is one an administrator has taken out of use.
+            ValueError: when status is None, when it is not active, or when
+                this application is not one somebody is working on. Choosing
+                nothing is not a way of clearing the status, an inactive row
+                is one an administrator has taken out of use, and an
+                application nobody holds has no progress to report.
         """
         if status is None:
             raise ValueError(
@@ -601,6 +603,19 @@ class Application(models.Model):
             )
 
         self.refresh_from_db()
+
+        # The stage check belongs here rather than in the view, which is what
+        # the #40 review found: the route is on the Tayinlangan page and had
+        # nothing stopping it writing an application that page never shows. A
+        # manager could move a rejected application to a status, and a
+        # rejected application is off the workflow entirely. accept_as_
+        # specialist() already guards this way; this is the same rule for the
+        # other half of REQ-ARIZA-013.
+        if self.stage != self.Stage.ASSIGNED:
+            raise ValueError(
+                f"{self.ariza_raqami} is {self.stage}, not assigned, so "
+                "there is no work in progress to report a status for."
+            )
 
         if self.status_id == status.pk:
             return False
