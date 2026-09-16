@@ -28,6 +28,31 @@ class UserSpecialtyForm(forms.ModelForm):
         model = UserSpecialty
         fields = ("name", "category_number")
 
+    def clean_name(self) -> str:
+        """Refuse a name already taken, including by a deleted record.
+
+        Django's own message for the unique constraint is in English on a page
+        written in Uzbek, and it says a record exists - which is bewildering
+        when the record holding the name was deleted and is therefore nowhere
+        on the page. This says which of the two happened.
+        """
+        name = self.cleaned_data["name"]
+
+        taken = UserSpecialty.objects.filter(name__iexact=name)
+        if self.instance.pk is not None:
+            taken = taken.exclude(pk=self.instance.pk)
+
+        clash = taken.first()
+        if clash is None:
+            return name
+
+        if clash.is_active:
+            raise forms.ValidationError("Bu nom allaqachon mavjud.")
+
+        raise forms.ValidationError(
+            "Bu nom o'chirilgan yozuvga tegishli. Boshqa nom kiriting."
+        )
+
 
 def render_specialty_page(
     request: HttpRequest,

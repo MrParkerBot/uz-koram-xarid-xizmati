@@ -66,6 +66,14 @@ class CreationTests(SpecialtyPageTestCase):
         response = self.create()
 
         self.assertEqual(UserSpecialty.objects.count(), 1)
+        self.assertContains(response, "Bu nom allaqachon mavjud")
+
+    def test_a_name_differing_only_in_case_is_refused(self) -> None:
+        self.create()
+
+        response = self.create(name="mexanik MUHANDIS")
+
+        self.assertEqual(UserSpecialty.objects.count(), 1)
         self.assertEqual(response.status_code, 200)
 
     def test_the_category_number_is_optional(self) -> None:
@@ -209,9 +217,12 @@ class DeletionTests(SpecialtyPageTestCase):
 
         response = self.create()
 
-        self.assertEqual(response.status_code, 200)
         self.assertEqual(UserSpecialty.objects.count(), 1)
         self.assertFalse(UserSpecialty.objects.get().is_active)
+        # And it says which of the two things happened, because a message
+        # saying the record exists is bewildering when it is nowhere on screen.
+        # Without the apostrophe: the page escapes it to &#x27;.
+        self.assertContains(response, "chirilgan yozuvga tegishli")
 
 
 class PermissionTests(TestCase):
