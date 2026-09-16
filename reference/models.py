@@ -14,6 +14,7 @@ TASK-UZK-016 is the first table in this application.
 
 from __future__ import annotations
 
+from django.core.validators import RegexValidator
 from django.db import models
 
 from accounts.master_data import (
@@ -206,3 +207,73 @@ class Department(MasterDataRecord):
         ordering = ("name",)
         verbose_name = "Bo`lim"
         verbose_name_plural = "Bo`limlar"
+
+
+# The supplied contract form caps Firma INN at nine characters and shows
+# 123456789 as the placeholder, so nine digits is the customer's own
+# expectation rather than this task's invention. It also leaves the field
+# optional, which matters: DEC-023 seeds an Import contract type, so foreign
+# suppliers are expected, and a foreign firm's tax identifier is not an Uzbek
+# INN. Following the form means such a firm is entered without one.
+INN_LENGTH = 9
+
+INN_FORMAT = RegexValidator(
+    rf"^\d{{{INN_LENGTH}}}$",
+    message=f"INN {INN_LENGTH} ta raqamdan iborat bo`lishi kerak.",
+)
+
+
+class Supplier(MasterDataRecord):
+    """A Firma - a supplier the department buys from (DEC-011).
+
+    The specification gives suppliers no page, but the dashboard counts them
+    and ranks the top ones, and the contract form types the firm's name into
+    every contract. Two contracts naming the same firm are then two unrelated
+    strings, and a count over strings is not a count of suppliers. DEC-011
+    makes them master data selected on the contract form; TASK-UZK-021 adds
+    the page to maintain them, following the precedent TASK-UZK-020 set.
+
+    Daraja is free text. DEC-025 adds the field because the dashboard filters
+    by it, and defines neither its values nor who assigns them. A scale
+    invented here would be an invented scale, so TASK-UZK-048 will filter on
+    whatever the department actually enters.
+    """
+
+    name = models.CharField(
+        "Firma Nomi", max_length=MASTER_DATA_NAME_LENGTH, unique=True
+    )
+    inn = models.CharField(
+        "Firma INN raqami",
+        max_length=INN_LENGTH,
+        blank=True,
+        validators=[INN_FORMAT],
+        help_text=(
+            "Nine digits, as the supplied contract form asks for. Optional: a "
+            "foreign supplier has no Uzbek INN."
+        ),
+    )
+    daraja = models.CharField(
+        "Daraja",
+        max_length=32,
+        blank=True,
+        help_text=(
+            "DEC-025 adds this because the dashboard filters by it, and does "
+            "not say what values it takes. Free text until the customer says."
+        ),
+    )
+
+    class Meta:
+        ordering = ("name",)
+        verbose_name = "Firma"
+        verbose_name_plural = "Firmalar"
+        constraints = [
+            # Unique among the suppliers that have one, so several firms may
+            # have no INN while no two share one. Without it the dashboard
+            # count and the top-supplier ranking would double-count a firm
+            # entered twice, which is what DEC-011 exists to prevent.
+            models.UniqueConstraint(
+                fields=["inn"],
+                condition=~models.Q(inn=""),
+                name="unique_supplier_inn_when_given",
+            )
+        ]

@@ -44,6 +44,7 @@ from reference.department_views import department_page
 from reference.mahsulot_turi_views import mahsulot_turi_page
 from reference.shartnoma_status_views import shartnoma_status_page
 from reference.shartnoma_turi_views import shartnoma_turi_page
+from reference.supplier_views import supplier_page
 
 # Every page except the dashboard, which answers at the site root. Each entry
 # is (url path, URL name); the template is pages/<name>.html.
@@ -300,5 +301,27 @@ urlpatterns = [
         "bolim-royhati/<int:pk>/delete/",
         require_page_permission("bolim-royhati")(department_page.delete_record),
         name="bolim-royhati-delete",
+    ),
+    # The Firmalar master data page (TASK-UZK-021). DEC-011 makes suppliers
+    # master data; the specification gives them no page either.
+    path(
+        "firmalar/",
+        require_page_permission("firmalar")(supplier_page.list_records),
+        name="firmalar",
+    ),
+    path(
+        "firmalar/add/",
+        require_page_permission("firmalar")(supplier_page.create_record),
+        name="firmalar-create",
+    ),
+    path(
+        "firmalar/<int:pk>/edit/",
+        require_page_permission("firmalar")(supplier_page.update_record),
+        name="firmalar-update",
+    ),
+    path(
+        "firmalar/<int:pk>/delete/",
+        require_page_permission("firmalar")(supplier_page.delete_record),
+        name="firmalar-delete",
     ),
 ]

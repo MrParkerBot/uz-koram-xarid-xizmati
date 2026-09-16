@@ -100,6 +100,8 @@ ADMIN_ONLY_PAGES = frozenset(
         # DEC-018. Not a page the specification describes; see
         # reference/department_views.py for why it exists.
         "bolim-royhati",
+        # DEC-011, and invented for the same reason as bolim-royhati.
+        "firmalar",
         "integration",
     }
 )
