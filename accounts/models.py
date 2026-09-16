@@ -15,74 +15,30 @@ from __future__ import annotations
 from django.conf import settings
 from django.db import models
 
-from accounts.master_data import badge_class_for, badge_colour_field
+from accounts.master_data import (
+    MasterDataQuerySet,
+    MasterDataRecord,
+    badge_class_for,
+    badge_colour_field,
+)
+
+# Re-exported: the master data shape moved to accounts/master_data.py in
+# TASK-UZK-020, and four merged modules import it from here. Moving a name
+# is not a reason to make every caller chase it.
+__all__ = [
+    "MASTER_DATA_NAME_LENGTH",
+    "MasterDataQuerySet",
+    "MasterDataRecord",
+    "UserProfile",
+    "UserSpecialty",
+    "UserType",
+]
 
 # One length for every master data name column. It was 64 on three tables
 # and 128 on two, which was arbitrary rather than meaningful: nothing in
 # the specification distinguishes them, so the next table had no basis for
 # choosing. The wider of the two, because widening loses nothing.
 MASTER_DATA_NAME_LENGTH = 128
-
-
-class MasterDataQuerySet(models.QuerySet):
-    """Queries every master data table answers.
-
-    Shared because DEC-009 gives them all the same deletion rule: a deleted
-    row is deactivated, leaves the lists and stays resolvable.
-    """
-
-    def active(self) -> MasterDataQuerySet:
-        """The types that still appear in lists and drop-downs.
-
-        A deleted type is marked inactive rather than removed (DEC-009), so
-        that a user who was assigned it still resolves.
-        """
-        return self.filter(is_active=True)
-
-
-class MasterDataRecord(models.Model):
-    """What every master data table in the application has in common.
-
-    Seven pages of the specification describe the same table seven times, and
-    six of them are built. What they genuinely share is small: they can be
-    deactivated rather than deleted (DEC-009), they know when they were
-    created, they answer objects.active(), and they print as their name.
-
-    Deliberately not here:
-
-    - name, because each table labels it in its own words - "Status Nomi",
-      "Specialty Nomi", "Category Nomi" - and a shared field with a generic
-      label would be worse than a line per table. The length is standard
-      across them, which is the part that was arbitrary.
-    - badge_colour and position, which only the two status tables have. A
-      status list has a progression and a colour; a list of specialties does
-      not.
-
-    category_number is here because DEC-023 gives it one meaning everywhere it
-    appears, and optional is the common case. Mahsulot Turlari overrides it:
-    there it is required and unique, because the supplied form calls it a code
-    and TASK-UZK-046 reports by it.
-
-    A subclass must declare name. __str__ reads it, which is the one thing
-    this base assumes rather than provides.
-    """
-
-    category_number = models.PositiveIntegerField(
-        "Category Number",
-        null=True,
-        blank=True,
-        help_text="Six digits when present (DEC-023).",
-    )
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    objects = MasterDataQuerySet.as_manager()
-
-    class Meta:
-        abstract = True
-
-    def __str__(self) -> str:
-        return self.name
 
 
 class UserType(MasterDataRecord):
@@ -115,9 +71,8 @@ class UserType(MasterDataRecord):
 class UserProfile(models.Model):
     """The department's own facts about an account.
 
-    Today that is the user's type. TASK-UZK-013 adds the contract-edit
-    permission and TASK-UZK-014 the specialty, both of which belong to the
-    person rather than to the login.
+    Today that is the user's type, their department and what they are
+    permitted to edit - all facts about the person rather than the login.
     """
 
     user = models.OneToOneField(
@@ -132,6 +87,20 @@ class UserProfile(models.Model):
         null=True,
         blank=True,
         help_text="A user with no type can open nothing that a role protects.",
+    )
+    department = models.ForeignKey(
+        "reference.Department",
+        on_delete=models.PROTECT,
+        related_name="users",
+        null=True,
+        blank=True,
+        help_text=(
+            "DEC-018: every user belongs to a department, and the Xarid "
+            "Arizasi form fills it in from whoever is signed in. Nullable so "
+            "that the users who existed before departments did still save; "
+            "whether the Users page should insist on one is a question for "
+            "the customer."
+        ),
     )
     phone_number = models.CharField(max_length=32, blank=True)
     may_edit_contracts = models.BooleanField(

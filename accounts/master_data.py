@@ -261,7 +261,7 @@ class MasterDataPage:
     def __init__(
         self,
         *,
-        model: type[models.Model],
+        model: type[MasterDataRecord],
         form_class: type[MasterDataForm],
         template_name: str,
         url_name: str,
@@ -270,9 +270,11 @@ class MasterDataPage:
         """Describe one page.
 
         Args:
-            model: the master data table this page maintains. It must carry
-                is_active and answer objects.active(), which is what DEC-009
-                deletion and every drop-down are built on.
+            model: the master data table this page maintains. The base is
+                what promises objects.active() and the DEC-009 deletion this
+                page is built on; before TASK-UZK-020 the requirement could
+                only be written here, because the base lived in a module this
+                one could not import.
             form_class: the form that captures one row.
             template_name: the template to render, which reads
                 context_object_name and edited_record.
@@ -301,7 +303,7 @@ class MasterDataPage:
         self,
         request: HttpRequest,
         form: MasterDataForm,
-        edited_record: models.Model | None = None,
+        edited_record: MasterDataRecord | None = None,
     ) -> HttpResponse:
         """Render the page with the given form, filled in when editing.
 
@@ -318,7 +320,7 @@ class MasterDataPage:
             },
         )
 
-    def _active_record(self, pk: int | str) -> models.Model:
+    def _active_record(self, pk: int | str) -> MasterDataRecord:
         """One row that has not been deleted, or a 404.
 
         A deleted row answers 404 rather than 403: it has left the page, and
@@ -372,3 +374,64 @@ class MasterDataPage:
         deactivate(self._active_record(pk))
 
         return redirect(self.url_name)
+
+
+class MasterDataQuerySet(models.QuerySet):
+    """Queries every master data table answers.
+
+    Shared because DEC-009 gives them all the same deletion rule: a deleted
+    row is deactivated, leaves the lists and stays resolvable.
+    """
+
+    def active(self) -> MasterDataQuerySet:
+        """The types that still appear in lists and drop-downs.
+
+        A deleted type is marked inactive rather than removed (DEC-009), so
+        that a user who was assigned it still resolves.
+        """
+        return self.filter(is_active=True)
+
+
+class MasterDataRecord(models.Model):
+    """What every master data table in the application has in common.
+
+    Seven pages of the specification describe the same table seven times, and
+    six of them are built. What they genuinely share is small: they can be
+    deactivated rather than deleted (DEC-009), they know when they were
+    created, they answer objects.active(), and they print as their name.
+
+    Deliberately not here:
+
+    - name, because each table labels it in its own words - "Status Nomi",
+      "Specialty Nomi", "Category Nomi" - and a shared field with a generic
+      label would be worse than a line per table. The length is standard
+      across them, which is the part that was arbitrary.
+    - badge_colour and position, which only the two status tables have. A
+      status list has a progression and a colour; a list of specialties does
+      not.
+
+    category_number is here because DEC-023 gives it one meaning everywhere it
+    appears, and optional is the common case. Mahsulot Turlari overrides it:
+    there it is required and unique, because the supplied form calls it a code
+    and TASK-UZK-046 reports by it.
+
+    A subclass must declare name. __str__ reads it, which is the one thing
+    this base assumes rather than provides.
+    """
+
+    category_number = models.PositiveIntegerField(
+        "Category Number",
+        null=True,
+        blank=True,
+        help_text="Six digits when present (DEC-023).",
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = MasterDataQuerySet.as_manager()
+
+    class Meta:
+        abstract = True
+
+    def __str__(self) -> str:
+        return self.name

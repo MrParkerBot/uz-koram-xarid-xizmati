@@ -22,6 +22,7 @@ from django.db import transaction
 from django.utils.text import slugify
 
 from accounts.models import UserProfile, UserType
+from reference.models import Department
 
 MAXIMUM_USERNAME_ATTEMPTS = 1000
 
@@ -79,6 +80,16 @@ class UserAdministrationForm(forms.Form):
         queryset=UserType.objects.none(),
         required=False,
     )
+    department = forms.ModelChoiceField(
+        label="Bo`lim",
+        queryset=Department.objects.none(),
+        required=False,
+        help_text=(
+            "DEC-018 says everybody belongs to one, but the field is optional "
+            "here: the users who existed before departments did have none, "
+            "and refusing to save them would be worse than the gap."
+        ),
+    )
 
     def __init__(self, *args, edited_user: AbstractBaseUser | None = None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -86,6 +97,9 @@ class UserAdministrationForm(forms.Form):
         # Resolved at construction rather than at import, so a type added
         # through the User Types page appears without a restart.
         self.fields["user_type"].queryset = UserType.objects.active()
+        # Both resolved at construction rather than at import, so a type or a
+        # department added through its own page appears without a restart.
+        self.fields["department"].queryset = Department.objects.active()
 
     @property
     def is_creating(self) -> bool:
@@ -128,8 +142,9 @@ class UserAdministrationForm(forms.Form):
 
         profile, _ = UserProfile.objects.get_or_create(user=user)
         profile.user_type = self.cleaned_data["user_type"]
+        profile.department = self.cleaned_data["department"]
         profile.phone_number = self.cleaned_data["phone_number"]
-        profile.save(update_fields=["user_type", "phone_number"])
+        profile.save(update_fields=["user_type", "department", "phone_number"])
 
         return user
 
@@ -144,5 +159,6 @@ class UserAdministrationForm(forms.Form):
                 "last_name": user.last_name,
                 "phone_number": profile.phone_number,
                 "user_type": profile.user_type_id,
+                "department": profile.department_id,
             },
         )

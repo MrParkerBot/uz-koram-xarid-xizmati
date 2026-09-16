@@ -51,6 +51,7 @@ page says who holds it above the table.
             <th>To'liq Ism</th>
             <th>Telefon</th>
             <th>User Type</th>
+            <th>Bo'lim</th>
             <th style="text-align:center;">Tahrirlash ruxsati</th>
             <th style="text-align:center;">Amallar</th>
           </tr></thead>
@@ -69,6 +70,7 @@ page says who holds it above the table.
               </td>
               <td class="mono-cell">{% if listed_user.profile.phone_number %}+998 {{ listed_user.profile.phone_number }}{% endif %}</td>
               <td>{% if listed_user.profile.user_type %}<span class="badge badge-primary">{{ listed_user.profile.user_type.name }}</span>{% else %}<span class="muted small">Belgilanmagan</span>{% endif %}</td>
+              <td>{% if listed_user.profile.department %}{{ listed_user.profile.department.name }}{% else %}<span class="muted small">Belgilanmagan</span>{% endif %}</td>
               <td style="text-align:center;">
                 <form method="post" action="{% url 'user-contract-editing' listed_user.pk %}" id="contract-editing-{{ listed_user.pk }}">
                   {% csrf_token %}
@@ -88,7 +90,7 @@ page says who holds it above the table.
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="6" class="muted" style="text-align:center;">Hozircha foydalanuvchi yo'q.</td></tr>
+            <tr><td colspan="7" class="muted" style="text-align:center;">Hozircha foydalanuvchi yo'q.</td></tr>
           {% endfor %}
           </tbody>
         </table>
@@ -151,6 +153,17 @@ page says who holds it above the table.
           </select>
           <div class="form-error">{{ form.user_type.errors|striptags }}</div>
         </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ form.department.id_for_label }}">Bo'lim</label>
+          <select class="form-control" name="{{ form.department.html_name }}" id="{{ form.department.id_for_label }}">
+            <option value="">Belgilanmagan</option>
+            {% for value, label in form.fields.department.choices %}{% if value %}<option value="{{ value }}"{% if form.department.value|stringformat:'s' == value|stringformat:'s' %} selected{% endif %}>{{ label }}</option>{% endif %}{% endfor %}
+          </select>
+          <div class="form-hint">Xarid Arizasi formasi shu bo'limni avtomatik to'ldiradi (DEC-018).</div>
+          <div class="form-error">{{ form.department.errors|striptags }}</div>
+        </div>
+      </div>
+      <div class="form-row">
         <div class="form-group">
           <label class="form-label">Tahrirlash Ruxsati</label>
           <div class="toggle-wrap" style="margin-top:10px;">

@@ -13,6 +13,7 @@ from collections.abc import Iterable
 from django.contrib.auth.models import AbstractBaseUser, AnonymousUser
 
 from accounts.models import UserProfile, UserType
+from reference.models import Department
 
 # DEC-013. The spellings are the department's own, and they are what the rows
 # in the database are called - a rename in one place without the other would
@@ -97,3 +98,34 @@ def assign_user_type(user: AbstractBaseUser, user_type: UserType | None) -> User
     profile.user_type = user_type
     profile.save(update_fields=["user_type"])
     return profile
+
+
+def department_of(
+    user: AbstractBaseUser | AnonymousUser | None,
+) -> Department | None:
+    """The department this user belongs to, or None when they have none.
+
+    The same three answers user_type_of gives, reached the same way: the
+    department, None for somebody who has not been given one, and None for an
+    anonymous visitor - so a caller cannot forget to handle the last two. A
+    department that was deleted answers None as well, because DEC-009 keeps
+    the row for the records that already point at it, not to keep offering it.
+
+    DEC-018 has the Xarid Arizasi form fill the department in from whoever is
+    signed in, and TASK-UZK-030 asks here rather than reaching into the
+    profile itself.
+    """
+    if user is None or not getattr(user, "is_authenticated", False):
+        return None
+
+    profile = (
+        UserProfile.objects.filter(user=user).select_related("department").first()
+    )
+    if profile is None:
+        return None
+
+    department = profile.department
+    if department is None or not department.is_active:
+        return None
+
+    return department

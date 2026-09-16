@@ -37,7 +37,7 @@ def listed_users() -> QuerySet:
     return (
         get_user_model()
         .objects.filter(is_active=True)
-        .select_related("profile", "profile__user_type")
+        .select_related("profile", "profile__user_type", "profile__department")
         .order_by("first_name", "last_name", "id")
     )
 

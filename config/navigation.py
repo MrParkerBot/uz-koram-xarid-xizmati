@@ -52,6 +52,10 @@ SIDEBAR_NAVIGATION: tuple[NavigationGroup, ...] = (
             NavigationEntry(
                 "Shartnoma Turi", "bi-file-earmark-text", "shartnoma-turi"
             ),
+            # Not in the supplied sidebar: the specification gives departments
+            # no page at all, and DEC-018 makes them Admin-maintained master
+            # data. Without this they could only be created from a shell.
+            NavigationEntry("Bo'limlar", "bi-diagram-3", "bolim-royhati"),
         ),
     ),
     NavigationGroup(

@@ -97,6 +97,9 @@ ADMIN_ONLY_PAGES = frozenset(
         "shartnoma-status",
         "mahsulot-turlari",
         "shartnoma-turi",
+        # DEC-018. Not a page the specification describes; see
+        # reference/department_views.py for why it exists.
+        "bolim-royhati",
         "integration",
     }
 )
