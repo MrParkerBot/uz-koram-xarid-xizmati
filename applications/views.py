@@ -774,19 +774,30 @@ def approvals_for(user) -> QuerySet[PurchaseApplication]:
 def awaiting_approval(request: HttpRequest, pk: int) -> PurchaseApplication:
     """The request this person may decide, or a refusal.
 
+    Two different refusals, and telling them apart is the point. Somebody who
+    could never decide this request is denied. Somebody for whom it has simply
+    moved on - a colleague got there first, or they double clicked - had the
+    permission they needed, and what changed is the record. The #26 review
+    settled that for accept_application, and the #44 review found this route
+    answering Forbidden to both.
+
     Raises:
-        PermissionDenied: when the request is not waiting for them. They may
-            open the page, so this is about the record rather than the page -
-            which is why the URL wrapper is not what answers.
+        PermissionDenied: when this person could not decide this request at
+            any step - the wrong role, or another department's head.
         Http404: when there is no such request.
     """
     application = get_object_or_404(PurchaseApplication, pk=pk)
 
-    if not application.awaits(request.user):
+    if not (
+        application.awaits(request.user) or application.moved_past(request.user)
+    ):
         raise PermissionDenied(
-            f"{application.xarid_raqami} is not waiting for {request.user}."
+            f"{application.xarid_raqami} is not {request.user} to decide."
         )
 
+    # Either it is waiting for them, or it has moved while their page sat
+    # open. The second is not a permission problem, so the view says what
+    # happened and sends them back to a queue showing the truth.
     return application
 
 
@@ -805,10 +816,11 @@ def approve_purchase_application(
     try:
         approved = application.approve(by=request.user)
     except ValueError:
-        messages.error(
+        # Reachable only for a request that has moved on, because anybody who
+        # could never decide it was refused above.
+        messages.info(
             request,
-            f"{application.xarid_raqami} tasdiqlanmadi: ariza sizning "
-            "tasdig`ingizni kutmayapti.",
+            f"{application.xarid_raqami} allaqachon hal qilingan.",
         )
         return redirect("xarid-ariza")
 
@@ -843,11 +855,13 @@ def reject_purchase_application(
             by=request.user, comment=request.POST.get("inkor_izohi", "")
         )
     except ValueError:
-        if not application.awaits_approval:
-            messages.error(
+        if not application.awaits(request.user):
+            # Either it has been decided, or it has moved to the next step
+            # while this page sat open. Both are "not yours to decide now"
+            # rather than "not yours ever".
+            messages.info(
                 request,
-                f"{application.xarid_raqami} inkor etilmadi: ariza "
-                "allaqachon hal qilingan.",
+                f"{application.xarid_raqami} allaqachon hal qilingan.",
             )
         else:
             messages.error(
