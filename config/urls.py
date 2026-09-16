@@ -45,6 +45,7 @@ from applications.views import (
     accepted_list,
     application_create,
     application_pdf,
+    approve_purchase_application,
     assign_application,
     assigned_list,
     incoming_list,
@@ -52,6 +53,7 @@ from applications.views import (
     purchase_application_list,
     purchase_application_pdf,
     reject_application,
+    reject_purchase_application,
     set_application_status,
 )
 from reference.ariza_status_views import ariza_status_page
@@ -389,6 +391,21 @@ urlpatterns = [
         "xarid-ariza/yaratish/",
         require_page_permission("xarid-ariza")(purchase_application_create),
         name="xarid-ariza-yaratish",
+    ),
+    # DEC-016's approval chain (TASK-UZK-031). Both actions are offered in
+    # the queue on the Xarid Arizasi page and answer to its permission;
+    # whether this person is the one the request is waiting for is decided in
+    # the view, because both approvers may open the page and only one of them
+    # is waiting on any given request.
+    path(
+        "xarid-ariza/<int:pk>/tasdiqlash/",
+        require_page_permission("xarid-ariza")(approve_purchase_application),
+        name="xarid-ariza-tasdiqlash",
+    ),
+    path(
+        "xarid-ariza/<int:pk>/inkor/",
+        require_page_permission("xarid-ariza")(reject_purchase_application),
+        name="xarid-ariza-inkor",
     ),
     path(
         "xarid-ariza/<int:pk>/pdf/",
