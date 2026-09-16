@@ -19,7 +19,7 @@ from __future__ import annotations
 from django import forms
 
 from applications.attachments import validate_pdf
-from applications.models import Application, ApplicationItem
+from applications.models import SMALLEST_QUANTITY, Application, ApplicationItem
 
 # One row on an empty form, so the person sees a line to fill in rather than
 # an order with nothing in it. More rows come from the plus button.
@@ -104,8 +104,15 @@ class ApplicationItemForm(forms.ModelForm):
             "buyurtma_nomi": forms.TextInput(
                 attrs={"class": "form-control", "placeholder": "Item nomi"}
             ),
+            # The browser is told the same floor the column enforces, so
+            # somebody typing a negative is stopped before they submit rather
+            # than after. The rule lives on the column; this is the courtesy.
             "buyurtma_soni": forms.NumberInput(
-                attrs={"class": "form-control", "step": "0.001", "min": "0"}
+                attrs={
+                    "class": "form-control",
+                    "step": "0.001",
+                    "min": str(SMALLEST_QUANTITY),
+                }
             ),
             "olchov_birligi": forms.TextInput(
                 attrs={"class": "form-control", "placeholder": "ta"}

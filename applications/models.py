@@ -19,6 +19,7 @@ from collections.abc import Mapping, Sequence
 from datetime import date
 from decimal import Decimal
 
+from django.core.validators import MinValueValidator
 from django.db import models, transaction
 from django.utils import timezone
 
@@ -27,6 +28,12 @@ from applications.attachments import application_pdf_field
 # DEC-022: ARZ-2026-00001, five digits, resetting each year.
 ARIZA_NUMBER_PREFIX = "ARZ"
 ARIZA_NUMBER_DIGITS = 5
+
+# The smallest order anybody can place: one thousandth, which is the finest
+# the quantity column stores. Written as the smallest storable amount rather
+# than as zero, so that the floor moves with decimal_places if that ever
+# changes, and so that an order for none of something is refused too.
+SMALLEST_QUANTITY = Decimal("0.001")
 
 
 def next_ariza_raqami(today: date | None = None) -> str:
@@ -428,8 +435,18 @@ class ApplicationItem(models.Model):
     buyurtma_nomi = models.CharField("Buyurtma nomi", max_length=255)
     # Decimal rather than float: REQ-ARIZA-003 allows a fractional quantity,
     # and a quantity that is nearly 0.3 is not a quantity anybody ordered.
+    #
+    # The floor is on the column rather than on the form, because the rule is
+    # about what an order line may be and not about what one page accepts.
+    # The #33 review found the form's min attribute doing this job alone,
+    # which meant a posted -5 was stored as an order for minus five bolts.
+    # SMALLEST_QUANTITY excludes zero as well: an order for none of something
+    # is not an order, it is a line somebody meant to delete.
     buyurtma_soni = models.DecimalField(
-        "Buyurtma soni", max_digits=12, decimal_places=3
+        "Buyurtma soni",
+        max_digits=12,
+        decimal_places=3,
+        validators=[MinValueValidator(SMALLEST_QUANTITY)],
     )
     olchov_birligi = models.CharField(
         "O`lchov birligi",
@@ -446,6 +463,21 @@ class ApplicationItem(models.Model):
         ordering = ("id",)
         verbose_name = "Ariza qatori"
         verbose_name_plural = "Ariza qatorlari"
+        # The validator above is what a person filling in the form sees, and
+        # it only runs when something calls full_clean(). raise_application()
+        # does not - it bulk_creates - so the validator alone would leave the
+        # #33 finding half fixed: refused on the page, accepted from code.
+        # The constraint is the rule itself, held by the database on every
+        # path into the table.
+        constraints = (
+            models.CheckConstraint(
+                condition=models.Q(buyurtma_soni__gte=SMALLEST_QUANTITY),
+                name="order_line_quantity_is_positive",
+                violation_error_message=(
+                    "Buyurtma soni noldan katta bo`lishi kerak."
+                ),
+            ),
+        )
 
     def __str__(self) -> str:
         return f"{self.buyurtma_nomi} - {self.soni_display} {self.olchov_birligi}"
