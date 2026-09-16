@@ -22,10 +22,11 @@ TASK-UZK-026 and TASK-UZK-036 attach their own documents and reuse this.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from django.conf import settings
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.core.files.storage import FileSystemStorage
 from django.db import models
 from django.http import FileResponse, Http404
@@ -58,6 +59,42 @@ class UnaddressableStorage(FileSystemStorage):
     here makes that the only way rather than the intended way.
     """
 
+    @property
+    def base_location(self) -> str:
+        """Where the files are, read now rather than remembered.
+
+        FileSystemStorage caches this, and a callable storage is evaluated
+        once when Django builds the model field at import, so passing
+        location=settings.ATTACHMENT_ROOT pins the directory for the life of
+        the process. Nothing can move it afterwards - which reads as harmless
+        until a test overrides ATTACHMENT_ROOT, is told nothing, and writes
+        its uploads into the real directory while a temporary one is created
+        and cleaned up empty beside it.
+
+        Reading the setting on each access makes override_settings work the
+        way whoever wrote it expected, and costs one attribute lookup per
+        file operation.
+
+        Raises:
+            ImproperlyConfigured: when ATTACHMENT_ROOT is unset. Refusing is
+                the only safe answer: str(None) is the directory "None",
+                which would be created beside manage.py and filled with
+                customer documents.
+        """
+        root = settings.ATTACHMENT_ROOT
+        if not root:
+            raise ImproperlyConfigured(
+                "ATTACHMENT_ROOT must name the directory attachments are "
+                "stored in (DEC-019)."
+            )
+
+        return str(root)
+
+    @property
+    def location(self) -> str:
+        """The absolute form of base_location, recomputed with it."""
+        return os.path.abspath(self.base_location)
+
     def url(self, name: str) -> str:
         """Refuse to produce an address for an attachment.
 
@@ -72,8 +109,13 @@ class UnaddressableStorage(FileSystemStorage):
 
 
 def attachment_storage() -> UnaddressableStorage:
-    """Storage rooted outside anything the web server publishes."""
-    return UnaddressableStorage(location=settings.ATTACHMENT_ROOT)
+    """Storage rooted outside anything the web server publishes.
+
+    Given no location, so that the storage reads ATTACHMENT_ROOT when it is
+    used rather than when this is called. Django calls it once, while it is
+    building the model field at import.
+    """
+    return UnaddressableStorage()
 
 
 def validate_pdf(uploaded) -> None:

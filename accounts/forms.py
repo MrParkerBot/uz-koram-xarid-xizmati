@@ -18,7 +18,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractBaseUser
 from django.contrib.auth.password_validation import validate_password
 from django.core.validators import RegexValidator
-from django.db import transaction
+from django.db import models, transaction
 from django.utils.text import slugify
 
 from accounts.models import UserProfile, UserType
@@ -51,6 +51,32 @@ def derive_username(first_name: str, last_name: str) -> str:
             return candidate
 
     raise ValueError(f"Could not derive a free username from {stem!r}.")
+
+
+
+def still_offered(manager, assigned_pk: int | None):
+    """The active rows, plus the one already assigned however deleted it is.
+
+    A drop-down that offers only the active rows silently loses a deleted
+    assignment: the select has no option for it, so an edit that touched
+    nothing else posts an empty value and the field, being optional, is
+    overwritten with None. That is the opposite of what DEC-009 deletion
+    promises - a record already pointing at a deleted row keeps resolving -
+    and it costs somebody their department, or their user type and with it
+    every page they could open, without anybody choosing to.
+
+    So the row somebody already holds stays in their own drop-down. It is not
+    offered to anybody else, because it is not in the active set, which is the
+    whole point of DEC-009: the assignment survives, the choice is gone.
+
+    Args:
+        manager: the master data manager to ask, such as UserType.objects.
+        assigned_pk: the row this user currently holds, or None.
+    """
+    if assigned_pk is None:
+        return manager.active()
+
+    return manager.filter(models.Q(is_active=True) | models.Q(pk=assigned_pk))
 
 
 class UserAdministrationForm(forms.Form):
@@ -94,12 +120,23 @@ class UserAdministrationForm(forms.Form):
     def __init__(self, *args, edited_user: AbstractBaseUser | None = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.edited_user = edited_user
-        # Resolved at construction rather than at import, so a type added
-        # through the User Types page appears without a restart.
-        self.fields["user_type"].queryset = UserType.objects.active()
-        # Both resolved at construction rather than at import, so a type or a
+
+        profile = self.profile_being_edited()
+        # Resolved at construction rather than at import, so a type or a
         # department added through its own page appears without a restart.
-        self.fields["department"].queryset = Department.objects.active()
+        self.fields["user_type"].queryset = still_offered(
+            UserType.objects, profile.user_type_id if profile else None
+        )
+        self.fields["department"].queryset = still_offered(
+            Department.objects, profile.department_id if profile else None
+        )
+
+    def profile_being_edited(self) -> UserProfile | None:
+        """The profile of the user this form edits, or None when creating one."""
+        if self.edited_user is None:
+            return None
+
+        return UserProfile.objects.filter(user=self.edited_user).first()
 
     @property
     def is_creating(self) -> bool:

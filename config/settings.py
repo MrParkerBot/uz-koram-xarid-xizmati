@@ -158,8 +158,8 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 # that asks the permission matrix first.
 #
 # Outside BASE_DIR / "static" and outside STATIC_ROOT, so nothing the static
-# machinery collects or serves can reach it. config/test_attachment_root.py
-# fails if that stops being true.
+# machinery collects or serves can reach it. AttachmentRootTests in
+# applications/test_attachments.py fails if that stops being true.
 ATTACHMENT_ROOT = BASE_DIR / "attachments"
 
 # The Bootstrap build, icon font and JavaScript supplied with the technical

@@ -12,11 +12,13 @@ download does.
 
 from __future__ import annotations
 
+import os
+import tempfile
 from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -113,6 +115,52 @@ class StorageLocationTests(TestCase):
             attachment_storage().url("arizalar/2026/03/ariza.pdf")
 
 
+class StorageRootTests(TestCase):
+    """The storage reads ATTACHMENT_ROOT when it is used, not at import.
+
+    It used to be given the directory at construction, and Django builds a
+    callable storage once while it is building the model field - so the path
+    was fixed for the life of the process and override_settings could not
+    move it. Nothing said so. A test that pointed ATTACHMENT_ROOT at a
+    temporary directory was quietly writing into the real one, and cleaning
+    up an empty temporary directory afterwards.
+
+    These are the tests that would have caught that.
+    """
+
+    def test_the_storage_follows_the_setting(self) -> None:
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            self.settings(ATTACHMENT_ROOT=directory),
+        ):
+            self.assertEqual(
+                attachment_storage().location, os.path.abspath(directory)
+            )
+
+    def test_a_saved_file_lands_under_the_overridden_root(self) -> None:
+        # The property that matters. Asserting on .location alone would still
+        # pass if something else had pinned the path a file actually goes to.
+        real_root = Path(settings.ATTACHMENT_ROOT)
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            self.settings(ATTACHMENT_ROOT=directory),
+        ):
+            stored = attachment_storage().save("arizalar/probe.pdf", a_pdf())
+
+            self.assertTrue((Path(directory) / stored).exists())
+            self.assertFalse((real_root / stored).exists())
+
+    def test_an_unset_root_is_refused(self) -> None:
+        # str(None) would be the directory "None", created beside manage.py
+        # and filled with customer documents.
+        with (
+            self.settings(ATTACHMENT_ROOT=None),
+            self.assertRaises(ImproperlyConfigured),
+        ):
+            self.assertIsNone(attachment_storage().location)
+
+
 @override_settings(ATTACHMENT_ROOT=None)
 class DownloadTestCase(TestCase):
     """The download route, which is the only way to a stored file."""
@@ -138,10 +186,22 @@ class DownloadTestCase(TestCase):
         )
         self.url = reverse("ariza-pdf", args=[self.application.pk])
 
+    def download(self):
+        """Fetch the attachment, closing the file handle when the test ends.
+
+        A FileResponse holds the file open until the response is closed, and
+        the test client does not close it. On Windows that open handle stops
+        the temporary directory being removed - which only became visible
+        once the storage started writing where these tests say it does.
+        """
+        response = self.client.get(self.url)
+        self.addCleanup(response.close)
+        return response
+
     def test_the_file_downloads(self) -> None:
         self.client.force_login(make_user(ADMIN))
 
-        response = self.client.get(self.url)
+        response = self.download()
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(b"".join(response.streaming_content), PDF_BYTES)
@@ -149,7 +209,7 @@ class DownloadTestCase(TestCase):
     def test_it_is_offered_as_a_download_under_the_application_number(self):
         self.client.force_login(make_user(ADMIN))
 
-        response = self.client.get(self.url)
+        response = self.download()
 
         self.assertIn("attachment", response["Content-Disposition"])
         self.assertIn(
@@ -178,24 +238,24 @@ class DownloadTestCase(TestCase):
         self.application.pdf = ""
         self.application.save(update_fields=["pdf"])
 
-        self.assertEqual(self.client.get(self.url).status_code, 404)
+        self.assertEqual(self.download().status_code, 404)
 
     def test_somebody_who_may_open_the_page_may_download(self) -> None:
         self.client.force_login(make_user(MENEJER))
 
-        self.assertEqual(self.client.get(self.url).status_code, 200)
+        self.assertEqual(self.download().status_code, 200)
 
     def test_somebody_who_may_not_open_the_page_may_not_download(self) -> None:
         # The whole point of DEC-019's permission check: the attachment is
         # not a back door into a page somebody may not open.
         self.client.force_login(make_user(USERS))
 
-        response = self.client.get(self.url)
+        response = self.download()
 
         self.assertEqual(response.status_code, 403)
 
     def test_an_anonymous_visitor_may_not_download(self) -> None:
-        self.assertEqual(self.client.get(self.url).status_code, 302)
+        self.assertEqual(self.download().status_code, 302)
 
 
 class AttachmentFollowsTheRecordTests(DownloadTestCase):
@@ -214,22 +274,22 @@ class AttachmentFollowsTheRecordTests(DownloadTestCase):
     def test_a_direktor_may_download_an_incoming_application(self) -> None:
         self.client.force_login(make_user(DIREKTOR))
 
-        self.assertEqual(self.client.get(self.url).status_code, 200)
+        self.assertEqual(self.download().status_code, 200)
 
     def test_a_direktor_may_not_download_it_once_it_is_accepted(self) -> None:
         self.client.force_login(make_user(DIREKTOR))
         self.accept()
 
-        self.assertEqual(self.client.get(self.url).status_code, 403)
+        self.assertEqual(self.download().status_code, 403)
 
     def test_a_manager_may_download_it_at_either_stage(self) -> None:
         # Menejer may open both pages, so the application never leaves their
         # sight and the attachment never leaves their reach.
         self.client.force_login(make_user(MENEJER))
 
-        self.assertEqual(self.client.get(self.url).status_code, 200)
+        self.assertEqual(self.download().status_code, 200)
         self.accept()
-        self.assertEqual(self.client.get(self.url).status_code, 200)
+        self.assertEqual(self.download().status_code, 200)
 
     def test_nobody_may_download_a_rejected_application(self) -> None:
         # No page lists a rejected application yet, so there is no page whose
@@ -238,4 +298,4 @@ class AttachmentFollowsTheRecordTests(DownloadTestCase):
         self.application.stage = Application.Stage.REJECTED
         self.application.save(update_fields=["stage"])
 
-        self.assertEqual(self.client.get(self.url).status_code, 403)
+        self.assertEqual(self.download().status_code, 403)

@@ -26,10 +26,13 @@ def next_ariza_raqami(today: date | None = None) -> str:
     """The next application number for this year (DEC-022).
 
     The sequence restarts annually, so the number is allocated by looking at
-    what this year already has rather than by a global counter. Called inside
-    the same transaction as the save, so two applications created at once
-    cannot be handed the same number - and the unique column is what makes
-    that a failure rather than a duplicate if they somehow are.
+    what this year already has rather than by a global counter. That read
+    takes no lock, so two transactions running at once can see the same
+    highest number and build the same candidate; being inside one transaction
+    with the save does not prevent it. The unique column is what does - the
+    second writer gets an IntegrityError rather than a duplicate number,
+    which is the right way round, and a caller that expects to survive a
+    collision has to retry.
 
     The highest number is found by sorting as text, which is correct only
     because the sequence is zero-padded to a fixed width: ARZ-2026-00009 sorts
