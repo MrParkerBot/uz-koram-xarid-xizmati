@@ -79,16 +79,16 @@ class CreateApplicationTests(TestCase):
         form.update(overrides)
         return form
 
-    def create(self, lines: int = 1, pdf=..., **overrides):
-        """Submit the form, with a valid PDF unless one is given."""
+    def create(self, lines: int = 1, pdf=None, **overrides):
+        """Submit the form with an attachment: the given one, or a valid one."""
         payload = self.payload(lines, **overrides)
-        if pdf is not ...:
-            if pdf is not None:
-                payload["pdf"] = pdf
-        else:
-            payload["pdf"] = a_pdf()
+        payload["pdf"] = pdf if pdf is not None else a_pdf()
 
         return self.client.post(self.url, payload)
+
+    def create_without_pdf(self, lines: int = 1, **overrides):
+        """Submit the form with no attachment at all (REQ-ARIZA-009)."""
+        return self.client.post(self.url, self.payload(lines, **overrides))
 
     def test_one_line_creates_one_application(self) -> None:
         response = self.create()
@@ -174,14 +174,14 @@ class CreateApplicationTests(TestCase):
         self.assertIn(Application.objects.get().ariza_raqami, page)
 
     def test_without_the_pdf_nothing_is_created(self) -> None:
-        response = self.create(pdf=None)
+        response = self.create_without_pdf()
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Application.objects.exists())
         self.assertFalse(ApplicationItem.objects.exists())
 
     def test_the_refusal_says_the_pdf_is_missing(self) -> None:
-        response = self.create(pdf=None)
+        response = self.create_without_pdf()
 
         self.assertContains(response, "PDF ilova yuklanishi shart")
 
@@ -213,12 +213,12 @@ class CreateApplicationTests(TestCase):
         self.assertFalse(ApplicationItem.objects.exists())
 
     def test_a_refused_submission_comes_back_with_what_was_typed(self) -> None:
-        response = self.create(pdf=None, buyurtmachi_ismi="Dilnoza Yusupova")
+        response = self.create_without_pdf(buyurtmachi_ismi="Dilnoza Yusupova")
 
         self.assertContains(response, "Dilnoza Yusupova")
 
     def test_the_form_reopens_when_it_is_refused(self) -> None:
-        response = self.create(pdf=None)
+        response = self.create_without_pdf()
 
         self.assertContains(response, 'id="create-modal" class="modal-overlay"')
 
