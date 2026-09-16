@@ -10,10 +10,12 @@ password reaching a rendered page.
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.request import urlopen
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.staticfiles import finders
+from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.test import TestCase
 from django.urls import reverse
 from django.utils.crypto import get_random_string
@@ -337,17 +339,33 @@ class ClosedApplicationTests(AuthenticationTestCase):
         self.assertRedirects(response, target)
 
 
-class AnonymousAssetTests(TestCase):
-    """The login page has to be able to style itself."""
+class AnonymousAssetTests(StaticLiveServerTestCase):
+    """The login page has to be able to style itself.
 
-    def test_the_stylesheets_the_login_page_needs_are_not_behind_the_login(
+    Fetched over the wire without a session rather than checked in the
+    markup: a page that merely asks for a stylesheet looks identical whether
+    the stylesheet is served or redirected to the login form.
+    """
+
+    host = "127.0.0.1"
+
+    def test_the_stylesheets_the_login_page_needs_are_served_anonymously(
         self,
     ) -> None:
-        # The assets are served outside the URL configuration, so the
-        # middleware does not see them - but a login page rendered without its
-        # stylesheet is a broken first impression, so it is worth asserting.
-        response = self.client.get(reverse("login"))
+        for asset in ("css/style.css", "css/bootstrap.min.css"):
+            with (
+                self.subTest(asset=asset),
+                urlopen(f"{self.live_server_url}/static/{asset}") as response,
+            ):
+                self.assertEqual(response.status, 200)
+                self.assertEqual(
+                    response.headers["Content-Type"].split(";")[0], "text/css"
+                )
+
+    def test_the_login_page_asks_for_those_stylesheets(self) -> None:
+        with urlopen(f"{self.live_server_url}{reverse('login')}") as response:
+            page = response.read().decode()
 
         for asset in ("css/style.css", "css/bootstrap.min.css"):
             with self.subTest(asset=asset):
-                self.assertContains(response, asset)
+                self.assertIn(asset, page)
