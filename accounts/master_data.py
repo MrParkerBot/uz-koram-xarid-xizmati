@@ -49,3 +49,37 @@ def deactivate(record) -> None:
     """
     record.is_active = False
     record.save(update_fields=["is_active"])
+
+
+class MasterDataForm(forms.ModelForm):
+    """The validation every master data form shares.
+
+    Two records must not share a name, and refusing a clash has to say which
+    of the two things happened: the name is in use, or the name belongs to a
+    record somebody deleted and therefore cannot see. Django's own message
+    says neither, and says it in English.
+
+    A second master data page made this shared; TASK-UZK-014 wrote it first.
+    """
+
+    NAME_ALREADY_USED = "Bu nom allaqachon mavjud."
+    NAME_HELD_BY_DELETED_RECORD = (
+        "Bu nom o'chirilgan yozuvga tegishli. Boshqa nom kiriting."
+    )
+
+    def clean_name(self) -> str:
+        """Refuse a name already taken, case-insensitively."""
+        name = self.cleaned_data["name"]
+
+        taken = self._meta.model.objects.filter(name__iexact=name)
+        if self.instance.pk is not None:
+            taken = taken.exclude(pk=self.instance.pk)
+
+        clash = taken.first()
+        if clash is None:
+            return name
+
+        if clash.is_active:
+            raise forms.ValidationError(self.NAME_ALREADY_USED)
+
+        raise forms.ValidationError(self.NAME_HELD_BY_DELETED_RECORD)

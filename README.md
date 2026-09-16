@@ -266,7 +266,16 @@ unique, so a deleted name cannot be entered again. Whether an administrator
 should be able to restore the old record instead is an open question for the
 customer.
 
-`User Specialty` (`TASK-UZK-014`) is the first of the eight.
+`User Specialty` (`TASK-UZK-014`) and `User Types` (`TASK-UZK-015`) are the
+first two of the eight, and `accounts/master_data.py` grew its shared name
+validation when the second one arrived.
+
+**User Types are also roles.** `accounts/permissions.py` decides what each type
+may open by name, so the six DEC-013 fixes cannot be renamed or deleted on that
+page: renaming one would detach it from every permission written against it and
+the user would simply lose access, with nothing anywhere saying why. Their
+badge colour and Category Number are editable like any other, and an
+installation may add types of its own freely.
 
 ## Templates
 
