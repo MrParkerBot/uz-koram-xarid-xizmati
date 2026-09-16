@@ -20,7 +20,7 @@ from django.views.decorators.http import require_POST
 
 from accounts.permissions import may_open
 from applications.attachments import attachment_response
-from applications.models import Application
+from applications.models import Application, DecisionRefused
 
 INCOMING_TEMPLATE = "pages/kelib-arizalar.html"
 
@@ -115,7 +115,7 @@ def accept_application(request: HttpRequest, pk: int) -> HttpResponse:
 
     try:
         accepted = application.accept(by=request.user)
-    except ValueError:
+    except DecisionRefused:
         messages.error(
             request,
             f"{application.ariza_raqami} qabul qilinmadi: ariza allaqachon "
@@ -152,12 +152,16 @@ def reject_application(request: HttpRequest, pk: int) -> HttpResponse:
         rejected = application.reject(
             by=request.user, comment=request.POST.get("inkor_izohi", "")
         )
-    except ValueError:
-        if not application.is_incoming:
-            # A decision was taken on this application by somebody else while
-            # the page sat open. Reported the way accept_application reports
-            # it, and for the reason the #26 review gave: the caller had the
-            # permission they needed, and what changed is the application.
+    except DecisionRefused as refused:
+        # Which refusal it was comes from the refusal itself. Asking the
+        # instance - is_incoming - made this branch depend on where the
+        # re-read sat inside reject(), which the #28 review objected to: an
+        # empty comment posted against an application a colleague had just
+        # accepted was reported as a missing comment.
+        if refused.was_already_decided:
+            # The caller had the permission they needed, and what changed is
+            # the application. The #26 review settled that this is a message
+            # rather than a Forbidden page.
             messages.error(
                 request,
                 f"{application.ariza_raqami} inkor etilmadi: ariza "
