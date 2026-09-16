@@ -12,8 +12,8 @@ the point:
 - The filter bar is inert. TASK-UZK-041 builds filtering for every table at
   once, and four controls that look like they work but do not would be worse
   than four that are visibly waiting.
-- Accept and Reject are the actions section 4.1 describes, and TASK-UZK-023
-  and TASK-UZK-024 wire them.
+- Reject is the action section 4.1 describes and TASK-UZK-024 wires it.
+  Accept is wired (TASK-UZK-023).
 
 DEC-016 also puts a requester, their Bo`lim Boshlig`i and a Direktor in front
 of this list. None of that is built either, so an application here is one that
@@ -95,7 +95,10 @@ somebody put into the database, not one that came through an approval chain.
               </td>
               <td class="mono-cell">{{ ariza.kelib_tushgan_sana|date:"Y-m-d" }}</td>
               <td style="text-align:center;white-space:nowrap;">
-                <button class="btn btn-outline-custom text-success btn-xs" disabled title="TASK-UZK-023 qabul qilishni quradi"><i class="bi bi-check-lg" aria-hidden="true"></i> Qabul</button>
+                <form method="post" action="{% url 'ariza-qabul' ariza.pk %}" style="display:inline;" data-confirm="{{ ariza.ariza_raqami }} qabul qilinsinmi?">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-outline-custom text-success btn-xs"><i class="bi bi-check-lg" aria-hidden="true"></i> Qabul</button>
+                </form>
                 <button class="btn btn-outline-custom text-danger btn-xs" disabled title="TASK-UZK-024 inkor etishni quradi"><i class="bi bi-x-lg" aria-hidden="true"></i> Inkor</button>
               </td>
             </tr>

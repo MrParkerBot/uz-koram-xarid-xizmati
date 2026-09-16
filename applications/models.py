@@ -14,6 +14,7 @@ from datetime import date
 from decimal import Decimal
 
 from django.db import models, transaction
+from django.utils import timezone
 
 from applications.attachments import application_pdf_field
 
@@ -120,8 +121,33 @@ class Application(models.Model):
             "DEC-016 approval chain that would identify them is not built."
         ),
     )
+    status = models.ForeignKey(
+        "reference.ArizaStatus",
+        on_delete=models.PROTECT,
+        related_name="applications",
+        null=True,
+        blank=True,
+        verbose_name="Status",
+        help_text=(
+            "What a person reads, beside the stage the workflow branches on. "
+            "Nullable because DEC-017 lets an administrator delete every "
+            "status, and a master data page must not be able to stop an "
+            "application being accepted."
+        ),
+    )
     kelib_tushgan_sana = models.DateTimeField(
         "Kelib tushgan sana", auto_now_add=True
+    )
+    qabul_qilingan_sana = models.DateTimeField(
+        "Qabul qilingan sana", null=True, blank=True
+    )
+    accepted_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.PROTECT,
+        related_name="accepted_applications",
+        null=True,
+        blank=True,
+        verbose_name="Qabul qilgan",
     )
     stage = models.CharField(
         max_length=16, choices=Stage.choices, default=Stage.INCOMING
@@ -155,6 +181,64 @@ class Application(models.Model):
             return quantity.quantize(Decimal(1))
 
         return quantity
+
+    @property
+    def is_incoming(self) -> bool:
+        """Whether this application is still waiting to be decided."""
+        return self.stage == self.Stage.INCOMING
+
+    @transaction.atomic
+    def accept(self, by) -> bool:
+        """Accept this application, once.
+
+        Moves it to the ACCEPTED stage, stamps the date TASK-UZK-025 shows as
+        Qabul qilingan sana, records who decided, and attaches the status the
+        department reads for an accepted application when one can be found.
+
+        The status is found by its code, not its name: DEC-017 lets an
+        administrator rename any status row, and a lookup by name is one that
+        stops working the day somebody exercises the page. If every status has
+        been deleted the application is still accepted, with no status - a
+        master data page must not be able to stop the workflow.
+
+        Args:
+            by: the user accepting it, recorded as the acceptor.
+
+        Returns:
+            True when this call accepted it, and False when it was already
+            accepted. False rather than an exception because the second click
+            of a double click is not an error, and the caller wants to say
+            "already accepted" rather than show a crash.
+
+        Raises:
+            ValueError: when the application is at a stage acceptance makes no
+                sense from - a rejected one. That is not a double click; it is
+                a request for something that should not happen.
+        """
+        if self.stage == self.Stage.ACCEPTED:
+            return False
+
+        if not self.is_incoming:
+            raise ValueError(
+                f"{self.ariza_raqami} is {self.stage}, not incoming, "
+                "so it cannot be accepted."
+            )
+
+        from reference.models import ArizaStatus
+
+        self.stage = self.Stage.ACCEPTED
+        self.qabul_qilingan_sana = timezone.now()
+        self.accepted_by = by
+        self.status = ArizaStatus.objects.filter(
+            code=ArizaStatus.Code.ACCEPTED, is_active=True
+        ).first()
+        self.save(
+            update_fields=[
+                "stage", "qabul_qilingan_sana", "accepted_by", "status"
+            ]
+        )
+
+        return True
 
     @classmethod
     @transaction.atomic

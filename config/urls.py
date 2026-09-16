@@ -39,7 +39,11 @@ from accounts.views import (
     user_list,
     user_update,
 )
-from applications.views import application_pdf, incoming_list
+from applications.views import (
+    accept_application,
+    application_pdf,
+    incoming_list,
+)
 from reference.ariza_status_views import ariza_status_page
 from reference.department_views import department_page
 from reference.mahsulot_turi_views import mahsulot_turi_page
@@ -340,5 +344,13 @@ urlpatterns = [
         "arizalar/<int:pk>/pdf/",
         application_pdf,
         name="ariza-pdf",
+    ),
+    # Accepting is offered on the incoming page, so it answers to that page's
+    # permission: an action is never reachable by somebody who may not see
+    # the row offering it (TASK-UZK-023).
+    path(
+        "kelib-arizalar/<int:pk>/qabul/",
+        require_page_permission("kelib-arizalar")(accept_application),
+        name="ariza-qabul",
     ),
 ]

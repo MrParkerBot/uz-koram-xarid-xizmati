@@ -30,6 +30,17 @@ from accounts.models import MASTER_DATA_NAME_LENGTH, MasterDataRecord
 class ArizaStatus(MasterDataRecord):
     """A state an application can be in (section 3.5).
 
+    Some of these rows have a code as well as a name. A code is how the
+    workflow finds the row it means - TASK-UZK-023 needs the accepted status
+    and cannot look for it by name, because DEC-017 lets an administrator
+    rename any row. Only the seeded rows carry one; a status an administrator
+    adds has none and is never chosen automatically, which is the correct
+    answer rather than a limitation: the code means "this is the row the
+    application itself relies on", and only the application can say that.
+
+    TASK-UZK-016 recorded this as the open point it was deliberately not
+    solving. This is the task that needed it.
+
     DEC-017 makes these editable master data rather than a fixed list: the
     four the migration seeds are examples the department is expected to
     extend, not names the code may rely on. Deleting one deactivates it
@@ -37,11 +48,30 @@ class ArizaStatus(MasterDataRecord):
     resolves while the status leaves the page and every drop-down.
     """
 
+    class Code(models.TextChoices):
+        """The rows the application itself relies on."""
+
+        NEW = "new", "Yangi"
+        ACCEPTED = "accepted", "Qabul qilingan"
+        ASSIGNED = "assigned", "Tayinlangan"
+        CANCELLED = "cancelled", "Bekor qilingan"
+
     name = models.CharField(
         "Status Nomi", max_length=MASTER_DATA_NAME_LENGTH, unique=True
     )
+    code = models.CharField(
+        max_length=16,
+        choices=Code.choices,
+        blank=True,
+        help_text=(
+            "How the workflow finds this row. Set on the seeded statuses and "
+            "empty on any an administrator adds. A renamed row keeps its "
+            "code, which is the point."
+        ),
+    )
     badge_colour = badge_colour_field()
     position = position_field()
+
     class Meta:
         # By position, not by name. A status list describes a progression, and
         # sorting alphabetically puts "Bekor qilingan" first and the starting
@@ -50,6 +80,15 @@ class ArizaStatus(MasterDataRecord):
         # columns come out in too. Name is the tie-break so that two rows left
         # at the same position still sort predictably.
         ordering = ("position", "name")
+        constraints = [
+            # At most one row per code. Two rows both claiming to be the
+            # accepted status would make the lookup a coin toss.
+            models.UniqueConstraint(
+                fields=["code"],
+                condition=~models.Q(code=""),
+                name="unique_ariza_status_code",
+            )
+        ]
         verbose_name = "Ariza Status"
         verbose_name_plural = "Ariza Statuslari"
 
