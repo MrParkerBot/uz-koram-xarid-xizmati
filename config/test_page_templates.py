@@ -24,6 +24,10 @@ PAGE_TEMPLATE_DIR = Path(settings.BASE_DIR) / "templates" / "pages"
 # that a template disappearing is a failure instead of a smaller test run.
 CONVERTED_PAGES = (
     "ariza-status.html",
+    # Not one of the twenty supplied pages: TASK-UZK-020 added it because
+    # DEC-018 makes departments Admin-maintained and the specification gives
+    # them no page. It carries the shell like the rest, so it is checked here.
+    "bolim-royhati.html",
     "bolimlar.html",
     "dashboard.html",
     "integration.html",

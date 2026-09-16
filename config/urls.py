@@ -40,6 +40,7 @@ from accounts.views import (
     user_update,
 )
 from reference.ariza_status_views import ariza_status_page
+from reference.department_views import department_page
 from reference.mahsulot_turi_views import mahsulot_turi_page
 from reference.shartnoma_status_views import shartnoma_status_page
 from reference.shartnoma_turi_views import shartnoma_turi_page
@@ -276,5 +277,28 @@ urlpatterns = [
             shartnoma_turi_page.delete_record
         ),
         name="shartnoma-turi-delete",
+    ),
+    # The Bo`limlar master data page (TASK-UZK-020). DEC-018 makes departments
+    # Admin-maintained, and the specification gives them no page, so this one
+    # is invented. bolimlar is the TASK-UZK-045 report and stays that.
+    path(
+        "bolim-royhati/",
+        require_page_permission("bolim-royhati")(department_page.list_records),
+        name="bolim-royhati",
+    ),
+    path(
+        "bolim-royhati/add/",
+        require_page_permission("bolim-royhati")(department_page.create_record),
+        name="bolim-royhati-create",
+    ),
+    path(
+        "bolim-royhati/<int:pk>/edit/",
+        require_page_permission("bolim-royhati")(department_page.update_record),
+        name="bolim-royhati-update",
+    ),
+    path(
+        "bolim-royhati/<int:pk>/delete/",
+        require_page_permission("bolim-royhati")(department_page.delete_record),
+        name="bolim-royhati-delete",
     ),
 ]

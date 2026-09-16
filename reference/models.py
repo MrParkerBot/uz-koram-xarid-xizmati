@@ -181,3 +181,28 @@ class ShartnomaTuri(MasterDataRecord):
         ordering = ("name",)
         verbose_name = "Shartnoma Turi"
         verbose_name_plural = "Shartnoma Turlari"
+
+
+class Department(MasterDataRecord):
+    """A Bo`lim - a department of the enterprise (DEC-018).
+
+    The specification never gives departments a page, but it groups by them in
+    section 4.4 and auto-fills one from the signed-in user in section 4.9,
+    neither of which works on text typed into each application. DEC-018 makes
+    them Admin-maintained master data, which means they need somewhere to be
+    maintained; TASK-UZK-020 adds the plainest page in the application for it.
+
+    Whether this list is the purchasing department's own sub-units or every
+    department that can raise a purchase application is not stated. Section
+    4.9 filling it in from the signed-in user points at the second, and it is
+    recorded as a question rather than answered here.
+    """
+
+    name = models.CharField(
+        "Bo`lim Nomi", max_length=MASTER_DATA_NAME_LENGTH, unique=True
+    )
+
+    class Meta:
+        ordering = ("name",)
+        verbose_name = "Bo`lim"
+        verbose_name_plural = "Bo`limlar"
