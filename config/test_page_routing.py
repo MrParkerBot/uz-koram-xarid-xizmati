@@ -18,6 +18,7 @@ from django.test import SimpleTestCase
 from django.urls import NoReverseMatch, reverse
 
 from config.navigation import SIDEBAR_NAVIGATION, navigation_url_names
+from config.test_support import SignedInTestCase
 
 PAGE_TEMPLATE_DIR = Path(settings.BASE_DIR) / "templates" / "pages"
 
@@ -61,7 +62,7 @@ class NavigationInventoryTests(SimpleTestCase):
                 self.assertTrue(group.entries)
 
 
-class PageResponseTests(SimpleTestCase):
+class PageResponseTests(SignedInTestCase):
     """Every page the sidebar offers has to answer."""
 
     def test_every_page_returns_ok(self) -> None:
@@ -83,8 +84,18 @@ class PageResponseTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 404)
 
+    def test_an_unknown_url_is_not_turned_into_a_login_prompt(self) -> None:
+        # LoginRequiredMiddleware acts on resolved views, so a URL that matches
+        # nothing must still be a 404 for a visitor with no session - otherwise
+        # every typo becomes an invitation to sign in.
+        self.client.logout()
 
-class ActiveEntryTests(SimpleTestCase):
+        response = self.client.get("/no-such-page/")
+
+        self.assertEqual(response.status_code, 404)
+
+
+class ActiveEntryTests(SignedInTestCase):
     """The sidebar has to say which page you are looking at."""
 
     def active_labels(self, rendered_page: str) -> list[str]:
@@ -117,7 +128,7 @@ class ActiveEntryTests(SimpleTestCase):
         self.assertNotIn("nav-link active", shell)
 
 
-class StaticLinkTests(SimpleTestCase):
+class StaticLinkTests(SignedInTestCase):
     """Nothing may still point at a page as though it were a file."""
 
     def all_templates(self) -> list[Path]:

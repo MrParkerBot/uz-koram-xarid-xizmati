@@ -18,6 +18,8 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils.crypto import get_random_string
 
+from config.navigation import navigation_url_names
+
 USERNAME = "b.toshmatov"
 FIRST_NAME = "Bobur"
 LAST_NAME = "Toshmatov"
@@ -279,3 +281,73 @@ class SessionCookieTests(TestCase):
         # reachable over HTTPS sets DJANGO_SECURE_COOKIES.
         self.assertEqual(settings.SESSION_COOKIE_SECURE, settings.CSRF_COOKIE_SECURE)
         self.assertFalse(settings.SESSION_COOKIE_SECURE)
+
+
+class ClosedApplicationTests(AuthenticationTestCase):
+    """Every page is closed to a visitor with no session."""
+
+    def test_every_page_redirects_an_anonymous_visitor_to_the_login_page(
+        self,
+    ) -> None:
+        for url_name in navigation_url_names():
+            with self.subTest(page=url_name):
+                response = self.client.get(reverse(url_name))
+
+                self.assertEqual(response.status_code, 302)
+                self.assertTrue(response.url.startswith(reverse("login")))
+
+    def test_the_redirect_remembers_where_the_visitor_was_going(self) -> None:
+        # Otherwise signing in always lands on the dashboard and the visitor
+        # has to find their way back.
+        target = reverse("logs")
+
+        response = self.client.get(target)
+
+        self.assertIn(f"next={target}", response.url)
+
+    def test_every_page_answers_once_signed_in(self) -> None:
+        self.client.force_login(self.user)
+
+        for url_name in navigation_url_names():
+            with self.subTest(page=url_name):
+                response = self.client.get(reverse(url_name))
+
+                self.assertEqual(response.status_code, 200)
+
+    def test_the_login_page_stays_open(self) -> None:
+        # The one view that must not be closed: closing it would mean nobody
+        # could ever sign in.
+        response = self.client.get(reverse("login"))
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_an_unknown_url_is_still_a_not_found(self) -> None:
+        response = self.client.get("/no-such-page/")
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_signing_in_returns_the_visitor_to_the_page_they_asked_for(self) -> None:
+        target = reverse("tuzilgan")
+
+        response = self.client.post(
+            f"{reverse('login')}?next={target}",
+            {"username": USERNAME, "password": PASSWORD},
+        )
+
+        self.assertRedirects(response, target)
+
+
+class AnonymousAssetTests(TestCase):
+    """The login page has to be able to style itself."""
+
+    def test_the_stylesheets_the_login_page_needs_are_not_behind_the_login(
+        self,
+    ) -> None:
+        # The assets are served outside the URL configuration, so the
+        # middleware does not see them - but a login page rendered without its
+        # stylesheet is a broken first impression, so it is worth asserting.
+        response = self.client.get(reverse("login"))
+
+        for asset in ("css/style.css", "css/bootstrap.min.css"):
+            with self.subTest(asset=asset):
+                self.assertContains(response, asset)

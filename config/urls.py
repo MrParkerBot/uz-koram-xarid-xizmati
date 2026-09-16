@@ -13,6 +13,7 @@ re-implementing session cycling and credential checking that django.contrib.auth
 already does correctly.
 """
 
+from django.contrib.auth.decorators import login_not_required
 from django.contrib.auth.views import LoginView, LogoutView
 from django.urls import path
 from django.views.generic import TemplateView
@@ -48,11 +49,16 @@ def page_view(page_name: str) -> object:
 
 
 urlpatterns = [
+    # The one view that stays open. Everything else is closed by
+    # LoginRequiredMiddleware, including logout: an anonymous request there has
+    # no session to end and is simply sent back here.
     path(
         "login/",
-        LoginView.as_view(
-            template_name="pages/login.html",
-            redirect_authenticated_user=True,
+        login_not_required(
+            LoginView.as_view(
+                template_name="pages/login.html",
+                redirect_authenticated_user=True,
+            )
         ),
         name="login",
     ),
