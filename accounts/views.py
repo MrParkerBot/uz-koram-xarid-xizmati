@@ -15,7 +15,7 @@ USERS_TEMPLATE = "pages/users.html"
 
 
 def listed_users() -> QuerySet:
-    """The users the page shows, newest last.
+    """The users the page shows, in the order a reader scans them.
 
     Deactivated accounts are absent: DEC-009 makes deletion a deactivation, so
     a deleted user leaves the list while every record that refers to them still

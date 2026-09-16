@@ -8,6 +8,7 @@ hashed and unreadable (DEC-020), deleting must deactivate rather than remove
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
+from django.http import HttpResponse
 from django.test import TestCase
 from django.urls import reverse
 from django.utils.crypto import get_random_string
@@ -38,7 +39,7 @@ class UsersPageTestCase(TestCase):
         super().setUp()
         self.client.force_login(self.administrator)
 
-    def create_user(self, **overrides) -> None:
+    def create_user(self, **overrides) -> HttpResponse:
         """Post the create form with sensible defaults."""
         fields = {
             "first_name": "Bobur",
