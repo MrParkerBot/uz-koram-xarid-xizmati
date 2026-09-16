@@ -18,12 +18,13 @@ from django.contrib.auth.views import LoginView, LogoutView
 from django.urls import path
 from django.views.generic import TemplateView
 
+from accounts.views import user_create, user_delete, user_list, user_update
+
 # Every page except the dashboard, which answers at the site root. Each entry
 # is (url path, URL name); the template is pages/<name>.html.
 PAGE_ROUTES: tuple[tuple[str, str], ...] = (
     ("user-specialty/", "user-specialty"),
     ("user-types/", "user-types"),
-    ("users/", "users"),
     ("ariza-status/", "ariza-status"),
     ("shartnoma-status/", "shartnoma-status"),
     ("mahsulot-turlari/", "mahsulot-turlari"),
@@ -70,4 +71,11 @@ urlpatterns = [
         path(route, page_view(page_name), name=page_name)
         for route, page_name in PAGE_ROUTES
     ),
+    # The Users page has real views rather than a template: it is the first
+    # page with data behind it (TASK-UZK-011). The list keeps the name the
+    # sidebar and the page inventory already use.
+    path("users/", user_list, name="users"),
+    path("users/add/", user_create, name="user-create"),
+    path("users/<int:pk>/edit/", user_update, name="user-update"),
+    path("users/<int:pk>/delete/", user_delete, name="user-delete"),
 ]
