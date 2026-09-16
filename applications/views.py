@@ -1,8 +1,12 @@
-"""The Kelib tushgan Arizalar page (section 4.1).
+"""The two application lists of sections 4.1 and 4.2.
 
-A list with row actions and no form, which is why it does not use
-MasterDataPage: that abstraction is a table beside a form, and this is a table
-beside nothing.
+Lists with row actions and no form, which is why they do not use
+MasterDataPage: that abstraction is a table beside a form, and these are
+tables beside nothing.
+
+The same record on two pages, told apart by its stage: Kelib tushgan shows
+what has arrived and not been decided, Qabul qilingan shows what was accepted
+and is waiting to be given to somebody.
 
 Accept and Reject are the two decisions section 4.1 describes, and both are
 wired (TASK-UZK-023, TASK-UZK-024). The filter bar the supplied page carries
@@ -23,6 +27,7 @@ from applications.attachments import attachment_response
 from applications.models import Application
 
 INCOMING_TEMPLATE = "pages/kelib-arizalar.html"
+ACCEPTED_TEMPLATE = "pages/qabul-arizalar.html"
 
 # Which page shows an application at each stage. The attachment follows the
 # record rather than the route: a PDF is downloadable by whoever may open the
@@ -57,12 +62,47 @@ def incoming_applications() -> QuerySet[Application]:
     ).select_related("department", "mahsulot_turi")
 
 
+def accepted_applications() -> QuerySet[Application]:
+    """The applications that were accepted and are waiting to be given out.
+
+    Ordered by when they were accepted, newest first, rather than by when they
+    arrived: this page is worked through in the order decisions were taken,
+    and an application that sat in the incoming list for a week is new here on
+    the day it is accepted. Falls back to the model ordering for anything
+    whose date is somehow missing, which nothing should produce.
+    """
+    return (
+        Application.objects.filter(stage=Application.Stage.ACCEPTED)
+        .select_related("department", "mahsulot_turi", "accepted_by")
+        .order_by("-qabul_qilingan_sana", "-id")
+    )
+
+
 def incoming_list(request: HttpRequest) -> HttpResponse:
     """The table of applications that have arrived and not been decided."""
     return render(
         request,
         INCOMING_TEMPLATE,
         {"applications": incoming_applications()},
+    )
+
+
+def accepted_list(request: HttpRequest) -> HttpResponse:
+    """The Qabul qilingan Arizalar table (REQ-ARIZA-006).
+
+    Every column the specification names, including Qabul qilingan sana -
+    which is the date acceptance happened, not the date the application
+    arrived. The two are different and the page that confuses them is the one
+    that makes the department head wonder why nothing was decided for a week.
+
+    Tayinlangan xodim and the assignment controls are on every row and do
+    nothing yet: TASK-UZK-027 wires them. Rendered visibly waiting rather than
+    hidden, the way TASK-UZK-022 left the filter bar.
+    """
+    return render(
+        request,
+        ACCEPTED_TEMPLATE,
+        {"applications": accepted_applications()},
     )
 
 

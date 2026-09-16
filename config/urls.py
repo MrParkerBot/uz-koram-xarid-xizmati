@@ -41,6 +41,7 @@ from accounts.views import (
 )
 from applications.views import (
     accept_application,
+    accepted_list,
     application_pdf,
     incoming_list,
     reject_application,
@@ -55,7 +56,6 @@ from reference.supplier_views import supplier_page
 # Every page except the dashboard, which answers at the site root. Each entry
 # is (url path, URL name); the template is pages/<name>.html.
 PAGE_ROUTES: tuple[tuple[str, str], ...] = (
-    ("qabul-arizalar/", "qabul-arizalar"),
     ("tayinlangan/", "tayinlangan"),
     ("kelishinlingan/", "kelishinlingan"),
     ("tuzilgan/", "tuzilgan"),
@@ -337,6 +337,14 @@ urlpatterns = [
         "kelib-arizalar/",
         require_page_permission("kelib-arizalar")(incoming_list),
         name="kelib-arizalar",
+    ),
+    # The Qabul qilingan Arizalar page (TASK-UZK-025). It left PAGE_ROUTES
+    # when it stopped being a template with no data behind it; the path and
+    # the name are the ones the sidebar and PAGE_SHOWING_STAGE already use.
+    path(
+        "qabul-arizalar/",
+        require_page_permission("qabul-arizalar")(accepted_list),
+        name="qabul-arizalar",
     ),
     # Not wrapped in require_page_permission: the view asks about the page
     # that currently shows this application, because the attachment has to
