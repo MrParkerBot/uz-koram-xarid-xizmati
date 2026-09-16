@@ -277,6 +277,109 @@ the user would simply lose access, with nothing anywhere saying why. Their
 badge colour and Category Number are editable like any other, and an
 installation may add types of its own freely.
 
+## Applications
+
+`applications/` holds the work the department does, as opposed to `accounts`,
+which holds facts about people, and `reference`, which holds the lists work is
+described with. An application is the first record in this project with a
+**life cycle** rather than a name, and that is why it has a home of its own.
+
+### Stage and status are different things
+
+An application carries both, and confusing them is the mistake this design
+exists to prevent.
+
+- **Stage** is a code the record stores - `incoming`, `accepted`, `rejected` -
+  and it is what the workflow branches on. Nothing but the application itself
+  writes it.
+- **Status** is an `ArizaStatus` row, which DEC-017 makes editable master data:
+  an administrator may rename *Qabul qilingan* or delete it outright. It is
+  what a person reads on the page.
+
+Every list filters on the stage. A list that filtered on a status name would
+quietly empty the day somebody exercised the master data page they were given,
+and there are tests that rename a status and then assert the list did not
+notice.
+
+Where the workflow needs a *particular* status row - the one to attach when an
+application is accepted - it finds it by a machine-readable `code` that the
+four seeded rows carry and an added row never does. A renamed row keeps its
+code, which is the point. A status an administrator adds is never chosen
+automatically, because the code means "the application itself relies on this
+row", and only the application can say that.
+
+**Master data cannot stop the workflow.** Deleting every status still lets an
+application be accepted - with no status, rather than with a refusal. The
+alternative would let the Ariza Status page stop the department working.
+
+### The two decisions
+
+`Kelib tushgan Arizalar` (`/kelib-arizalar/`) lists what has arrived and not
+been decided, and offers both decisions on each row.
+
+**Qabul** accepts: the application moves to the accepted stage, stamps when it
+happened and who decided, and leaves the list.
+
+**Inkor** rejects, and opens a comment window first. The comment is the
+requirement rather than a decoration on it - REQ-ARIZA-005 exists so the sender
+is told why - so a rejection carrying no reason is refused and the record is
+left exactly as it was. The refusal lives in `Application.reject()` and not
+only on the textarea, because `required` is something a browser honours and a
+POST need not.
+
+Both are `POST`-only, and both answer to the permission of the page that offers
+them: an action is never reachable by somebody who may not see the row.
+
+**Deciding twice is not an error.** The second click of a double click is told
+the application was already decided, and the first decision - its date and its
+decider - is left alone. That holds under genuine concurrency and not just in
+sequence: the stage comparison is part of the write, so the database compares
+it while holding the row and the count it returns is the answer to "did this
+call do it". A check followed by an unconditional save would let the loser of
+that race overwrite the winner, and the record would name the wrong person.
+
+Deciding something already decided **differently** is a refusal rather than a
+repeat, and it is reported as a message rather than as a 403: the caller had
+the permission they needed, and what changed is the application.
+
+### The accepted list
+
+`Qabul qilingan Arizalar` (`/qabul-arizalar/`) lists what was accepted, with
+**Qabul qilingan sana** - the date acceptance happened, not the date the
+application arrived. Both are on the record and they are easy to confuse.
+
+The assignment controls on each row are visibly disabled until `TASK-UZK-027`
+builds assignment, the way the filter bars are disabled until `TASK-UZK-041`
+builds filtering. A control that looks like it works but does not is worse than
+one that is visibly waiting.
+
+### Attachments follow the record, not the route
+
+An application's PDF has no URL of its own and lives outside anything served
+statically. `applications/views.py` asks the permission matrix about the page
+that **currently** shows the application, so an attachment stops being
+reachable at the same moment the row stops being visible.
+
+DEC-015 is what gives that teeth: Direktor may open Kelib tushgan and may not
+open Qabul qilingan, so an application's attachment leaves their reach at the
+moment it is accepted. A download guarded by the page the link was written on
+would have stayed open to them.
+
+A rejected application is on no page at all, so nobody may fetch its
+attachment. That is the current answer rather than an oversight, and a test
+says so, which means whichever task lists rejected applications has to decide
+it deliberately.
+
+### Notifications
+
+The specification asks for the sender to be notified on both decisions. Nothing
+here sends one. DEC-012 makes the channel an in-app panel with an unread badge,
+which is a feature (`TASK-UZK-054`) rather than a side effect of a transition -
+and `Application.sender` is still nullable, because the DEC-016 approval chain
+that would identify a sender is not built. What these tasks do is make the
+event *recordable*: the date, the decider and the rejection reason are all
+stored, so the task that owns notification has something to notify about.
+
 ## Templates
 
 `templates/base_document.html` holds the document every page shares: the head,
@@ -287,6 +390,21 @@ gives it no sidebar.
 
 ## Project status
 
-Every page renders and sits behind a real login - but the pages have no data
-yet: their tables and forms are still the sample markup supplied with the
-assignment, and every signed-in user sees all of them.
+Every page renders and sits behind a real login, and the permission matrix
+decides who sees which.
+
+Seven pages have real data behind them: Users, User Specialty, User Types,
+Ariza Status, Shartnoma Status, Mahsulot Turlari, Shartnoma turi, plus the two
+invented master data pages Bo`limlar and Firmalar that DEC-018 and DEC-011
+imply.
+
+The application workflow reaches the second of its stages. An application can
+arrive, be listed, be accepted with a date and a decider, or be rejected with a
+reason - and the accepted ones have a page of their own. What follows is
+assignment (`TASK-UZK-027`), which is why the Tayinlangan xodim column is
+present and empty.
+
+The tables that remain sample markup are the reports and the contract pages,
+and the filter bars and Excel/PDF exports are inert on every table at once -
+`TASK-UZK-041` and `TASK-UZK-042` build those for all of them rather than one
+page at a time.

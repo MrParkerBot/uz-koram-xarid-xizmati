@@ -143,16 +143,27 @@ class ContentTests(AcceptedListTestCase):
     def test_the_list_is_newest_decision_first(self) -> None:
         # The order acceptances were taken in, which is what this page is
         # worked through in - not the order the applications arrived.
-        first = self.accepted_application(buyurtma_nomi="Birinchi")
-        second = self.accepted_application(buyurtma_nomi="Ikkinchi")
-        Application.objects.filter(pk=first.pk).update(
-            qabul_qilingan_sana=timezone.now()
+        #
+        # Both dates are written explicitly. Accepting two applications in a
+        # row and then re-stamping one of them left this deciding on two
+        # timezone.now() calls microseconds apart, which collide at the
+        # resolution SQLite stores - and on a tie the row that arrived later
+        # wins, which is the reverse of what the test asserts. It passed on an
+        # idle machine and failed on a busy one; found while fixing #29.
+        earlier = self.accepted_application(buyurtma_nomi="Birinchi")
+        later = self.accepted_application(buyurtma_nomi="Ikkinchi")
+        decided = timezone.now()
+        Application.objects.filter(pk=earlier.pk).update(
+            qabul_qilingan_sana=decided - timedelta(hours=2)
+        )
+        Application.objects.filter(pk=later.pk).update(
+            qabul_qilingan_sana=decided
         )
 
         row = self.table()
 
         self.assertLess(
-            row.index(first.ariza_raqami), row.index(second.ariza_raqami)
+            row.index(later.ariza_raqami), row.index(earlier.ariza_raqami)
         )
 
 
@@ -202,12 +213,19 @@ class AssignmentControlsTests(AcceptedListTestCase):
         self.assertIn("<select", row)
 
     def test_they_are_disabled_rather_than_pretending_to_work(self) -> None:
-        self.accepted_application()
-        row = self.table()
+        # Two controls per row, both disabled, both saying which task wires
+        # them. Counted per row rather than as a fixed number: the #29 review
+        # pointed out that an exact count over the whole table body passes
+        # only while the case has exactly one application in it, and fails
+        # for the wrong reason the moment somebody adds a second.
+        rows = 3
+        for index in range(rows):
+            self.accepted_application(buyurtma_nomi=f"Ariza {index}")
 
-        # Two controls, both disabled, both saying which task wires them.
-        self.assertEqual(row.count("disabled"), 2)
-        self.assertEqual(row.count("TASK-UZK-027"), 2)
+        table = self.table()
+
+        self.assertEqual(table.count("disabled"), 2 * rows)
+        self.assertEqual(table.count("TASK-UZK-027"), 2 * rows)
 
     def test_the_prototypes_creation_form_is_gone(self) -> None:
         # It is the section 4.2 form, which is TASK-UZK-026, and it posted
@@ -282,3 +300,83 @@ class AccessTests(AcceptedListTestCase):
         response = self.client.get(reverse("qabul-arizalar"))
 
         self.assertEqual(response.status_code, 302)
+
+
+class OrderingTests(AcceptedListTestCase):
+    """Where an accepted row with no acceptance date lands.
+
+    It should not exist: accept() is the only thing that writes this stage and
+    it always stamps the date. The #29 review objected to the docstring
+    claiming a fallback the query did not have, and the answer chosen was to
+    give it one rather than to delete the sentence - a silent ordering that
+    differs by database is the thing worth removing, not the comment.
+    """
+
+    def undated(self) -> Application:
+        """An accepted application with no acceptance date.
+
+        Written straight to the column, because nothing in the application
+        can produce this and that is the point of the test.
+        """
+        application = self.accepted_application(buyurtma_nomi="Sanasiz")
+        Application.objects.filter(pk=application.pk).update(
+            qabul_qilingan_sana=None
+        )
+        return application
+
+    def test_it_sorts_below_everything_with_a_real_date(self) -> None:
+        # Not above, which is where SQLite puts a null under DESC.
+        dated = self.accepted_application(buyurtma_nomi="Sanali")
+        undated = self.undated()
+
+        table = self.table()
+
+        self.assertLess(
+            table.index(dated.ariza_raqami),
+            table.index(undated.ariza_raqami),
+        )
+
+    def test_it_is_still_listed(self) -> None:
+        # Sorted last, not dropped: the row is a real accepted application
+        # whatever is wrong with its date.
+        undated = self.undated()
+
+        self.assertIn(undated.ariza_raqami, self.table())
+
+    def test_two_undated_rows_fall_back_to_the_arrival_date(self) -> None:
+        older = self.undated()
+        newer = self.undated()
+        arrived = timezone.now()
+        Application.objects.filter(pk=older.pk).update(
+            kelib_tushgan_sana=arrived - timedelta(days=3)
+        )
+        Application.objects.filter(pk=newer.pk).update(
+            kelib_tushgan_sana=arrived
+        )
+
+        table = self.table()
+
+        self.assertLess(
+            table.index(newer.ariza_raqami), table.index(older.ariza_raqami)
+        )
+
+
+class QueryTests(AcceptedListTestCase):
+    """What the page fetches, and what it does not."""
+
+    def test_the_acceptor_is_not_joined(self) -> None:
+        # Nothing renders who accepted the application, so joining auth_user
+        # would fetch a password hash per row for a column that does not
+        # exist. The #29 review found the join; this keeps it gone.
+        from applications.views import accepted_applications
+
+        self.assertNotIn("auth_user", str(accepted_applications().query))
+
+    def test_the_department_and_category_are_joined(self) -> None:
+        # Both are rendered on every row, so they must not be a query each.
+        from applications.views import accepted_applications
+
+        sql = str(accepted_applications().query)
+
+        self.assertIn("reference_department", sql)
+        self.assertIn("reference_mahsulotturi", sql)

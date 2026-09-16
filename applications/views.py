@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
-from django.db.models import QuerySet
+from django.db.models import F, QuerySet
 from django.http import FileResponse, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -68,13 +68,28 @@ def accepted_applications() -> QuerySet[Application]:
     Ordered by when they were accepted, newest first, rather than by when they
     arrived: this page is worked through in the order decisions were taken,
     and an application that sat in the incoming list for a week is new here on
-    the day it is accepted. Falls back to the model ordering for anything
-    whose date is somehow missing, which nothing should produce.
+    the day it is accepted.
+
+    An accepted row with no acceptance date should not exist - accept() is the
+    only thing that writes this stage and it always stamps the date - but the
+    ordering says what happens to one anyway, because the alternative is a
+    silent answer that differs by database. nulls_last puts it at the bottom
+    rather than above every application that has a real date, which is where
+    SQLite would otherwise sort it, and the arrival date is the fallback the
+    #29 review pointed out this function claimed and did not have.
     """
     return (
         Application.objects.filter(stage=Application.Stage.ACCEPTED)
-        .select_related("department", "mahsulot_turi", "accepted_by")
-        .order_by("-qabul_qilingan_sana", "-id")
+        # accepted_by is deliberately not selected: nothing on this page
+        # renders the acceptor, so joining auth_user would fetch a password
+        # hash per row for a column that does not exist. TASK-UZK-027 assigns
+        # a specialist, who is somebody else, so it will not need this either.
+        .select_related("department", "mahsulot_turi")
+        .order_by(
+            F("qabul_qilingan_sana").desc(nulls_last=True),
+            "-kelib_tushgan_sana",
+            "-id",
+        )
     )
 
 
