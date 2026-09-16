@@ -208,23 +208,33 @@ class ColumnTests(AssignedListTestCase):
         self.assertIn("Hozircha tayinlangan ariza", self.table())
 
 
-class WaitingControlTests(AssignedListTestCase):
-    """Accept and Holat belong to TASK-UZK-029."""
+class WiredControlTests(AssignedListTestCase):
+    """Accept and Holat, wired by TASK-UZK-029.
 
-    def test_they_are_disabled_and_name_the_task_that_wires_them(self) -> None:
-        # Counted per row rather than as a fixed number. The #29 review made
-        # this point about the same assertion on the Qabul qilingan page: an
-        # exact count over the whole table body passes only while the case has
-        # one application in it, and then fails for the wrong reason. The #38
-        # review found it repeated here.
+    They were rendered disabled with a title naming that task until it
+    arrived. Counted per row rather than as a fixed number, which is the
+    shape the #29 and #38 reviews between them settled on.
+    """
+
+    def test_they_no_longer_name_the_task_that_would_wire_them(self) -> None:
         rows = 3
         for index in range(rows):
             self.assigned_application(izoh=f"Ariza {index}")
         self.client.force_login(self.specialist)
 
         row = self.table()
-        self.assertEqual(row.count("TASK-UZK-029"), 2 * rows)
-        self.assertEqual(row.count("disabled"), 2 * rows)
+        self.assertNotIn("TASK-UZK-029", row)
+        self.assertEqual(row.count("disabled"), 0)
+
+    def test_every_row_offers_both_controls(self) -> None:
+        rows = 3
+        for index in range(rows):
+            self.assigned_application(izoh=f"Ariza {index}")
+        self.client.force_login(self.specialist)
+
+        row = self.table()
+        self.assertEqual(row.count('name="status"'), rows)
+        self.assertEqual(row.count("/qabul/"), rows)
 
 
 class QueryTests(AssignedListTestCase):

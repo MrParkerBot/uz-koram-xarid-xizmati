@@ -41,6 +41,7 @@ from accounts.views import (
 )
 from applications.views import (
     accept_application,
+    accept_assigned_application,
     accepted_list,
     application_create,
     application_pdf,
@@ -48,6 +49,7 @@ from applications.views import (
     assigned_list,
     incoming_list,
     reject_application,
+    set_application_status,
 )
 from reference.ariza_status_views import ariza_status_page
 from reference.department_views import department_page
@@ -356,6 +358,21 @@ urlpatterns = [
         "tayinlangan/",
         require_page_permission("tayinlangan")(assigned_list),
         name="tayinlangan",
+    ),
+    # The specialist taking the work, and marking where it has got to
+    # (TASK-UZK-029). Both are offered on the Tayinlangan page and answer to
+    # its permission; which rows a caller may act on is decided in the view,
+    # because a specialist may open the page and may not touch somebody
+    # else's row.
+    path(
+        "tayinlangan/<int:pk>/qabul/",
+        require_page_permission("tayinlangan")(accept_assigned_application),
+        name="tayinlangan-qabul",
+    ),
+    path(
+        "tayinlangan/<int:pk>/holat/",
+        require_page_permission("tayinlangan")(set_application_status),
+        name="tayinlangan-holat",
     ),
     # Creating an application (TASK-UZK-026). The form is on the Qabul
     # qilingan page, so it answers to that page's permission like every other

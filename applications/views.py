@@ -29,6 +29,7 @@ from accounts.roles import KATTA_MUTAXASIS, assignable_specialists, has_user_typ
 from applications.attachments import attachment_response
 from applications.forms import ApplicationForm, ApplicationItemFormSet
 from applications.models import Application, ApplicationItem
+from applications.notifications import notify_admins_of_acceptance
 from reference.models import ArizaStatus
 
 # The four columns one order line is made of, named once so the creation
@@ -341,7 +342,7 @@ def assigned_list(request: HttpRequest) -> HttpResponse:
     Accept and Holat are on every row and do nothing yet - TASK-UZK-029 wires
     them. Rendered visibly waiting, the way TASK-UZK-022 left the filter bar.
     """
-    own_work_only = has_user_type(request.user, (KATTA_MUTAXASIS,))
+    own_work_only = acts_on_own_work_only(request.user)
 
     return render(
         request,
@@ -353,8 +354,129 @@ def assigned_list(request: HttpRequest) -> HttpResponse:
                 else all_assigned_applications()
             ),
             "shows_the_holder": not own_work_only,
+            # DEC-017 lets an administrator retire a status. The drop-down
+            # offers what is in use now; a row an application already holds
+            # keeps rendering whether or not it is still offered.
+            "statuses": ArizaStatus.objects.filter(is_active=True),
         },
     )
+
+
+def acts_on_own_work_only(user) -> bool:
+    """Whether this person may only touch the applications they hold.
+
+    A Katta Mutaxasis may. Everybody else DEC-015 lets onto the Tayinlangan
+    page hands work out and may touch all of it. One function, so that what
+    the page shows and what the page may do cannot drift apart - which they
+    would the first time one of them was changed and the other was not.
+    """
+    return has_user_type(user, (KATTA_MUTAXASIS,))
+
+
+def held_application(request: HttpRequest, pk: int) -> Application:
+    """The application this request may act on, or a refusal.
+
+    Raises:
+        PermissionDenied: when a specialist reaches for work that is not
+            theirs. They may open the page, so this is about the row rather
+            than about the page, which is why it is not the URL wrapper
+            answering.
+        Http404: when there is no such application.
+    """
+    application = get_object_or_404(Application, pk=pk)
+
+    if (
+        acts_on_own_work_only(request.user)
+        and application.assigned_to_id != request.user.pk
+    ):
+        raise PermissionDenied(
+            f"{request.user} does not hold {application.ariza_raqami}."
+        )
+
+    return application
+
+
+@require_POST
+def accept_assigned_application(request: HttpRequest, pk: int) -> HttpResponse:
+    """The holder takes the work assigned to them (REQ-ARIZA-013).
+
+    POST only, under the permission of the page offering the button. The
+    acceptance is recorded against the holder rather than against whoever
+    pressed it: a manager accepting on a specialist's behalf records that the
+    specialist took it, because that is what the record is for.
+
+    Accepting tells Admin, which is the second half of REQ-ARIZA-013. The
+    notification is produced inside the same transaction as the acceptance,
+    so there is never an acceptance nobody was told about, nor a notification
+    about an acceptance that did not happen.
+    """
+    application = held_application(request, pk)
+
+    try:
+        with transaction.atomic():
+            taken = application.accept_as_specialist(
+                by=application.assigned_to
+            )
+            if taken:
+                notify_admins_of_acceptance(application)
+    except ValueError:
+        messages.error(
+            request,
+            f"{application.ariza_raqami} qabul qilinmadi: ariza tayinlanmagan.",
+        )
+        return redirect("tayinlangan")
+
+    if taken:
+        messages.success(
+            request, f"{application.ariza_raqami} qabul qilindi."
+        )
+    else:
+        messages.info(
+            request, f"{application.ariza_raqami} allaqachon qabul qilingan."
+        )
+
+    return redirect("tayinlangan")
+
+
+@require_POST
+def set_application_status(request: HttpRequest, pk: int) -> HttpResponse:
+    """Mark the state an application is currently in (REQ-ARIZA-013).
+
+    The status is looked up among the active rows only, so a retired one
+    cannot be chosen by a request that did not come from the drop-down. A
+    choice that is not a number is nobody's status rather than a crash - the
+    #35 review found that shape on the assignment route.
+    """
+    application = held_application(request, pk)
+    chosen = request.POST.get("status")
+    status = (
+        ArizaStatus.objects.filter(pk=int(chosen), is_active=True).first()
+        if chosen and chosen.isdigit()
+        else None
+    )
+
+    try:
+        changed = application.set_status(status)
+    except ValueError:
+        messages.error(
+            request,
+            f"{application.ariza_raqami} holati o`zgartirilmadi: holat "
+            "tanlanishi shart.",
+        )
+        return redirect("tayinlangan")
+
+    if changed:
+        messages.success(
+            request,
+            f"{application.ariza_raqami} holati: {status.name}.",
+        )
+    else:
+        messages.info(
+            request,
+            f"{application.ariza_raqami} allaqachon shu holatda.",
+        )
+
+    return redirect("tayinlangan")
 
 
 def application_pdf(request: HttpRequest, pk: int) -> FileResponse:
