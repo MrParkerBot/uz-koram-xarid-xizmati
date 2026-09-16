@@ -11,6 +11,7 @@ import mimetypes
 import os
 from pathlib import Path
 
+from django.contrib.messages import constants as messages_constants
 from django.core.management.utils import get_random_secret_key
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -107,6 +108,12 @@ TEMPLATES = [
         },
     },
 ]
+
+# The message framework's ERROR level is tagged "error" by default, and the
+# vendored style.css has no .alert-error - it calls that idea .alert-danger,
+# as Bootstrap does. Renaming the tag here is better than translating it in
+# the template, because every page that ever shows a message gets it right.
+MESSAGE_TAGS = {messages_constants.ERROR: "danger"}
 
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"

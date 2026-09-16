@@ -11,10 +11,12 @@ carries is left inert; TASK-UZK-041 builds filtering for every table at once.
 
 from __future__ import annotations
 
+from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db.models import QuerySet
 from django.http import FileResponse, HttpRequest, HttpResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
 from accounts.permissions import may_open
 from applications.attachments import attachment_response
@@ -84,3 +86,34 @@ def application_pdf(request: HttpRequest, pk: int) -> FileResponse:
     return attachment_response(
         application.pdf, f"{application.ariza_raqami}.pdf"
     )
+
+
+@require_POST
+def accept_application(request: HttpRequest, pk: int) -> HttpResponse:
+    """Accept one incoming application (REQ-ARIZA-004).
+
+    POST only, and wrapped by the URL configuration in the permission of the
+    page that offers the button, so an application cannot be accepted by
+    somebody who may not see it.
+
+    The second click of a double click is not an error: the record says it was
+    already accepted and the page says so too, rather than accepting it twice
+    or showing a crash.
+    """
+    application = get_object_or_404(Application, pk=pk)
+
+    try:
+        accepted = application.accept(by=request.user)
+    except ValueError as wrong_stage:
+        raise PermissionDenied(str(wrong_stage)) from wrong_stage
+
+    if accepted:
+        messages.success(
+            request, f"{application.ariza_raqami} qabul qilindi."
+        )
+    else:
+        messages.info(
+            request, f"{application.ariza_raqami} allaqachon qabul qilingan."
+        )
+
+    return redirect("kelib-arizalar")

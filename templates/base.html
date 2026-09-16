@@ -18,7 +18,7 @@ A page fills these blocks:
   extra_head     stylesheets or head scripts only that page needs
   breadcrumb     the small grey trail in the top header, e.g. "Umumiy / Dashboard"
   page_heading   the bold line under the trail
-  content        the page itself, inside .page-wrap
+  content        the page itself, inside .page-wrap, under any messages
   extra_scripts  scripts that run after the shared ones
 {% endcomment %}
 {% block body %}
@@ -38,6 +38,24 @@ shows their User Type, or their username while nobody has assigned them one.
     <div class="d-flex align-items-center gap-3"><div class="user-chip"><div class="av">{{ user|user_initials }}</div><div><div class="uname">{% firstof user.get_full_name user.get_username "Foydalanuvchi" %}</div><div class="urole">{% firstof user|user_type_name user.get_username "" %}</div></div><span class="arrow"><i class="bi bi-chevron-down" aria-hidden="true"></i></span><div class="account-menu hidden"><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="dropdown-item"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> Chiqish</button></form></div></div></div>
   </header>
   <div class="page-wrap">
+{% comment %}
+What a view says after it has done something. Rendered here rather than on the
+page that raised it, because an action redirects to a list and the list should
+not have to know which actions can send it here. Django's own levels map onto
+the vendored .alert classes; settings.MESSAGE_TAGS renames error to danger,
+which is what style.css calls it.
+
+The text is a template variable in normal HTML, not JavaScript source, so
+autoescaping is correct for it - the trap config/test_delete_confirmation.py
+exists to prevent.
+{% endcomment %}
+{% if messages %}
+    <div class="page-messages" role="status" aria-live="polite">
+      {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+{% endif %}
 {% block content %}{% endblock %}
   </div>
 </main>
