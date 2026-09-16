@@ -71,6 +71,14 @@ class UserProfile(models.Model):
         help_text="A user with no type can open nothing that a role protects.",
     )
     phone_number = models.CharField(max_length=32, blank=True)
+    may_edit_contracts = models.BooleanField(
+        "Tahrirlash ruxsati",
+        default=False,
+        help_text=(
+            "At most one user holds this at a time (DEC-021). Granting it to "
+            "somebody takes it from whoever had it."
+        ),
+    )
 
     def __str__(self) -> str:
         return f"{self.user.get_username()} ({self.user_type or 'no user type'})"

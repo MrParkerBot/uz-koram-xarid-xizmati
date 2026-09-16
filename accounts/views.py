@@ -14,6 +14,11 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
+from accounts.contract_editing import (
+    contract_editor,
+    grant_contract_editing,
+    revoke_contract_editing,
+)
 from accounts.forms import UserAdministrationForm
 from accounts.permissions import first_page_for
 
@@ -48,6 +53,7 @@ def render_users_page(
         USERS_TEMPLATE,
         {
             "users": listed_users(),
+            "contract_editor": contract_editor(),
             "form": form,
             "edited_user_id": edited_user_id,
             # The modal opens by itself when a submission failed or an edit was
@@ -134,3 +140,21 @@ def landing_page(request: HttpRequest) -> HttpResponse:
         )
 
     return redirect(page_name)
+
+
+@require_POST
+def user_contract_editing(request: HttpRequest, pk: int) -> HttpResponse:
+    """Grant or revoke the contract-edit permission for one user.
+
+    The submitted state is what the switch now shows, so a grant is a grant
+    and an unchecked box is a revocation - the page never has to work out
+    which of the two it meant.
+    """
+    subject = get_object_or_404(get_user_model(), pk=pk, is_active=True)
+
+    if request.POST.get("may_edit_contracts") == "on":
+        grant_contract_editing(subject)
+    else:
+        revoke_contract_editing(subject)
+
+    return redirect("users")

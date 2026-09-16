@@ -228,9 +228,25 @@ Deleting follows DEC-009: the account is deactivated, so it leaves the list and
 can no longer sign in while everything that already refers to it still
 resolves. The page asks before doing it.
 
-The Edit Permission column is rendered but inert; `TASK-UZK-013` owns the
-toggle and the exclusivity rule behind it. The page is open to any signed-in
-user until `TASK-UZK-012` restricts it to Admin.
+The Edit Permission column grants contract editing; see below. The page is
+Admin-only under DEC-015.
+
+## Contract editing
+
+One user at a time may edit entered contracts. The switch is the Edit
+Permission column on the Users page, and DEC-021 settles what section 3.3 and
+section 3.4 disagreed about: it is an exclusive lock that starts closed.
+Granting it to somebody takes it from whoever held it, and the page says who
+that is above the table.
+
+`accounts/contract_editing.py` is the only place that grants, revokes or reads
+it. Granting clears every other holder in one statement rather than the one the
+code believes in, so a database that somehow holds two - restored from a
+backup, edited by hand - is corrected instead of quietly breaking the rule.
+
+A deactivated account is not reported as the holder: DEC-009 leaves its row in
+place, and a page saying somebody who cannot sign in holds the only lock would
+be worse than saying nobody does.
 
 ## Templates
 

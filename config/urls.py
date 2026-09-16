@@ -21,6 +21,7 @@ from django.views.generic import TemplateView
 from accounts.permissions import require_page_permission
 from accounts.views import (
     landing_page,
+    user_contract_editing,
     user_create,
     user_delete,
     user_list,
@@ -104,5 +105,10 @@ urlpatterns = [
         "users/<int:pk>/delete/",
         require_page_permission("users")(user_delete),
         name="user-delete",
+    ),
+    path(
+        "users/<int:pk>/contract-editing/",
+        require_page_permission("users")(user_contract_editing),
+        name="user-contract-editing",
     ),
 ]
