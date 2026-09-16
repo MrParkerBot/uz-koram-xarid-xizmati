@@ -1,0 +1,70 @@
+{% extends "base_document.html" %}
+{% comment %}
+The supplied login screen, backed by Django's session login.
+
+It extends base_document.html rather than base.html because the supplied
+design gives the sign-in page no sidebar and no top header - only the shared
+document, stylesheets and title.
+
+Two things from the supplied file are deliberately absent:
+
+  - The demo credentials panel, which listed three usernames beside their
+    passwords. It existed so a front end with no backend could be clicked
+    through; those accounts do not exist now that real credentials decide who
+    gets in, and the panel would be a page telling visitors what to type.
+  - The mock login script, replaced by this form posting to Django.
+{% endcomment %}
+{% block page_title %}Kirish{% endblock %}
+{% block body_class %} class="login-body"{% endblock %}
+{% block body %}
+<div class="login-shell">
+  <div class="login-aside">
+    <div class="d-flex align-items-center gap-3 mb-4">
+      <div class="brand-mark">UK</div>
+      <div>
+        <div class="h6 mb-1">Uz-Koram</div>
+        <p class="mb-0 muted small">Xarid Xizmati Bo'limi</p>
+      </div>
+    </div>
+    <div class="section-title mb-3">Xarid jarayonlarini bitta joydan boshqaring</div>
+    <p class="muted mb-4">Arizalar, shartnomalar, yetkazib beruvchilar va mahsulot ma'lumotlari —
+      bo'lim bo'yicha yagona ish maydonida. Hisobotlar va 1C integratsiyasi bilan.</p>
+  </div>
+
+  <div class="login-card">
+    <h1 class="page-title">Kirish</h1>
+    <p class="muted mb-4">Hisobingiz bilan tizimga kiring.</p>
+
+    <form method="post" action="{% url 'login' %}" novalidate>
+      {% csrf_token %}
+      <div class="form-group">
+        <label class="form-label" for="{{ form.username.id_for_label }}">Foydalanuvchi nomi</label>
+        <div class="input-group">
+          <input type="text" name="{{ form.username.html_name }}" id="{{ form.username.id_for_label }}" class="form-control" placeholder="username kiriting" value="{{ form.username.value|default:'' }}" required autocomplete="username"/>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="{{ form.password.id_for_label }}">Parol</label>
+        <div class="input-group">
+          <input type="password" name="{{ form.password.html_name }}" id="{{ form.password.id_for_label }}" class="form-control" placeholder="••••••••" required autocomplete="current-password"/>
+          <button type="button" class="input-group-icon pwd-toggle" aria-label="Parolni ko'rsatish"><i class="bi bi-eye" aria-hidden="true"></i></button>
+        </div>
+      </div>
+
+      {% comment %}
+      One message for every rejection. Saying which of the two fields was wrong
+      would let anyone test whether a username exists.
+      {% endcomment %}
+      <div class="alert alert-danger{% if not form.errors %} hidden{% endif %}" id="login-error">
+        <i class="bi bi-exclamation-octagon" aria-hidden="true"></i>
+        <span>Username yoki parol noto'g'ri. Qayta urinib ko'ring.</span>
+      </div>
+
+      <button type="submit" class="btn btn-primary-custom btn-lg w-100 justify-content-center mt-3" id="login-btn">
+        Kirish
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

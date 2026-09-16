@@ -57,6 +57,11 @@ ALLOWED_HOSTS = read_list_setting(
 # administration surface would sit outside the permission matrix TASK-UZK-012
 # builds. Add it only if a requirement asks for it.
 INSTALLED_APPS = [
+    # The project package itself, so its template tag library is discoverable.
+    "config",
+    # The department's own facts about a user: their type, and from
+    # TASK-UZK-013 what they are permitted to edit.
+    "accounts",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -70,6 +75,11 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Closed by default. Decorating twenty pages individually would be twenty
+    # chances to forget the twenty-first, and every task from TASK-UZK-011
+    # onward adds views. A view that must stay open says so with
+    # @login_not_required; only the login page does.
+    "django.contrib.auth.middleware.LoginRequiredMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -101,6 +111,20 @@ DATABASES = {
         "NAME": BASE_DIR / "db.sqlite3",
     }
 }
+
+# Where an unauthenticated visitor is sent, and where each end of the session
+# lands. TASK-UZK-009 makes the first of these apply to every page.
+LOGIN_URL = "login"
+LOGIN_REDIRECT_URL = "landing-page"
+LOGOUT_REDIRECT_URL = "login"
+
+# The session cookie now identifies a real user rather than a browser-side
+# mock, so it must not travel in the clear. Off by default because development
+# runs over plain HTTP and a cookie a browser refuses to send would make the
+# application look broken rather than insecure; any deployment reachable over
+# HTTPS must turn it on.
+SESSION_COOKIE_SECURE = read_boolean_setting("DJANGO_SECURE_COOKIES", default=False)
+CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

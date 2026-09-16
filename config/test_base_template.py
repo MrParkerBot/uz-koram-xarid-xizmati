@@ -104,10 +104,16 @@ class ShellRenderingTests(SimpleTestCase):
             with self.subTest(landmark=landmark):
                 self.assertIn(f'class="{landmark}"', page)
 
-    def test_the_navigation_list_is_left_for_a_later_task_to_fill(self) -> None:
-        # TASK-UZK-007 owns navigation. Until then the vendored sidebar.js
-        # fills this element, exactly as it does in the supplied pages.
-        self.assertIn('<nav class="sidebar-nav"></nav>', render_shell())
+    def test_the_navigation_list_is_rendered_by_the_server(self) -> None:
+        # TASK-UZK-005 pinned this element as empty and named TASK-UZK-007 as
+        # the task that would fill it. TASK-UZK-012 then made its contents
+        # depend on who is asking: rendered with no user, as here, it is empty
+        # because nobody unidentified may open anything. The filled case is
+        # asserted in accounts/test_permissions.py, against a real account.
+        shell = render_shell()
+
+        self.assertIn('<nav class="sidebar-nav">', shell)
+        self.assertNotIn('class="nav-link"', shell)
 
 
 class PageBlockTests(SimpleTestCase):
@@ -168,13 +174,17 @@ class ShellAssetReferenceTests(SimpleTestCase):
     """
 
     def test_every_supplied_shell_asset_is_referenced(self) -> None:
+        # js/sidebar.js is absent by decision, not by accident: TASK-UZK-007
+        # moved the navigation to the server, and the script would overwrite
+        # the rendered links a moment after the page appeared. The file is
+        # still served - config/test_static_assets.py covers that - but the
+        # shell no longer loads it.
         expected_assets = {
             "css/bootstrap.min.css",
             "css/bootstrap-icons.css",
             "css/style.css",
             "js/bootstrap.bundle.min.js",
             "js/main.js",
-            "js/sidebar.js",
         }
 
         self.assertEqual(set(locally_served_assets(render_shell())), expected_assets)

@@ -53,6 +53,7 @@ variables in your shell or set them in your deployment's environment.
 | `DJANGO_SECRET_KEY` | a key generated at startup | **Set this for any real deployment.** The generated fallback changes on every restart, which invalidates sessions. |
 | `DJANGO_DEBUG` | off | Accepts `1`, `true`, `yes`, `on`. Anything unrecognised is treated as off. |
 | `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Comma separated. |
+| `DJANGO_SECURE_COOKIES` | off | **Turn this on for any deployment reachable over HTTPS.** It marks the session and CSRF cookies https-only. Off by default because development runs over plain HTTP. |
 
 Debug is off unless the environment turns it on, so an unconfigured deployment
 is the safe one rather than the permissive one.
@@ -60,9 +61,18 @@ is the safe one rather than the permissive one.
 ## Front-end assets
 
 The Bootstrap build, icon font and JavaScript supplied with the technical
-assignment live in `static/` and are served as-is. They are deliberately not
-rebuilt or minified again, so the interface the customer approved is the one
-that ships.
+assignment live in `static/` and are served as supplied. They are deliberately
+not rebuilt or minified again, so the interface the customer approved is the
+one that ships.
+
+One file is deliberately different. `js/main.js` shipped with a mock sign-in
+that kept four usernames and passwords in a file served to every browser;
+`TASK-UZK-008` removed it and its three call sites when real authentication
+arrived. Everything else in that file, and every other supplied asset, is
+byte for byte what was delivered.
+
+`js/sidebar.js` is still served but no longer loaded: `TASK-UZK-007` moved the
+navigation to the server.
 
 ```bash
 python manage.py collectstatic
@@ -98,11 +108,185 @@ inline script in `extra_scripts`. Twenty of the twenty-one supplied pages are
 here; `login.html` carries no shell and arrives with authentication in
 `TASK-UZK-008`.
 
-The pages still link to one another by `.html` filename, as the supplied files
-did. `TASK-UZK-007` gives them URLs and rewrites those links.
+Every page has a URL and a name, listed in `config/urls.py`. The name matches
+the template's filename, so a page can be traced from the sidebar to the URL
+to the template without a lookup table. The dashboard answers at the site root.
+
+## Navigation
+
+`config/navigation.py` holds the sidebar: its groups, labels, icons and the URL
+name each entry points at. The structure is the one the customer approved in
+the supplied `sidebar.js`; what changed is that Django renders it, so a link
+cannot point at a page that does not exist and the current page is marked on
+the server.
+
+`static/js/sidebar.js` is no longer loaded. It rebuilt the navigation in the
+browser and would overwrite the rendered links. The file stays in `static/`
+because it was supplied with the assignment and the asset tests assert it is
+served.
+
+Every entry is shown to everyone for now. Hiding the ones a role may not open
+is `TASK-UZK-012`.
+
+## Authentication
+
+Every session is Django's own. `/login/` renders the supplied sign-in page and
+`/logout/` ends the session on POST, so a link cannot sign somebody out.
+Rejections carry one message whatever was wrong, because an error that
+distinguishes an unknown username from a wrong password tells an attacker which
+accounts exist.
+
+The mocked sign-in that shipped with the front end is gone. It kept four
+usernames and passwords in `main.js` - a file served to every browser - and
+signed any visitor in as Admin when no session existed.
+
+Until `TASK-UZK-011` builds user administration, accounts are created on the
+command line:
+
+```bash
+python manage.py createsuperuser
+```
+
+`django.contrib.auth` provides that command; the Django admin site is still
+deliberately absent.
+
+Every page is closed. `LoginRequiredMiddleware` requires a session for every
+view, and an anonymous request is redirected to `/login/` with the page it
+wanted in `next`, so signing in returns the visitor to where they were going.
+The login page is the only view that opts out, with `@login_not_required`.
+
+A view added later is closed unless it says otherwise, which is the direction
+worth defaulting to: forgetting the decorator locks a page, not opens it.
+
+## Roles
+
+The specification calls a role a **User Type** and gives it a master data page,
+so it is a row rather than a constant. DEC-013 fixes the six the department
+works with, and a migration seeds them:
+
+Admin, Bo`lim Boshlig`i, Menejer, Katta Mutaxasis, Direktor and Users.
+
+A user's type lives on `accounts.UserProfile`, not on the account, and
+`accounts/roles.py` is the only place that reads it. It answers from the
+database on every call, so changing somebody's type takes effect on their next
+request rather than at their next sign-in.
+
+A user with no type, a user whose type was deactivated, and an anonymous
+visitor all resolve to no role, and every role check refuses them. Nobody is
+waved through for want of an answer.
+
+## Page permissions
+
+`accounts/permissions.py` holds the matrix: which User Type may open which
+page. It is DEC-015, which supersedes section 11 of the specification - section
+11 lists three roles, numbered 3 and 4 with no 1 and 2, and assigns four pages
+to nobody.
+
+Admin opens everything. Every other type opens the pages the decision names and
+receives **403** for the rest - not a redirect, because the visitor is signed
+in and sending them back to the login page would suggest signing in again would
+help. A user with no type opens nothing.
+
+The sidebar shows only what the current user may open, and a group heading with
+no visible entries is dropped rather than left standing over nothing.
+
+Where DEC-015 says a role "additionally" has a page, the addition is read
+against what section 11 gave that same role. **That is an assumption, not a
+certainty** - DEC-013 splits "Bo`lim Boshligi - Menejer" into two roles that
+section 11 wrote as one - and it is written out at the top of
+`accounts/permissions.py`.
+
+A page added to the application without a row in the matrix fails a test rather
+than becoming Admin-only by accident, and a page view added without the
+decorator fails another: the check is applied by hand, so something has to
+verify it was applied.
+
+Signing in lands on `/kirish/`, which forwards to the first page the user's
+type may open, in the sidebar's own order. It is not the dashboard, because
+three of the six types may not open that one - they would sign in correctly and
+be told they are forbidden.
+
+## Users
+
+The Users page at `/users/` creates, edits and deletes accounts, and assigns
+each one a User Type.
+
+The specification's form captures a first name, a last name, a password, a
+phone number and a type - but no username, although the login page asks for
+one. A username is derived from the name (`Bobur Toshmatov` becomes
+`bobur.toshmatov`, and a second one `bobur.toshmatov2`) and shown in the table,
+since nobody can sign in with a name they were never told. **This is an open
+question for the customer, not a decision:** they may want to enter usernames
+themselves.
+
+Passwords follow DEC-020: hashed, never rendered, and never returned to the
+form. Editing a user leaves the password field empty, and leaving it empty
+keeps the password they already have - changing somebody's phone number must
+not lock them out.
+
+Deleting follows DEC-009: the account is deactivated, so it leaves the list and
+can no longer sign in while everything that already refers to it still
+resolves. The page asks before doing it.
+
+The Edit Permission column grants contract editing; see below. The page is
+Admin-only under DEC-015.
+
+## Contract editing
+
+One user at a time may edit entered contracts. The switch is the Edit
+Permission column on the Users page, and DEC-021 settles what section 3.3 and
+section 3.4 disagreed about: it is an exclusive lock that starts closed.
+Granting it to somebody takes it from whoever held it, and the page says who
+that is above the table.
+
+`accounts/contract_editing.py` is the only place that grants, revokes or reads
+it. Granting clears every other holder in one statement rather than the one the
+code believes in, so a database that somehow holds two - restored from a
+backup, edited by hand - is corrected instead of quietly breaking the rule.
+
+A deactivated account is not reported as the holder: DEC-009 leaves its row in
+place, and a page saying somebody who cannot sign in holds the only lock would
+be worse than saying nobody does.
+
+## Master data
+
+The specification describes the same page eight times (sections 3.2, 3.5-3.8):
+a table with a counter and row actions, a form beside it, Save adding a record,
+Cancel discarding it, Edit opening the form filled in, and Delete removing the
+record after a confirmation.
+
+`accounts/master_data.py` holds the parts that do not differ - the six-digit
+Category Number of DEC-023, and the deletion DEC-009 defines - so the eight
+pages differ only where the specification says they do.
+
+**Deleting deactivates.** The record leaves the table and every drop-down,
+while an application or contract that already refers to it still resolves. One
+consequence is worth knowing: the deactivated row keeps its name, and names are
+unique, so a deleted name cannot be entered again. Whether an administrator
+should be able to restore the old record instead is an open question for the
+customer.
+
+`User Specialty` (`TASK-UZK-014`) and `User Types` (`TASK-UZK-015`) are the
+first two of the eight, and `accounts/master_data.py` grew its shared name
+validation when the second one arrived.
+
+**User Types are also roles.** `accounts/permissions.py` decides what each type
+may open by name, so the six DEC-013 fixes cannot be renamed or deleted on that
+page: renaming one would detach it from every permission written against it and
+the user would simply lose access, with nothing anywhere saying why. Their
+badge colour and Category Number are editable like any other, and an
+installation may add types of its own freely.
+
+## Templates
+
+`templates/base_document.html` holds the document every page shares: the head,
+the supplied stylesheets, the title convention and the scripts. `base.html`
+adds the application chrome - sidebar, top header, page wrapper - on top of it.
+The login screen extends the document directly, because the supplied design
+gives it no sidebar.
 
 ## Project status
 
-This is the application skeleton plus the shared page shell. The root URL
-still serves a placeholder; the real pages arrive in `TASK-UZK-006` and
-`TASK-UZK-007`.
+Every page renders and sits behind a real login - but the pages have no data
+yet: their tables and forms are still the sample markup supplied with the
+assignment, and every signed-in user sees all of them.
