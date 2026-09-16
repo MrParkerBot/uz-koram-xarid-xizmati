@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block page_title %}User Types{% endblock %}
+{% block breadcrumb %}Ma'lumotlar / User Types{% endblock %}
+{% block page_heading %}User Types{% endblock %}
+{% block content %}
+
+
+    <div class="page-header">
+      <div><h1 class="page-title">User Types</h1><div class="muted">Foydalanuvchi turlari / roleslar</div></div>
+      <div class="page-actions"><span class="role-tag role-admin">Admin only</span></div>
+    </div>
+
+    <div class="split-layout">
+      <div class="split-table-side">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div style="font-size:14px;font-weight:700;">User Types Ro'yhati</div>
+          <button class="btn btn-primary-custom btn-sm" onclick="showForm()">+ Yangi qo'shish</button>
+        </div>
+        <div class="search-box" style="margin-bottom:14px;"><i class="bi bi-search search-icon" aria-hidden="true"></i>
+          <input type="text" class="form-control" id="search-input" placeholder="Qidirish…"/>
+        </div>
+        <div class="table-wrap">
+          <table class="table-app" id="types-table">
+            <thead><tr>
+              <th style="width:40px;">#</th>
+              <th class="sortable">User Type<span class="sort-icon"></span></th>
+              <th style="width:90px;text-align:center;">Ko'rinish</th>
+              <th style="width:120px;text-align:center;">Amallar</th>
+            </tr></thead>
+            <tbody id="types-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="split-form-side">
+        <div class="split-form-title" id="form-title"><i class="bi bi-plus-lg" aria-hidden="true"></i> Yangi User Type qo'shish</div>
+        <input type="hidden" id="edit-id"/>
+        <div class="form-group">
+          <label class="form-label">User Type Nomi <span style="color:var(--color-danger)">*</span></label>
+          <input type="text" class="form-control" id="type-name" placeholder="Role nomini kiriting…" required/>
+          <div class="form-error" id="type-name-err"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Badge Rangi</label>
+          <select class="form-control" id="type-color">
+            <option value="orange">Orange (Admin)</option>
+            <option value="blue">Blue (Manager)</option>
+            <option value="green">Green (Specialist)</option>
+            <option value="yellow">Yellow (Director)</option>
+            <option value="gray">Gray (Boshqa)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ko'rinish (Badge Preview)</label>
+          <div id="badge-preview"><span class="badge badge-primary">Admin</span></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:24px;">
+          <button class="btn btn-primary-custom" style="flex:1;" onclick="saveRow()"><i class="bi bi-save" aria-hidden="true"></i> Saqlash</button>
+          <button class="btn btn-outline-custom" style="flex:1;" onclick="cancelEdit()"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</button>
+        </div>
+      </div>
+    </div>
+  
+{% endblock %}
+{% block extra_scripts %}
+<script>
+const colorMap = {orange:'badge-primary',blue:'badge-info',green:'badge-approved',yellow:'badge-trial',gray:'badge-soft'};
+let editingId = null;
+let data = [
+  {id:1, name:'Admin',       color:'orange'},
+  {id:2, name:'Manager',     color:'blue'},
+  {id:3, name:'Specialist',  color:'green'},
+  {id:4, name:'Director',    color:'yellow'},
+];
+let nextId = 5;
+
+document.getElementById('type-name').addEventListener('input', updatePreview);
+document.getElementById('type-color').addEventListener('change', updatePreview);
+
+function updatePreview() {
+  const name  = document.getElementById('type-name').value || 'Role Name';
+  const color = document.getElementById('type-color').value;
+  document.getElementById('badge-preview').innerHTML = `<span class="badge ${colorMap[color]}">${name}</span>`;
+}
+
+function showForm(id) {
+  editingId = id || null;
+  document.getElementById('form-title').innerHTML = id ? '<i class="bi bi-pencil" aria-hidden="true"></i> Tahrirlash' : '<i class="bi bi-plus-lg" aria-hidden="true"></i> Yangi User Type qo\'shish';
+  document.getElementById('type-name').value = '';
+  document.getElementById('type-name-err').textContent = '';
+  document.getElementById('type-color').value = 'orange';
+  if (id) {
+    const item = data.find(d => d.id === id);
+    if (item) { document.getElementById('type-name').value = item.name; document.getElementById('type-color').value = item.color; }
+  }
+  updatePreview();
+}
+
+function saveRow() {
+  const name  = document.getElementById('type-name').value.trim();
+  const color = document.getElementById('type-color').value;
+  if (!name) { document.getElementById('type-name-err').textContent = 'Bu maydon to\'ldirilishi shart'; document.getElementById('type-name').style.borderColor = 'var(--color-danger)'; return; }
+  document.getElementById('type-name').style.borderColor = '';
+  document.getElementById('type-name-err').textContent = '';
+  if (editingId) { const item = data.find(d=>d.id===editingId); if(item){ item.name=name; item.color=color; } Toast.success('Muvaffaqiyatli yangilandi'); }
+  else { data.push({id:nextId++, name, color}); Toast.success('Muvaffaqiyatli qo\'shildi'); }
+  renderTable(); cancelEdit();
+}
+
+function deleteRow(id, name) {
+  Modal.confirm('O\'chirishni tasdiqlaysizmi?', `"${name}" o\'chirib tashlanadi.`, () => {
+    data = data.filter(d=>d.id!==id); renderTable(); Toast.success('O\'chirildi');
+  });
+}
+
+function cancelEdit() {
+  editingId = null;
+  document.getElementById('type-name').value = '';
+  document.getElementById('type-name').style.borderColor = '';
+  document.getElementById('type-name-err').textContent = '';
+  document.getElementById('form-title').innerHTML = '<i class="bi bi-plus-lg" aria-hidden="true"></i> Yangi User Type qo\'shish';
+  updatePreview();
+}
+
+function renderTable() {
+  const tbody = document.getElementById('types-tbody');
+  if (!data.length) { tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state"><div class="empty-icon"><i class="bi bi-inbox" aria-hidden="true"></i></div><div class="empty-title">Ma'lumot topilmadi</div></div></td></tr>`; return; }
+  tbody.innerHTML = data.map((item,i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td>${item.name}</td>
+      <td style="text-align:center;"><span class="badge ${colorMap[item.color]}">${item.name}</span></td>
+      <td style="text-align:center;white-space:nowrap;"><button class="btn btn-outline-custom btn-xs" onclick="showForm(${item.id})"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</button> <button class="btn btn-outline-custom text-danger btn-xs" onclick="deleteRow(${item.id},'${item.name}')" aria-label="O'chirish"><i class="bi bi-x-lg" aria-hidden="true"></i></button></td>
+    </tr>
+  `).join('');
+}
+
+renderTable();
+initTableSearch('#search-input', '#types-table');
+</script>
+{% endblock %}

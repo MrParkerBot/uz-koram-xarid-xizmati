@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block page_title %}Ariza Status{% endblock %}
+{% block breadcrumb %}Ma'lumotlar / Ariza Status{% endblock %}
+{% block page_heading %}Ariza Status{% endblock %}
+{% block content %}
+
+
+    <div class="page-header">
+      <div><h1 class="page-title">Ariza Status</h1><div class="muted">Ariza holatlari boshqaruvi</div></div>
+      <div class="page-actions"><span class="role-tag role-admin">Admin only</span></div>
+    </div>
+
+    <div class="split-layout">
+      <div class="split-table-side">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div style="font-size:14px;font-weight:700;">Ariza Status Ro'yhati</div>
+          <button class="btn btn-primary-custom btn-sm" onclick="showForm()">+ Yangi qo'shish</button>
+        </div>
+        <div class="search-box" style="margin-bottom:14px;"><i class="bi bi-search search-icon" aria-hidden="true"></i>
+          <input type="text" class="form-control" id="search-input" placeholder="Qidirish…"/>
+        </div>
+        <div class="table-wrap">
+          <table class="table-app" id="status-table">
+            <thead><tr>
+              <th style="width:40px;">#</th>
+              <th>Status Nomi</th>
+              <th>Ko'rinish</th>
+              <th style="width:120px;text-align:center;">Amallar</th>
+            </tr></thead>
+            <tbody id="status-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="split-form-side">
+        <div class="split-form-title" id="form-title"><i class="bi bi-plus-lg" aria-hidden="true"></i> Yangi Status qo'shish</div>
+        <input type="hidden" id="edit-id"/>
+        <div class="form-group">
+          <label class="form-label">Status Nomi <span style="color:var(--color-danger)">*</span></label>
+          <input type="text" class="form-control" id="status-name-input" placeholder="Status nomini kiriting…" required/>
+          <div class="form-error" id="status-name-err"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Badge Rangi</label>
+          <input type="color" class="form-control" id="status-color-input" value="#DF5830" style="height:42px;padding:4px 8px;cursor:pointer;"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Jonli Ko'rinish</label>
+          <div><span id="status-badge-preview" class="badge" style="background:rgba(223,88,48,.12);color:#DF5830;border-color:rgba(223,91,48,.2);">Status nomi</span></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:24px;">
+          <button class="btn btn-primary-custom" style="flex:1;" onclick="saveRow()"><i class="bi bi-save" aria-hidden="true"></i> Saqlash</button>
+          <button class="btn btn-outline-custom" style="flex:1;" onclick="cancelEdit()"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</button>
+        </div>
+      </div>
+    </div>
+  
+{% endblock %}
+{% block extra_scripts %}
+<script>
+let editingId = null;
+let data = [
+  {id:1,name:'Kutilmoqda',     color:'#C67A00'},
+  {id:2,name:'Qabul qilindi',  color:'#4B5563'},
+  {id:3,name:'Ko\'rib chiqilmoqda',color:'#C67A00'},
+  {id:4,name:'Tayinlandi',     color:'#4B5563'},
+  {id:5,name:'Bajarilmoqda',   color:'#DF5830'},
+  {id:6,name:'Tugallandi',     color:'#2E7D32'},
+  {id:7,name:'Inkor etildi',   color:'#C0392B'},
+  {id:8,name:'Bekor qilindi',  color:'#666054'},
+];
+let nextId = 9;
+
+document.getElementById('status-name-input').addEventListener('input', updatePreview);
+document.getElementById('status-color-input').addEventListener('input', updatePreview);
+
+function updatePreview() {
+  const name  = document.getElementById('status-name-input').value || 'Status nomi';
+  const color = document.getElementById('status-color-input').value;
+  const prev  = document.getElementById('status-badge-preview');
+  prev.textContent = name;
+  prev.style.background = color + '22';
+  prev.style.color      = color;
+  prev.style.border     = `1px solid ${color}55`;
+}
+
+function showForm(id) {
+  editingId = id || null;
+  document.getElementById('form-title').innerHTML = id ? '<i class="bi bi-pencil" aria-hidden="true"></i> Tahrirlash' : '<i class="bi bi-plus-lg" aria-hidden="true"></i> Yangi Status qo\'shish';
+  document.getElementById('status-name-input').value  = '';
+  document.getElementById('status-color-input').value = '#DF5830';
+  document.getElementById('status-name-err').textContent = '';
+  if (id) {
+    const item = data.find(d=>d.id===id);
+    if (item) { document.getElementById('status-name-input').value = item.name; document.getElementById('status-color-input').value = item.color; }
+  }
+  updatePreview();
+}
+
+function saveRow() {
+  const name  = document.getElementById('status-name-input').value.trim();
+  const color = document.getElementById('status-color-input').value;
+  if (!name) { document.getElementById('status-name-err').textContent='Majburiy maydon'; return; }
+  document.getElementById('status-name-err').textContent='';
+  if (editingId) { const item=data.find(d=>d.id===editingId); if(item){item.name=name;item.color=color;} Toast.success('Yangilandi'); }
+  else { data.push({id:nextId++,name,color}); Toast.success('Qo\'shildi'); }
+  renderTable(); cancelEdit();
+}
+
+function deleteRow(id, name) {
+  Modal.confirm('O\'chirishni tasdiqlaysizmi?', `"${name}" o\'chirib tashlanadi.`, () => {
+    data=data.filter(d=>d.id!==id); renderTable(); Toast.success('O\'chirildi');
+  });
+}
+
+function cancelEdit() {
+  editingId=null;
+  document.getElementById('status-name-input').value='';
+  document.getElementById('status-color-input').value='#DF5830';
+  document.getElementById('status-name-err').textContent='';
+  document.getElementById('form-title').innerHTML='<i class="bi bi-plus-lg" aria-hidden="true"></i> Yangi Status qo\'shish';
+  updatePreview();
+}
+
+function renderTable() {
+  const tbody = document.getElementById('status-tbody');
+  tbody.innerHTML = data.map((item,i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td>${item.name}</td>
+      <td><span class="badge" style="background:${item.color}22;color:${item.color};border:1px solid ${item.color}55;">${item.name}</span></td>
+      <td style="text-align:center;white-space:nowrap;"><button class="btn btn-outline-custom btn-xs" onclick="showForm(${item.id})"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</button> <button class="btn btn-outline-custom text-danger btn-xs" onclick="deleteRow(${item.id},'${item.name}')" aria-label="O'chirish"><i class="bi bi-x-lg" aria-hidden="true"></i></button></td>
+    </tr>
+  `).join('');
+}
+renderTable();
+initTableSearch('#search-input','#status-table');
+updatePreview();
+</script>
+{% endblock %}

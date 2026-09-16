@@ -92,6 +92,15 @@ with server-side navigation. The user shown in the header and the sidebar
 footer is the placeholder from the supplied pages until `TASK-UZK-008` brings
 real authentication.
 
+`templates/pages/` holds one template per supplied page. Each extends
+`base.html`, keeps its own markup in the `content` block, and puts its trailing
+inline script in `extra_scripts`. Twenty of the twenty-one supplied pages are
+here; `login.html` carries no shell and arrives with authentication in
+`TASK-UZK-008`.
+
+The pages still link to one another by `.html` filename, as the supplied files
+did. `TASK-UZK-007` gives them URLs and rewrites those links.
+
 ## Project status
 
 This is the application skeleton plus the shared page shell. The root URL

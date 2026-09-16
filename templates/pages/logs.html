@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block page_title %}Logs{% endblock %}
+{% block breadcrumb %}Tizim / Logs{% endblock %}
+{% block page_heading %}Logs{% endblock %}
+{% block content %}
+
+
+    <div class="page-header">
+      <div><h1 class="page-title">Tizim Loglari</h1><div class="muted">System Activity Logs — Audit Trail</div></div>
+      <div class="page-actions"><span class="role-tag role-admin">Admin only</span></div>
+    </div>
+
+    <!-- STAT ROW -->
+    <div class="grid-4" style="margin-bottom:24px;">
+      <div class="panel stat-card">
+        <div class="stat-icon" style="background:rgba(223,88,48,.12);"><i class="bi bi-clipboard" aria-hidden="true"></i></div>
+        <div class="stat-label">Jami Loglar</div>
+        <div class="kpi-value">1,482</div>
+        <div class="stat-sub">Barcha vaqt uchun</div>
+      </div>
+      <div class="panel stat-card">
+        <div class="stat-icon" style="background:rgba(46,125,50,.12);"><i class="bi bi-check-circle" aria-hidden="true"></i></div>
+        <div class="stat-label">Muvaffaqiyatli</div>
+        <div class="kpi-value" style="color:var(--color-success);">1,398</div>
+        <div class="stat-sub">94.3%</div>
+      </div>
+      <div class="panel stat-card">
+        <div class="stat-icon" style="background:rgba(192,57,43,.12);"><i class="bi bi-x-circle" aria-hidden="true"></i></div>
+        <div class="stat-label">Xatolar</div>
+        <div class="kpi-value" style="color:var(--color-danger);">84</div>
+        <div class="stat-sub">5.7%</div>
+      </div>
+      <div class="panel stat-card">
+        <div class="stat-icon" style="background:rgba(75,85,99,.12);"><i class="bi bi-person" aria-hidden="true"></i></div>
+        <div class="stat-label">Faol Sessiyalar</div>
+        <div class="kpi-value" style="color:var(--color-info);">3</div>
+        <div class="stat-sub">Hozir onlayn</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar"><div class="toolbar-group">
+        <span class="toolbar-label">Filter:</span>
+        <div class="search-box" style="flex:1;max-width:260px;"><i class="bi bi-search search-icon" aria-hidden="true"></i>
+          <input type="text" class="form-control" id="log-search" placeholder="Qidirish…"/>
+        </div>
+        <select class="form-control" style="width:140px;" onchange="filterLogs()">
+          <option value="">Foydalanuvchi: barchasi</option>
+          <option>Admin</option>
+          <option>Manager</option>
+          <option>Specialist</option>
+        </select>
+        <select class="form-control" style="width:130px;" onchange="filterLogs()">
+          <option value="">Holati: barchasi</option>
+          <option value="200">200 OK</option>
+          <option value="201">201 Created</option>
+          <option value="400">400 Error</option>
+          <option value="500">500 Error</option>
+        </select>
+        <select class="form-control" style="width:120px;" onchange="filterLogs()">
+          <option value="">Metod: barchasi</option>
+          <option value="GET">GET</option>
+          <option value="POST">POST</option>
+          <option value="PUT">PUT</option>
+          <option value="DELETE">DELETE</option>
+        </select>
+        <input class="form-control" type="date" style="width:140px;"/>
+        <button class="btn btn-primary-custom btn-sm"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
+        </div><div class="toolbar-group">
+          <button class="btn btn-outline-custom btn-sm" onclick="Toast.info('Loglar eksport qilindi')"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Export</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table-app" id="logs-table">
+          <thead><tr>
+            <th style="width:36px;">#</th>
+            <th>Vaqt</th>
+            <th>Foydalanuvchi</th>
+            <th>Metod</th>
+            <th>Endpoint</th>
+            <th style="text-align:center;width:70px;">Status</th>
+            <th>Amal</th>
+            <th style="text-align:center;width:80px;">Davomiylik</th>
+            <th>IP</th>
+          </tr></thead>
+          <tbody id="logs-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pagination-wrap">
+        <button class="btn btn-outline-custom btn-sm prev-btn">‹ Oldingi</button>
+        <button class="btn btn-primary-custom btn-sm page-btn" data-page="1">1</button>
+        <button class="btn btn-outline-custom btn-sm page-btn" data-page="2">2</button>
+        <button class="btn btn-outline-custom btn-sm page-btn" data-page="3">3</button>
+        <span style="color:var(--color-text-muted);font-size:12px;">…</span>
+        <button class="btn btn-outline-custom btn-sm page-btn" data-page="60">60</button>
+        <button class="btn btn-outline-custom btn-sm next-btn">Keyingi ›</button>
+        <div class="pagination-info">
+          <select class="form-control" style="width:70px;"><option>25</option><option>10</option><option>50</option></select>
+          <span>Jami: 1,482 ta</span>
+        </div>
+      </div>
+    </div>
+  
+{% endblock %}
+{% block extra_scripts %}
+<script>
+const methodColors = {GET:'get',POST:'post',PUT:'put',DELETE:'del'};
+const logs = [
+  {id:1, time:'2025-03-17 15:42:10', user:'A. Karimov (Admin)',    method:'POST',   endpoint:'/api/contracts',          status:201, action:'Shartnoma yaratildi (SHT-2025-044)', duration:'142ms', ip:'192.168.1.5'},
+  {id:2, time:'2025-03-17 15:40:05', user:'B. Toshmatov (Spec)',   method:'PUT',    endpoint:'/api/contracts/42/status', status:200, action:'Shartnoma holati yangilandi',         duration:'88ms',  ip:'192.168.1.8'},
+  {id:3, time:'2025-03-17 15:38:22', user:'D. Yusupova (Spec)',    method:'POST',   endpoint:'/api/applications',        status:201, action:'Yangi ariza yaratildi (ARZ-2025-019)',duration:'110ms', ip:'192.168.1.12'},
+  {id:4, time:'2025-03-17 15:35:17', user:'A. Karimov (Admin)',    method:'DELETE', endpoint:'/api/users/7',             status:200, action:'Foydalanuvchi o\'chirildi',           duration:'64ms',  ip:'192.168.1.5'},
+  {id:5, time:'2025-03-17 15:30:44', user:'System',                method:'POST',   endpoint:'/api/1c/sync',             status:500, action:'1C sinxronlash xatosi',               duration:'5,200ms',ip:'127.0.0.1'},
+  {id:6, time:'2025-03-17 15:28:12', user:'B. Toshmatov (Spec)',   method:'GET',    endpoint:'/api/applications',        status:200, action:'Arizalar ro\'yhati ko\'rildi',        duration:'45ms',  ip:'192.168.1.8'},
+  {id:7, time:'2025-03-17 15:22:09', user:'A. Karimov (Admin)',    method:'POST',   endpoint:'/api/users',               status:201, action:'Yangi foydalanuvchi qo\'shildi',      duration:'93ms',  ip:'192.168.1.5'},
+  {id:8, time:'2025-03-17 15:18:55', user:'D. Yusupova (Spec)',    method:'PUT',    endpoint:'/api/applications/18/assign',status:200,action:'Ariza tayinlandi',                  duration:'72ms',  ip:'192.168.1.12'},
+  {id:9, time:'2025-03-17 15:10:01', user:'System',                method:'GET',    endpoint:'/api/health',              status:200, action:'Health check',                        duration:'12ms',  ip:'127.0.0.1'},
+  {id:10,time:'2025-03-17 14:58:33', user:'A. Karimov (Admin)',    method:'POST',   endpoint:'/api/contracts/44/approve', status:200,action:'Shartnoma tasdiqlandi',               duration:'118ms', ip:'192.168.1.5'},
+];
+
+function statusColor(code) {
+  if (code >= 200 && code < 300) return 'badge-approved';
+  if (code >= 400 && code < 500) return 'badge-trial';
+  return 'badge-danger';
+}
+
+function renderLogs() {
+  const tbody = document.getElementById('logs-tbody');
+  tbody.innerHTML = logs.map((item,i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td class="mono-cell" style="font-size:11px;">${item.time}</td>
+      <td style="font-size:12px;">${item.user}</td>
+      <td><span class="log-method ${methodColors[item.method]||'get'}">${item.method}</span></td>
+      <td class="mono-cell" style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${item.endpoint}">${item.endpoint}</td>
+      <td style="text-align:center;"><span class="badge ${statusColor(item.status)}">${item.status}</span></td>
+      <td style="font-size:12px;max-width:200px;">${item.action}</td>
+      <td style="text-align:center;" class="mono-cell">${item.duration}</td>
+      <td class="mono-cell" style="font-size:11px;">${item.ip}</td>
+    </tr>
+  `).join('');
+}
+
+function filterLogs() { /* client-side filter placeholder */ }
+
+renderLogs();
+initTableSearch('#log-search', '#logs-table');
+</script>
+{% endblock %}

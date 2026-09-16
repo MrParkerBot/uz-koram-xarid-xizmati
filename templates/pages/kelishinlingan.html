@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% block page_title %}Kelishinlingan Shartnoma{% endblock %}
+{% block breadcrumb %}Shartnomalar / Kelishinlingan{% endblock %}
+{% block page_heading %}Kelishinlingan{% endblock %}
+{% block content %}
+
+
+    <div class="page-header">
+      <div><h1 class="page-title">Kelishinlingan Shartnoma</h1><div class="muted">Agreed Contracts — Entry &amp; Management</div></div>
+      <div class="page-actions">
+        <span class="role-tag role-manager">Manager</span>
+        <span class="role-tag role-specialist">Specialist</span>
+      </div>
+    </div>
+
+    <!-- TABLE CARD -->
+    <div class="panel" style="margin-bottom:24px;">
+      <div class="toolbar"><div class="toolbar-group">
+        <span class="toolbar-label">Filter:</span>
+        <select class="form-control" style="width:150px;">
+          <option value="">Holati: barchasi</option>
+          <option>Kutilmoqda</option>
+          <option>Tasdiqlandi</option>
+          <option>Inkor etildi</option>
+        </select>
+        <input class="form-control" type="date" style="width:140px;"/>
+        <button class="btn btn-primary-custom btn-sm"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
+        </div><div class="toolbar-group">
+          <button class="btn btn-primary-custom btn-sm" onclick="openContractForm()">+ Shartnoma Kiritish</button>
+          <button class="btn btn-outline-custom btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
+          <button class="btn btn-outline-custom btn-sm"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table-app" id="kelish-table">
+          <thead><tr>
+            <th style="width:36px;">#</th>
+            <th>Ariza №</th>
+            <th>Bo'lim</th>
+            <th>Buyurtma nomi</th>
+            <th>Shartnoma №</th>
+            <th>Firma</th>
+            <th>Kim tuzdi</th>
+            <th>Yaratilgan</th>
+            <th>Qiymati (UZS)</th>
+            <th style="text-align:center;width:60px;">Ko'rish</th>
+            <th style="text-align:center;width:100px;">Yuborish</th>
+            <th>Izoh</th>
+          </tr></thead>
+          <tbody id="kelish-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pagination-wrap">
+        <button class="btn btn-outline-custom btn-sm">‹ Oldingi</button>
+        <button class="btn btn-primary-custom btn-sm">1</button>
+        <button class="btn btn-outline-custom btn-sm">Keyingi ›</button>
+        <div class="pagination-info"><span>Jami: <span id="total-count">2</span> ta</span></div>
+      </div>
+    </div>
+  
+{% endblock %}
+{% block extra_scripts %}
+<!-- CONTRACT FORM MODAL -->
+<div id="contract-form-modal" class="modal-overlay hidden">
+  <div class="modal-box" style="max-width:800px;width:100%;max-height:90vh;overflow-y:auto;padding:28px;">
+    <div class="modal-title"><i class="bi bi-clipboard" aria-hidden="true"></i> Shartnoma Kiritish Formasi</div>
+
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Ariza Raqami</label><input type="text" class="form-control mono" value="ARZ-2025-001" disabled/></div>
+      <div class="form-group"><label class="form-label">Ariza Berilgan Sana</label><input type="text" class="form-control" value="2025-03-10" disabled/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Bo'lim Nomi</label><input type="text" class="form-control" value="Texnik bo'lim" disabled/></div>
+      <div class="form-group"><label class="form-label">Shartnoma Sanasi <span style="color:var(--color-danger)">*</span></label><input type="date" class="form-control" id="cf-date" required/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Shartnoma Raqami <span style="color:var(--color-danger)">*</span></label><input type="text" class="form-control mono" id="cf-num" placeholder="SHT-YYYY-NNN" required/></div>
+      <div class="form-group"><label class="form-label">Status</label><select class="form-control" id="cf-status"><option>Birjaga qo'yilgan</option><option>Shartnoma tuzilgan</option></select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Firma Nomi <span style="color:var(--color-danger)">*</span></label><input type="text" class="form-control" id="cf-firma" placeholder="Firma/kompaniya nomi" required/></div>
+      <div class="form-group"><label class="form-label">Firma INN</label><input type="text" class="form-control mono" id="cf-inn" placeholder="123456789" maxlength="9"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Shartnoma Turi <span style="color:var(--color-danger)">*</span></label>
+        <select class="form-control" id="cf-turi"><option>Import</option><option>Mahalliy (Local)</option><option>Ramka (Framework)</option><option>Davlat xaridi</option></select></div>
+      <div class="form-group"><label class="form-label">Ilova (PDF) <span style="color:var(--color-danger)">*</span></label>
+        <div class="file-upload-wrap"><div class="file-upload-area" style="padding:12px;"><div class="upload-icon" style="font-size:18px;"><i class="bi bi-paperclip" aria-hidden="true"></i></div><div class="upload-text" style="font-size:11px;">PDF yuklash (majburiy)</div><input type="file" accept=".pdf" style="display:none;"/></div><div class="file-upload-preview" style="display:none;"></div></div>
+      </div>
+    </div>
+
+    <!-- Dynamic item rows -->
+    <div class="item-rows-container">
+      <div class="item-row-header">Buyurtma qatorlari:</div>
+      <div id="cf-item-rows">
+        <div class="form-row-items-6 item-row-entry">
+          <div class="form-group" style="margin-bottom:0;"><label class="form-label">Buyurtma Nomi</label><input type="text" class="form-control" placeholder="Item nomi" required/></div>
+          <div class="form-group" style="margin-bottom:0;"><label class="form-label">Miqdori</label><input type="number" class="form-control calc-qty" placeholder="0" min="0" step="0.01"/></div>
+          <div class="form-group" style="margin-bottom:0;"><label class="form-label">Birligi</label><select class="form-control"><option>ta</option><option>kg</option><option>m</option><option>l</option></select></div>
+          <div class="form-group" style="margin-bottom:0;"><label class="form-label">Part Number</label><input type="text" class="form-control mono" placeholder="P/N"/></div>
+          <div class="form-group" style="margin-bottom:0;"><label class="form-label">Narxi (1ta)</label><input type="number" class="form-control calc-price" placeholder="0" min="0" oninput="calcRowTotal(this)"/></div>
+          <div class="form-group" style="margin-bottom:0;"><label class="form-label">Jami Narx</label><input type="text" class="form-control calc-total" disabled placeholder="Auto" style="background:var(--color-surface-muted);font-weight:700;"/></div>
+          <button type="button" class="btn btn-outline-custom btn-xs" style="align-self:flex-end;color:var(--color-danger);" onclick="removeItemRow(this)" title="O'chirish" aria-label="Qatorni olib tashlash"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+        </div>
+      </div>
+      <!-- extra: payment + deadline row -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:8px;margin-top:8px;margin-bottom:10px;" id="cf-extra-row">
+        <div class="form-group"><label class="form-label">To'lash muddati</label><input type="date" class="form-control"/></div>
+        <div class="form-group"><label class="form-label">Muddat talabi</label><input type="date" class="form-control"/></div>
+        <div class="form-group"><label class="form-label">Izoh</label><input type="text" class="form-control" placeholder="Qo'shimcha izoh"/></div>
+      </div>
+      <button type="button" class="btn btn-outline-custom btn-xs" onclick="addCFRow()">+ Qator qo'shish</button>
+    </div>
+
+    <div class="form-group" style="margin-top:16px;">
+      <label class="form-label">Shartnoma Umumiy Qiymati (UZS)</label>
+      <input type="text" class="form-control grand-total-field" disabled placeholder="Qatorlar yig'indisi — auto hisoblanadi" style="background:var(--color-surface-muted);font-size:16px;font-weight:800;color:var(--color-primary);"/>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-outline-custom" data-close-modal="contract-form-modal"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</button>
+      <button class="btn btn-primary-custom" onclick="submitContract()"><i class="bi bi-check-lg" aria-hidden="true"></i> Yaratish</button>
+    </div>
+  </div>
+</div>
+
+<!-- VIEW DRAWER -->
+<div id="view-drawer-overlay" class="drawer-overlay hidden">
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <div class="drawer-title" id="view-drawer-title">Shartnoma tafsilotlari</div>
+      <button class="drawer-close" data-close-drawer="view-drawer" aria-label="Yopish"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+    </div>
+    <div class="drawer-body" id="view-drawer-body"></div>
+  </div>
+</div>
+
+<script>
+let contracts = [
+  {id:1, arizaNum:'ARZ-2025-001', bolim:'Texnik',  nomi:'Bolt M12×50',     shtNum:'SHT-2025-042', firma:'Texnoprom LLC', kim:'A. Karimov', date:'2025-03-12', qiymati:'42,500,000', izoh:'', status:'pending'},
+  {id:2, arizaNum:'ARZ-2025-003', bolim:'Moliya',  nomi:'Asetilen gazi',   shtNum:'SHT-2025-043', firma:'GazTrade',      kim:'B. Toshmatov',date:'2025-03-13', qiymati:'8,200,000',  izoh:'Narx noto\'g\'ri', status:'rejected'},
+];
+
+function renderTable() {
+  const tbody = document.getElementById('kelish-tbody');
+  tbody.innerHTML = contracts.map((item,i) => `
+    <tr data-id="${item.id}">
+      <td>${i+1}</td>
+      <td class="mono-cell">${item.arizaNum}</td>
+      <td>${item.bolim}</td>
+      <td style="font-weight:500;">${item.nomi}</td>
+      <td class="mono-cell">${item.shtNum}</td>
+      <td>${item.firma}</td>
+      <td>${item.kim}</td>
+      <td class="mono-cell">${item.date}</td>
+      <td style="font-weight:700;">${item.qiymati} UZS</td>
+      <td style="text-align:center;"><button class="btn btn-outline-custom btn-xs" onclick="openView(${item.id})" aria-label="Ko'rish"><i class="bi bi-eye" aria-hidden="true"></i></button></td>
+      <td style="text-align:center;">
+        ${item.status==='pending'
+          ? `<button class="btn btn-primary-custom btn-xs" onclick="sendContract(${item.id})"><i class="bi bi-upload" aria-hidden="true"></i> Yuborish</button>`
+          : item.status==='sent'
+            ? `<span class="badge badge-trial">Kutilmoqda</span>`
+            : `<button class="btn btn-outline-custom text-warning btn-xs" onclick="sendContract(${item.id})" style="background:var(--color-warning);color:#fff;"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Qayta</button>`
+        }
+      </td>
+      <td style="font-size:11px;color:${item.izoh?'var(--color-danger)':'var(--color-text-muted)'};">${item.izoh||'—'}</td>
+    </tr>
+  `).join('');
+  document.getElementById('total-count').textContent = contracts.length;
+}
+
+function sendContract(id) {
+  const item = contracts.find(c=>c.id===id);
+  if (item) { item.status = 'sent'; item.izoh = ''; }
+  renderTable();
+  Toast.success('Shartnoma admin ko\'rib chiqishga yuborildi');
+}
+
+function openView(id) {
+  const item = contracts.find(c=>c.id===id);
+  document.getElementById('view-drawer-title').textContent = `Shartnoma: ${item.shtNum}`;
+  document.getElementById('view-drawer-body').innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div class="panel"><div class="panel-body" style="padding:16px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;">
+          <div><div style="font-size:10px;color:var(--color-text-muted);text-transform:uppercase;margin-bottom:2px;">Shartnoma №</div><div class="mono-cell">${item.shtNum}</div></div>
+          <div><div style="font-size:10px;color:var(--color-text-muted);text-transform:uppercase;margin-bottom:2px;">Ariza №</div><div class="mono-cell">${item.arizaNum}</div></div>
+          <div><div style="font-size:10px;color:var(--color-text-muted);text-transform:uppercase;margin-bottom:2px;">Firma</div><div>${item.firma}</div></div>
+          <div><div style="font-size:10px;color:var(--color-text-muted);text-transform:uppercase;margin-bottom:2px;">Umumiy Qiymat</div><div style="font-weight:800;color:var(--color-primary);">${item.qiymati} UZS</div></div>
+          <div><div style="font-size:10px;color:var(--color-text-muted);text-transform:uppercase;margin-bottom:2px;">Bo'lim</div><div>${item.bolim}</div></div>
+          <div><div style="font-size:10px;color:var(--color-text-muted);text-transform:uppercase;margin-bottom:2px;">Yaratilgan</div><div>${item.date}</div></div>
+        </div>
+      </div></div>
+      <span class="pdf-badge" style="align-self:flex-start;padding:8px 14px;font-size:12px;"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> Shartnoma.pdf yuklab olish</span>
+    </div>
+  `;
+  Drawer.open('view-drawer');
+}
+
+function openContractForm() { Modal.open('contract-form-modal'); }
+
+function calcRowTotal(el) {
+  const row = el.closest('.form-row-items-6, .item-row-entry');
+  if (!row) return;
+  const qty   = parseFloat(row.querySelector('.calc-qty')?.value) || 0;
+  const price = parseFloat(el.value) || 0;
+  const total = row.querySelector('.calc-total');
+  if (total) total.value = (qty*price).toLocaleString('uz-UZ');
+  updateGrandTotal();
+}
+
+function updateGrandTotal() {
+  const totals = document.querySelectorAll('.calc-total');
+  let sum = 0;
+  totals.forEach(t => { sum += parseFloat((t.value||'').replace(/[^\d.]/g,''))||0; });
+  const gf = document.querySelector('.grand-total-field');
+  if (gf) gf.value = sum ? sum.toLocaleString('uz-UZ') + ' UZS' : '';
+}
+
+function addCFRow() {
+  const container = document.getElementById('cf-item-rows');
+  const row = document.createElement('div');
+  row.className = 'form-row-items-6 item-row-entry';
+  row.innerHTML = `
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Buyurtma Nomi</label><input type="text" class="form-control" placeholder="Item nomi"/></div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Miqdori</label><input type="number" class="form-control calc-qty" placeholder="0" oninput="calcRowTotal(this.closest('.form-row-items-6').querySelector('.calc-price'))"/></div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Birligi</label><select class="form-control"><option>ta</option><option>kg</option><option>m</option></select></div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Part Number</label><input type="text" class="form-control mono" placeholder="P/N"/></div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Narxi (1ta)</label><input type="number" class="form-control calc-price" placeholder="0" oninput="calcRowTotal(this)"/></div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Jami Narx</label><input type="text" class="form-control calc-total" disabled placeholder="Auto" style="background:var(--color-surface-muted);font-weight:700;"/></div>
+    <button type="button" class="btn btn-outline-custom btn-xs" style="align-self:flex-end;color:var(--color-danger);" onclick="removeItemRow(this)" aria-label="Qatorni olib tashlash"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+  `;
+  container.appendChild(row);
+}
+
+function removeItemRow(btn) {
+  const rows = document.querySelectorAll('.item-row-entry');
+  if (rows.length <= 1) { Toast.warning('Kamida 1 ta qator bo\'lishi shart'); return; }
+  btn.closest('.item-row-entry').remove();
+  updateGrandTotal();
+}
+
+function submitContract() {
+  const num   = document.getElementById('cf-num').value.trim();
+  const firma = document.getElementById('cf-firma').value.trim();
+  if (!num || !firma) { Toast.error('Barcha majburiy maydonlarni to\'ldiring'); return; }
+  Toast.success('Shartnoma muvaffaqiyatli yaratildi');
+  Modal.close('contract-form-modal');
+}
+
+renderTable();
+</script>
+{% endblock %}
