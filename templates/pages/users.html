@@ -13,8 +13,9 @@ carried over:
   - The four sample users in a JavaScript array.
   - Deleting a row from that array. DEC-009 makes deletion a deactivation.
 
-The Edit Permission column is rendered but inert. TASK-UZK-013 owns the toggle
-and the exclusivity rule behind it (DEC-021).
+The Edit Permission column posts to its own action. DEC-021 makes it an
+exclusive lock: granting it to somebody takes it from whoever had it, and the
+page says who holds it above the table.
 {% endcomment %}
 {% block page_title %}Foydalanuvchilar{% endblock %}
 {% block breadcrumb %}Ma'lumotlar / Foydalanuvchilar{% endblock %}
@@ -28,7 +29,9 @@ and the exclusivity rule behind it (DEC-021).
 
     <div class="alert alert-warning" style="margin-bottom:20px;">
       <span><i class="bi bi-exclamation-triangle" aria-hidden="true"></i></span>
-      <div><strong>Tahrirlash ruxsati:</strong> Faqat bitta foydalanuvchi tahrirlash ruxsatiga ega bo'lishi mumkin. Boshqa foydalanuvchiga ruxsat berilganda, avvalgisinikini avtomatik o'chiriladi.</div>
+      <div><strong>Tahrirlash ruxsati:</strong> Faqat bitta foydalanuvchi tahrirlash ruxsatiga ega bo'lishi mumkin. Boshqa foydalanuvchiga ruxsat berilganda, avvalgisinikini avtomatik o'chiriladi.
+        {% if contract_editor %}Hozir: <strong>{{ contract_editor.user.get_full_name|default:contract_editor.user.get_username }}</strong>.{% else %}Hozircha hech kimda yo'q.{% endif %}
+      </div>
     </div>
 
     <div class="panel" style="margin-bottom:20px;">
@@ -67,10 +70,14 @@ and the exclusivity rule behind it (DEC-021).
               <td class="mono-cell">{% if listed_user.profile.phone_number %}+998 {{ listed_user.profile.phone_number }}{% endif %}</td>
               <td>{% if listed_user.profile.user_type %}<span class="badge badge-primary">{{ listed_user.profile.user_type.name }}</span>{% else %}<span class="muted small">Belgilanmagan</span>{% endif %}</td>
               <td style="text-align:center;">
-                <label class="toggle edit-permission-toggle-wrap" title="TASK-UZK-013">
-                  <input type="checkbox" class="edit-permission-toggle" disabled/>
-                  <span class="toggle-slider"></span>
-                </label>
+                <form method="post" action="{% url 'user-contract-editing' listed_user.pk %}" id="contract-editing-{{ listed_user.pk }}">
+                  {% csrf_token %}
+                  <label class="toggle edit-permission-toggle-wrap">
+                    <input type="checkbox" class="edit-permission-toggle" name="may_edit_contracts" data-user-name="{{ listed_user.get_full_name|default:listed_user.get_username }}" onchange="this.form.submit();"{% if listed_user.profile.may_edit_contracts %} checked{% endif %}/>
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <noscript><button type="submit" class="btn btn-outline-custom btn-xs">Saqlash</button></noscript>
+                </form>
               </td>
               <td style="text-align:center;">
                 <a class="btn btn-outline-custom btn-xs" href="{% url 'users' %}?edit={{ listed_user.pk }}" aria-label="Tahrirlash"><i class="bi bi-pencil" aria-hidden="true"></i></a>
@@ -147,11 +154,7 @@ and the exclusivity rule behind it (DEC-021).
         <div class="form-group">
           <label class="form-label">Tahrirlash Ruxsati</label>
           <div class="toggle-wrap" style="margin-top:10px;">
-            <label class="toggle">
-              <input type="checkbox" disabled/>
-              <span class="toggle-slider"></span>
-            </label>
-            <span class="toggle-label muted">TASK-UZK-013</span>
+            <span class="toggle-label muted">Jadvaldagi kalit orqali beriladi.</span>
           </div>
         </div>
       </div>
