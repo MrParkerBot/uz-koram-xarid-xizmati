@@ -23,7 +23,7 @@ from django.urls import reverse
 from django.utils.crypto import get_random_string
 
 from accounts.models import UserType
-from accounts.roles import ADMIN, MENEJER, USERS, assign_user_type
+from accounts.roles import ADMIN, DIREKTOR, MENEJER, USERS, assign_user_type
 from applications.attachments import (
     LARGEST_ATTACHMENT_BYTES,
     attachment_storage,
@@ -196,3 +196,46 @@ class DownloadTestCase(TestCase):
 
     def test_an_anonymous_visitor_may_not_download(self) -> None:
         self.assertEqual(self.client.get(self.url).status_code, 302)
+
+
+class AttachmentFollowsTheRecordTests(DownloadTestCase):
+    """The PDF stops being reachable when the row stops being visible.
+
+    DEC-015 gives Direktor Kelib tushgan and not Qabul qilingan. A download
+    guarded by the incoming page alone would stay open to them after the
+    application was accepted and had left every page they may open, which is
+    a route outliving the row it belongs to.
+    """
+
+    def accept(self) -> None:
+        self.application.stage = Application.Stage.ACCEPTED
+        self.application.save(update_fields=["stage"])
+
+    def test_a_direktor_may_download_an_incoming_application(self) -> None:
+        self.client.force_login(make_user(DIREKTOR))
+
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+
+    def test_a_direktor_may_not_download_it_once_it_is_accepted(self) -> None:
+        self.client.force_login(make_user(DIREKTOR))
+        self.accept()
+
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+    def test_a_manager_may_download_it_at_either_stage(self) -> None:
+        # Menejer may open both pages, so the application never leaves their
+        # sight and the attachment never leaves their reach.
+        self.client.force_login(make_user(MENEJER))
+
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+        self.accept()
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+
+    def test_nobody_may_download_a_rejected_application(self) -> None:
+        # No page lists a rejected application yet, so there is no page whose
+        # permission could allow it. TASK-UZK-024 decides where it shows.
+        self.client.force_login(make_user(ADMIN))
+        self.application.stage = Application.Stage.REJECTED
+        self.application.save(update_fields=["stage"])
+
+        self.assertEqual(self.client.get(self.url).status_code, 403)

@@ -30,6 +30,15 @@ def next_ariza_raqami(today: date | None = None) -> str:
     the same transaction as the save, so two applications created at once
     cannot be handed the same number - and the unique column is what makes
     that a failure rather than a duplicate if they somehow are.
+
+    The highest number is found by sorting as text, which is correct only
+    because the sequence is zero-padded to a fixed width: ARZ-2026-00009 sorts
+    below ARZ-2026-00010. It would stop being correct if a year ever needed a
+    sixth digit, because ARZ-2026-100000 sorts below ARZ-2026-99999 and the
+    number allocated next would already be taken. The unique column turns that
+    into an error rather than a duplicate, and a department raising a hundred
+    thousand applications a year is not this one - but the constraint is
+    invisible otherwise, so it is written down here.
     """
     year = (today or date.today()).year
     prefix = f"{ARIZA_NUMBER_PREFIX}-{year}-"

@@ -333,9 +333,12 @@ urlpatterns = [
         require_page_permission("kelib-arizalar")(incoming_list),
         name="kelib-arizalar",
     ),
+    # Not wrapped in require_page_permission: the view asks about the page
+    # that currently shows this application, because the attachment has to
+    # stop being reachable when the row stops being visible.
     path(
-        "kelib-arizalar/<int:pk>/pdf/",
-        require_page_permission("kelib-arizalar")(application_pdf),
+        "arizalar/<int:pk>/pdf/",
+        application_pdf,
         name="ariza-pdf",
     ),
 ]
