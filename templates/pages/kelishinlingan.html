@@ -19,9 +19,19 @@ TASK-UZK-036). It is on the page for every contract still here, and it has no
 permission of its own yet: DEC-021 makes editing an exclusive lock one person
 holds, and TASK-UZK-040 is where that lands.
 
-Two things are deliberately not finished:
+Holati is the status control of REQ-ROLE-008 (TASK-UZK-037). What counts
+as a permitted move is narrower than it looks: DEC-010 makes the statuses rows
+an administrator invents, so the drop-down offers whatever is in use and the
+code cannot name any of them. Beneath it is the last move and who made it,
+because "keeps changing their state" is a sequence rather than a value.
 
-- Ko'rish and Yuborish are TASK-UZK-037 and TASK-UZK-038.
+Ko'rish opens the contract's goods rows in place (REQ-SHARTNOMA-005). They are
+already on the page - the Buyurtma nomi column is made of them - so this is
+markup rather than a second request.
+
+One thing is deliberately not finished:
+
+- Yuborish is TASK-UZK-038.
 - The filter bar and the exports are inert until TASK-UZK-041 and
   TASK-UZK-042 build them for every table at once.
 
@@ -79,6 +89,7 @@ REQ-SHARTNOMA-006 asks for and stores one fact.
             <th>Kim tuzdi</th>
             <th>Yaratilgan</th>
             <th>Qiymati (UZS)</th>
+            <th style="width:180px;">Holati</th>
             <th style="text-align:center;width:50px;">Ilova</th>
             <th style="text-align:center;width:60px;">Ko'rish</th>
             <th style="text-align:center;width:60px;">Tahrir</th>
@@ -102,6 +113,29 @@ REQ-SHARTNOMA-006 asks for and stores one fact.
               <td rowspan="{{ lines|length }}">{{ shartnoma.created_by.get_full_name|default:shartnoma.created_by.username }}</td>
               <td class="mono-cell" rowspan="{{ lines|length }}">{{ shartnoma.yaratilingan_sana|date:"Y-m-d" }}</td>
               <td style="font-weight:600;color:var(--color-primary);" rowspan="{{ lines|length }}">{{ shartnoma.qiymati_display }}</td>
+              <td rowspan="{{ lines|length }}">
+                {% if shartnoma.is_editable %}
+                <form method="post" action="{% url 'shartnoma-holat' shartnoma.pk %}">
+                  {% csrf_token %}
+                  <select class="form-control" name="status" style="width:160px;padding:5px 8px;font-size:11px;">
+                    <option value="">&mdash; {{ shartnoma.status.name|default:"Tanlang" }} &mdash;</option>
+                    {% for holat in statuses %}
+                      <option value="{{ holat.pk }}"{% if holat.pk == shartnoma.status_id %} selected{% endif %}>{{ holat.name }}</option>
+                    {% endfor %}
+                  </select>
+                  <button type="submit" class="btn btn-outline-custom btn-xs" style="margin-top:4px;">Saqlash</button>
+                </form>
+                {% else %}
+                  {% if shartnoma.status %}<span class="badge {{ shartnoma.status.badge_class }}">{{ shartnoma.status.name }}</span>{% else %}<span class="muted small">&mdash;</span>{% endif %}
+                {% endif %}
+                {% with oxirgi=shartnoma.last_status_change %}
+                {% if oxirgi %}
+                  <div class="muted" style="font-size:10px;margin-top:4px;">
+                    {{ oxirgi.to_status.name }} &mdash; {{ oxirgi.changed_by.get_full_name|default:oxirgi.changed_by.username }}, {{ oxirgi.changed_at|date:"Y-m-d H:i" }}
+                  </div>
+                {% endif %}
+                {% endwith %}
+              </td>
               <td style="text-align:center;" rowspan="{{ lines|length }}">
                 {% if shartnoma.pdf %}
                   <a class="pdf-badge" href="{% url 'shartnoma-pdf' shartnoma.pk %}" title="{{ shartnoma.shartnoma_raqami }}.pdf"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></a>
@@ -110,7 +144,7 @@ REQ-SHARTNOMA-006 asks for and stores one fact.
                 {% endif %}
               </td>
               <td style="text-align:center;" rowspan="{{ lines|length }}">
-                <button class="btn btn-outline-custom btn-xs" disabled title="TASK-UZK-037 ko'rishni quradi"><i class="bi bi-eye" aria-hidden="true"></i></button>
+                <button type="button" class="btn btn-outline-custom btn-xs js-sht-korish" data-tafsilot="sht-tafsilot-{{ shartnoma.pk }}" title="Tovarlarni ko'rish"><i class="bi bi-eye" aria-hidden="true"></i></button>
               </td>
               <td style="text-align:center;" rowspan="{{ lines|length }}">
                 <a class="btn btn-outline-custom btn-xs" href="{% url 'shartnoma-tahrirlash' shartnoma.pk %}" title="Tahrirlash"><i class="bi bi-pencil" aria-hidden="true"></i></a>
@@ -122,9 +156,36 @@ REQ-SHARTNOMA-006 asks for and stores one fact.
               {% endif %}
             </tr>
             {% endfor %}
+            <tr class="hidden" id="sht-tafsilot-{{ shartnoma.pk }}">
+              <td colspan="15" style="background:var(--color-surface-alt, #fafafa);">
+                <div style="font-size:11px;color:var(--color-text-muted);margin-bottom:6px;">{{ shartnoma.shartnoma_raqami }} &mdash; tovarlar</div>
+                <table class="table-app">
+                  <thead><tr>
+                    <th>Buyurtma nomi</th>
+                    <th>Part Number</th>
+                    <th>Miqdori</th>
+                    <th>Birligi</th>
+                    <th>Narxi (UZS)</th>
+                    <th>Umumiy Narx (UZS)</th>
+                  </tr></thead>
+                  <tbody>
+                  {% for qator in lines %}
+                    <tr>
+                      <td style="font-weight:500;">{{ qator.buyurtma_nomi }}</td>
+                      <td class="mono-cell">{{ qator.part_number|default:"&mdash;" }}</td>
+                      <td>{{ qator.soni_display }}</td>
+                      <td>{{ qator.olchov_birligi }}</td>
+                      <td class="mono-cell">{{ qator.narxi_display }}</td>
+                      <td class="mono-cell" style="font-weight:600;">{{ qator.umumiy_narx_display }}</td>
+                    </tr>
+                  {% endfor %}
+                  </tbody>
+                </table>
+              </td>
+            </tr>
             {% endwith %}
           {% empty %}
-            <tr><td colspan="14" class="muted" style="text-align:center;">Hozircha kelishinlingan shartnoma yo'q.</td></tr>
+            <tr><td colspan="15" class="muted" style="text-align:center;">Hozircha kelishinlingan shartnoma yo'q.</td></tr>
           {% endfor %}
           </tbody>
         </table>
@@ -321,6 +382,18 @@ REQ-SHARTNOMA-006 asks for and stores one fact.
     </div>
   </div>
 </template>
+
+<script>
+  // REQ-SHARTNOMA-005's View Button. The goods are already on the page -
+  // Buyurtma nomi is made of them - so this shows what is there rather than
+  // asking the server for it again.
+  document.getElementById('kelish-tbody').addEventListener('click', (event) => {
+    const button = event.target.closest('.js-sht-korish');
+    if (!button) return;
+
+    document.getElementById(button.dataset.tafsilot).classList.toggle('hidden');
+  });
+</script>
 
 <script>
   // REQ-SHARTNOMA-007's plus button, the same shape as the two order-line

@@ -47,11 +47,12 @@ from applications.models import (
     ApplicationItem,
     Contract,
     ContractItem,
+    ContractStatusChange,
     PurchaseApplication,
     PurchaseApplicationItem,
 )
 from applications.notifications import notify_admins_of_acceptance
-from reference.models import ArizaStatus
+from reference.models import ArizaStatus, ShartnomaStatus
 
 # The four columns one order line is made of, named once so the creation
 # view and the line model cannot drift apart.
@@ -782,13 +783,29 @@ def agreed_contracts() -> QuerySet[Contract]:
             "status",
             "created_by",
         )
-        .prefetch_related(contract_lines())
+        .prefetch_related(contract_lines(), contract_status_history())
     )
 
 
 def contract_lines() -> Prefetch:
     """The goods rows of a contract, in the order they were entered."""
     return Prefetch("items", queryset=ContractItem.objects.all())
+
+
+def contract_status_history() -> Prefetch:
+    """Every move each listed contract has made, newest first.
+
+    All of them rather than the last one, because a per-row slice is a query
+    per row - the cost the review of #38 found on a list page. The page reads
+    only the first through Contract.last_status_change, and a contract that
+    has moved a dozen times is a dozen small rows in one query.
+    """
+    return Prefetch(
+        "status_changes",
+        queryset=ContractStatusChange.objects.select_related(
+            "to_status", "changed_by"
+        ),
+    )
 
 
 def contractable_applications(user) -> QuerySet[Application]:
@@ -848,6 +865,7 @@ def contract_page(
         ),
         "open_form": form is not None,
         "editing": editing,
+        "statuses": ShartnomaStatus.objects.active(),
         "suggested_units": SUGGESTED_UNITS,
     }
 
@@ -862,6 +880,60 @@ def agreed_contracts_list(request: HttpRequest) -> HttpResponse:
     return render(
         request, AGREED_CONTRACTS_TEMPLATE, contract_page(request.user)
     )
+
+
+@require_POST
+def set_contract_status(request: HttpRequest, pk: int) -> HttpResponse:
+    """Move a contract to a status (REQ-ROLE-008, REQ-SHTSTATUS-001).
+
+    POST only, under the permission of the page carrying the control. The
+    status is looked up among the active rows only, so a retired one cannot
+    be chosen by a request that did not come from the drop-down, and a choice
+    that is not a number is nobody's status rather than a crash - the shape
+    the review of #35 established on the assignment route.
+
+    Each refusal says which refusal it was. Being told the wrong one sends
+    whoever investigates somewhere unrelated, which is the point the review of
+    #28 made about rejection.
+    """
+    contract = get_object_or_404(Contract, pk=pk)
+    chosen = request.POST.get("status")
+    status = (
+        ShartnomaStatus.objects.filter(pk=int(chosen), is_active=True).first()
+        if chosen and chosen.isdigit()
+        else None
+    )
+
+    try:
+        moved = contract.set_status(status, request.user)
+    except ValueError:
+        if not contract.is_editable:
+            messages.error(
+                request,
+                f"{contract.shartnoma_raqami} holati o`zgartirilmadi: "
+                "shartnoma tasdiqlashga yuborilgan.",
+            )
+        else:
+            messages.error(
+                request,
+                f"{contract.shartnoma_raqami} holati o`zgartirilmadi: "
+                "holat tanlanishi shart.",
+            )
+
+        return redirect("kelishinlingan")
+
+    if moved:
+        messages.success(
+            request,
+            f"{contract.shartnoma_raqami} holati: {contract.status.name}.",
+        )
+    else:
+        messages.info(
+            request,
+            f"{contract.shartnoma_raqami} allaqachon shu holatda.",
+        )
+
+    return redirect("kelishinlingan")
 
 
 def contract_pdf(request: HttpRequest, pk: int) -> FileResponse:

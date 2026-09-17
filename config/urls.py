@@ -61,6 +61,7 @@ from applications.views import (
     reject_application,
     reject_purchase_application,
     set_application_status,
+    set_contract_status,
 )
 from reference.ariza_status_views import ariza_status_page
 from reference.department_views import department_page
@@ -414,6 +415,13 @@ urlpatterns = [
         "kelishinlingan/<int:pk>/saqlash/",
         require_page_permission("kelishinlingan")(contract_update),
         name="shartnoma-saqlash",
+    ),
+    # The status control of REQ-ROLE-008 (TASK-UZK-037), on the page the
+    # specialist works from.
+    path(
+        "kelishinlingan/<int:pk>/holat/",
+        require_page_permission("kelishinlingan")(set_contract_status),
+        name="shartnoma-holat",
     ),
     # The contract document (REQ-SHARTNOMA-003, DEC-019). No permission on
     # the route: the view asks the matrix about the page the contract's stage
