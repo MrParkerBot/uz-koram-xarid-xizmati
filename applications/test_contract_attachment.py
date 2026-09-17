@@ -340,6 +340,53 @@ class EditedValueTests(ContractAttachmentTestCase):
         with self.assertRaises(ValueError):
             contract.revise(items=[])
 
+    def test_revise_refuses_a_column_that_is_not_there(self) -> None:
+        # raise_contract() goes through objects.create(), which raises for a
+        # misspelled field before anything is written. This used to set the
+        # attribute, save, and lose it in silence (the review of #54).
+        contract = self.a_contract()
+
+        with self.assertRaises(TypeError):
+            contract.revise(
+                items=[
+                    {
+                        "buyurtma_nomi": "Vint",
+                        "buyurtma_soni": Decimal("1"),
+                        "olchov_birligi": "ta",
+                        "narxi": Decimal("10.00"),
+                    }
+                ],
+                izohh="Tuzatildi",
+            )
+
+    def test_an_edit_can_take_a_row_off_the_contract(self) -> None:
+        # The other direction from test_editing_replaces_the_goods_rows, and
+        # the one the review of #54 found untested: three rows down to one,
+        # posted the way the page posts it once a row has been removed.
+        self.create(rows=3)
+        contract = Contract.objects.get()
+        kept = contract.items.all()[1]
+
+        payload = self.payload(rows=1)
+        payload["form-INITIAL_FORMS"] = "3"
+        payload["form-0-id"] = kept.pk
+        self.client.post(
+            reverse("shartnoma-saqlash", args=[contract.pk]), payload
+        )
+
+        contract.refresh_from_db()
+        self.assertEqual(contract.items.count(), 1)
+        self.assertEqual(contract.qiymati, Decimal("125000000.00"))
+
+    def test_the_form_offers_a_way_to_take_a_row_off(self) -> None:
+        contract = self.a_contract()
+
+        page = self.client.get(
+            reverse("shartnoma-tahrirlash", args=[contract.pk])
+        ).content.decode()
+
+        self.assertIn("js-sht-qator-olib-tashlash", page)
+
     def test_a_contract_that_has_been_sent_cannot_be_edited(self) -> None:
         # DEC-024 describes correcting a rejected contract. One awaiting
         # somebody's approval changing underneath them is not described, so it
@@ -414,15 +461,18 @@ class DownloadTests(ContractAttachmentTestCase):
             contract.pdf.url  # noqa: B018
 
     def test_the_file_is_not_under_anything_published(self) -> None:
+        # Every directory the static machinery serves from, not only
+        # STATIC_ROOT. The review of #54 found this looking at one of the two,
+        # which would have passed with the attachments directory sitting
+        # inside static/ - the arrangement attachments.py exists to prevent.
         contract = self.a_contract()
 
-        stored = Path(settings.ATTACHMENT_ROOT) / contract.pdf.name
-
+        stored = (Path(settings.ATTACHMENT_ROOT) / contract.pdf.name).resolve()
         self.assertTrue(stored.exists())
-        self.assertNotIn(
-            Path(settings.STATIC_ROOT or "static").resolve(),
-            stored.resolve().parents,
-        )
+
+        for published in [settings.STATIC_ROOT, *settings.STATICFILES_DIRS]:
+            with self.subTest(published=str(published)):
+                self.assertNotIn(Path(published).resolve(), stored.parents)
 
     def test_somebody_who_may_not_open_the_page_is_refused(self) -> None:
         contract = self.a_contract()

@@ -234,6 +234,10 @@ REQ-SHARTNOMA-006 asks for and stores one fact.
               <label class="form-label">Umumiy Narx</label>
               <input type="text" class="form-control mono js-qator-jami" value="0,00" readonly/>
             </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label">&nbsp;</label>
+              <button type="button" class="btn btn-outline-custom btn-xs text-danger js-sht-qator-olib-tashlash" title="Qatorni olib tashlash"><i class="bi bi-trash" aria-hidden="true"></i></button>
+            </div>
           </div>
           {% endfor %}
         </div>
@@ -311,6 +315,10 @@ REQ-SHARTNOMA-006 asks for and stores one fact.
       <label class="form-label">Umumiy Narx</label>
       <input type="text" class="form-control mono js-qator-jami" value="0,00" readonly/>
     </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label">&nbsp;</label>
+      <button type="button" class="btn btn-outline-custom btn-xs text-danger js-sht-qator-olib-tashlash" title="Qatorni olib tashlash"><i class="bi bi-trash" aria-hidden="true"></i></button>
+    </div>
   </div>
 </template>
 
@@ -320,10 +328,32 @@ REQ-SHARTNOMA-006 asks for and stores one fact.
   // rather than by re-parsing HTML, so the markup added is the markup the
   // server reads back.
   const SHT_ROW_INDEX = /__prefix__/g;
+  const SHT_FIELD_INDEX = /form-\d+-/g;
+
+  function rows() {
+    return document.querySelectorAll('#sht-item-rows .js-sht-qator');
+  }
+
+  // Django reads the rows back by the numbers in their field names, so after
+  // one is taken out the rest have to close the gap: form-0, form-1, form-2
+  // with nothing missing, and TOTAL_FORMS saying how many there are.
+  function renumberRows() {
+    rows().forEach((row, index) => {
+      row.querySelectorAll('[name], [id], [for]').forEach((field) => {
+        ['name', 'id', 'for'].forEach((attribute) => {
+          const value = field.getAttribute(attribute);
+          if (value) {
+            field.setAttribute(attribute, value.replace(SHT_FIELD_INDEX, `form-${index}-`));
+          }
+        });
+      });
+    });
+
+    document.getElementById('id_form-TOTAL_FORMS').value = rows().length;
+  }
 
   document.getElementById('sht-add-row').addEventListener('click', () => {
-    const total = document.getElementById('id_form-TOTAL_FORMS');
-    const index = Number(total.value);
+    const index = rows().length;
     const row = document.getElementById('sht-row-template').content.cloneNode(true);
 
     row.querySelectorAll('[name], [id], [for]').forEach((field) => {
@@ -336,7 +366,20 @@ REQ-SHARTNOMA-006 asks for and stores one fact.
     });
 
     document.getElementById('sht-item-rows').appendChild(row);
-    total.value = index + 1;
+    renumberRows();
+    recalculate();
+  });
+
+  // REQ-SHARTNOMA-005 opens this form filled in so a contract can be
+  // corrected, and a correction that can only add is half a correction. The
+  // last row stays: a contract with nothing on it has no value to have, which
+  // is the same rule the formset and raise_contract() both hold.
+  document.getElementById('sht-item-rows').addEventListener('click', (event) => {
+    const button = event.target.closest('.js-sht-qator-olib-tashlash');
+    if (!button || rows().length <= 1) return;
+
+    button.closest('.js-sht-qator').remove();
+    renumberRows();
     recalculate();
   });
 

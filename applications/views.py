@@ -84,7 +84,7 @@ AGREED_CONTRACTS_TEMPLATE = "pages/kelishinlingan.html"
 # yet. A contract awaiting somebody's approval, or already approved, changing
 # underneath them is not something the document describes, so it is refused
 # rather than guessed at.
-EDITABLE_CONTRACT_STAGES = ("agreed", "rejected")
+EDITABLE_CONTRACT_STAGES = (Contract.Stage.AGREED, Contract.Stage.REJECTED)
 
 # Which page shows an application at each stage. The attachment follows the
 # record rather than the route: a PDF is downloadable by whoever may open the
@@ -120,10 +120,10 @@ PAGE_SHOWING_STAGE: dict[str, str] = {
 # contract is currently on. TASK-UZK-038 is what moves one from the first
 # page to the second.
 PAGE_SHOWING_CONTRACT_STAGE: dict[str, str] = {
-    "agreed": "kelishinlingan",
-    "rejected": "kelishinlingan",
-    "sent": "tuzilgan",
-    "signed": "tuzilgan",
+    Contract.Stage.AGREED: "kelishinlingan",
+    Contract.Stage.REJECTED: "kelishinlingan",
+    Contract.Stage.SENT: "tuzilgan",
+    Contract.Stage.SIGNED: "tuzilgan",
 }
 
 
