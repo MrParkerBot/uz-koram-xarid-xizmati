@@ -34,6 +34,9 @@ ARIZA_NUMBER_DIGITS = 5
 # shows, and it takes the same shape so all three read alike.
 XARID_NUMBER_PREFIX = "XA"
 
+# DEC-022 names this one outright: SHT-2026-00001, the contract sequence.
+CONTRACT_NUMBER_PREFIX = "SHT"
+
 # The smallest order anybody can place: one thousandth, which is the finest
 # the quantity column stores. Written as the smallest storable amount rather
 # than as zero, so that the floor moves with decimal_places if that ever
@@ -98,6 +101,17 @@ def next_xarid_raqami(today: date | None = None) -> str:
     """
     return next_number(
         XARID_NUMBER_PREFIX, PurchaseApplication, "xarid_raqami", today
+    )
+
+
+def next_shartnoma_raqami(today: date | None = None) -> str:
+    """The next contract number for this year (DEC-022).
+
+    Its own sequence, like the other two. DEC-022 names this one explicitly,
+    which the purchase application's does not have and had to be inferred.
+    """
+    return next_number(
+        CONTRACT_NUMBER_PREFIX, Contract, "shartnoma_raqami", today
     )
 
 
@@ -1367,3 +1381,155 @@ class PurchaseApplicationItem(OrderLine):
 
     def __str__(self) -> str:
         return f"{self.buyurtma_nomi} - {self.soni_display} {self.olchov_birligi}"
+
+
+class Contract(models.Model):
+    """One contract, as section 4.6 describes it.
+
+    The third record with a life cycle, and the one the reference module has
+    been waiting for. Supplier (DEC-011), ShartnomaStatus (DEC-010) and
+    ShartnomaTuri (DEC-023) were built by TASK-UZK-021, TASK-UZK-017 and
+    TASK-UZK-019 and nothing has ever pointed at them - which means deleting
+    one has been free until now, and is PROTECTed from here on.
+
+    A contract fulfils one application. REQ-SHARTNOMA-004 gives a row one
+    Ariza raqami, and what was ordered is that application's order lines
+    rather than anything the contract repeats.
+
+    The stage is a code the workflow branches on, beside the ShartnomaStatus
+    name a person reads and an administrator may rename - the same separation
+    Application makes, and for the reason DEC-010 gives: the statuses are
+    examples the department is expected to extend, so nothing may depend on
+    one being there.
+    """
+
+    class Stage(models.TextChoices):
+        """Where a contract has got to, in terms the code may rely on."""
+
+        AGREED = "agreed", "Kelishinlingan"
+        SENT = "sent", "Tasdiqlashga yuborilgan"
+        SIGNED = "signed", "Tuzilgan"
+        REJECTED = "rejected", "Inkor etilgan"
+
+    shartnoma_raqami = models.CharField(
+        "Shartnoma raqami", max_length=32, unique=True
+    )
+    application = models.ForeignKey(
+        "applications.Application",
+        on_delete=models.PROTECT,
+        related_name="contracts",
+        verbose_name="Ariza",
+        help_text=(
+            "The application this contract fulfils. PROTECT rather than "
+            "CASCADE: a contract is an agreement with a supplier and deleting "
+            "the request behind it should not take it with them."
+        ),
+    )
+    supplier = models.ForeignKey(
+        "reference.Supplier",
+        on_delete=models.PROTECT,
+        related_name="contracts",
+        verbose_name="Firma nomi",
+    )
+    shartnoma_turi = models.ForeignKey(
+        "reference.ShartnomaTuri",
+        on_delete=models.PROTECT,
+        related_name="contracts",
+        null=True,
+        blank=True,
+        verbose_name="Shartnoma turi",
+        help_text=(
+            "DEC-023 draws this from master data. Nullable because "
+            "REQ-SHARTNOMA-004 does not list it as a column and the "
+            "TASK-UZK-035 entry form is what asks for it."
+        ),
+    )
+    qiymati = models.DecimalField(
+        "Shartnoma qiymati",
+        max_digits=18,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        help_text=(
+            "In UZS. Eighteen digits because a contract in soums runs to "
+            "billions, and two decimal places because money has them. The "
+            "floor is on the column for the reason the #33 review gave about "
+            "order quantities: a rule on a form is a rule on one page."
+        ),
+    )
+    status = models.ForeignKey(
+        "reference.ShartnomaStatus",
+        on_delete=models.PROTECT,
+        related_name="contracts",
+        null=True,
+        blank=True,
+        verbose_name="Holati",
+        help_text=(
+            "Nullable for the reason Application.status is: DEC-010 lets an "
+            "administrator retire every status, and a master data page must "
+            "not be able to stop a contract being recorded."
+        ),
+    )
+    stage = models.CharField(
+        max_length=16, choices=Stage.choices, default=Stage.AGREED
+    )
+    inkor_izohi = models.TextField(
+        "Izoh (Inkor etilgan)",
+        blank=True,
+        help_text=(
+            "Why it was refused, which REQ-SHARTNOMA-004 gives a column of "
+            "its own. Empty until TASK-UZK-038 rejects one; the column is "
+            "rendered from the start so that task has nowhere left to put it."
+        ),
+    )
+    created_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.PROTECT,
+        related_name="contracts",
+        verbose_name="Kim shartnoma qilgan",
+    )
+    yaratilingan_sana = models.DateTimeField(
+        "Yaratilingan sana", auto_now_add=True
+    )
+
+    class Meta:
+        ordering = ("-yaratilingan_sana", "-id")
+        verbose_name = "Shartnoma"
+        verbose_name_plural = "Shartnomalar"
+
+    def __str__(self) -> str:
+        return f"{self.shartnoma_raqami} - {self.supplier.name}"
+
+    @property
+    def is_rejected(self) -> bool:
+        """Whether this contract was refused."""
+        return self.stage == self.Stage.REJECTED
+
+    @property
+    def qiymati_display(self) -> str:
+        """The contract value, grouped so a person can read it.
+
+        A contract here runs to hundreds of millions of soums, and Django
+        renders 125000000.00 under LANGUAGE_CODE uz as "125000000,00" - which
+        a reader can take as twelve and a half billion, because a comma is a
+        thousands separator in most of the world. The same trap soni_display
+        was written for, with more zeros in front of it.
+
+        Grouped with spaces and separated with a comma, which is the Uzbek
+        convention: 125 000 000,00.
+        """
+        whole, _, fraction = f"{self.qiymati:.2f}".partition(".")
+
+        return f"{int(whole):,}".replace(",", " ") + f",{fraction}"
+
+    @classmethod
+    @transaction.atomic
+    def raise_contract(cls, **fields) -> Contract:
+        """Create a contract, allocating its DEC-022 number.
+
+        The only way one should be created, for the reason the other two
+        records give: nothing should end up without a number, and the
+        allocation belongs in the same transaction as the insert.
+        """
+        return cls.objects.create(
+            shartnoma_raqami=next_shartnoma_raqami(), **fields
+        )
