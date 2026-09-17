@@ -361,6 +361,40 @@ class ChoosableApplicationTests(ContractEntryTestCase):
     def test_an_assigned_application_is_offered(self) -> None:
         self.assertIn(self.application.ariza_raqami, self.offered())
 
+    def test_an_offered_application_can_be_told_from_another(self) -> None:
+        # Application.__str__ is the number, and the number is the one thing
+        # about a request the person choosing did not pick it by. The review
+        # of #52 found three of them in a drop-down with nothing else on them.
+        response = self.client.get(reverse("kelishinlingan"))
+        field = response.context["form"].fields["application"]
+
+        label = field.label_from_instance(self.application)
+
+        self.assertIn(self.application.ariza_raqami, label)
+        self.assertIn("Texnik bolim", label)
+        self.assertIn("Bolt M12", label)
+
+    def test_a_multi_line_application_says_how_many_more(self) -> None:
+        many = Application.raise_application(
+            items=[
+                {
+                    "mahsulot_turi": self.category,
+                    "buyurtma_nomi": f"Bolt M{index}",
+                    "buyurtma_soni": 10,
+                    "olchov_birligi": "ta",
+                }
+                for index in range(3)
+            ],
+            department=self.department,
+        )
+        many.accept(self.buyer)
+        many.assign(self.buyer, self.specialist)
+
+        response = self.client.get(reverse("kelishinlingan"))
+        field = response.context["form"].fields["application"]
+
+        self.assertIn("+2", field.label_from_instance(many))
+
     def test_an_undecided_application_is_not_offered(self) -> None:
         waiting = self.an_application()
 
@@ -419,9 +453,14 @@ class MasterDataTests(ContractEntryTestCase):
         offered = response.context["form"].fields["shartnoma_turi"].queryset
 
         # Import and Local are seeded examples rather than the whole list
-        # (DEC-023), so a type the department adds is offered too.
+        # (DEC-023), so a type the department adds is offered too. Asserted as
+        # membership rather than as a total, which the review of #52 found:
+        # a total fails the day a migration seeds a third type, which is a
+        # test about something else breaking.
         self.assertIn(turi, offered)
-        self.assertEqual(offered.count(), 3)
+        for seeded in ("Import", "Mahalliy (Local)"):
+            with self.subTest(shartnoma_turi=seeded):
+                self.assertIn(ShartnomaTuri.objects.get(name=seeded), offered)
 
     def test_a_retired_firm_leaves_the_drop_down(self) -> None:
         retired = Supplier.objects.create(name="Eski Firma", inn="987654321")

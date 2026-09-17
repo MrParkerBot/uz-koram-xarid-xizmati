@@ -784,10 +784,17 @@ def contractable_applications(user) -> QuerySet[Application]:
     question the Tayinlangan page asks about its rows, asked once so that what
     a specialist may act on there and what they may contract against here
     cannot drift apart.
+
+    The department and the order lines are fetched because
+    ApplicationChoiceField renders both in the drop-down label. The review of
+    #52 found the join here already and nothing reading it, which is a query
+    paying for a column nobody rendered.
     """
-    applications = Application.objects.filter(
-        stage=Application.Stage.ASSIGNED
-    ).select_related("department")
+    applications = (
+        Application.objects.filter(stage=Application.Stage.ASSIGNED)
+        .select_related("department")
+        .prefetch_related("items")
+    )
 
     if acts_on_own_work_only(user):
         return applications.filter(assigned_to=user)
@@ -863,6 +870,12 @@ def contract_create(request: HttpRequest) -> HttpResponse:
     raise_contract() computes it from the rows, which is what makes the value
     the total of everything rather than a number somebody typed beside a
     different set of numbers.
+
+    The columns are named one by one rather than gathered from the form. The
+    review of #52 found a comprehension over Meta.fields here, which is
+    correct until somebody declares a field on the form without listing it
+    there - and TASK-UZK-036 is about to add the attachment REQ-SHARTNOMA-003
+    says a contract must not be stored without.
     """
     applications = contractable_applications(request.user)
     form = ContractForm(request.POST, applications=applications)
@@ -882,10 +895,14 @@ def contract_create(request: HttpRequest) -> HttpResponse:
         contract = Contract.raise_contract(
             items=contract_rows(items),
             created_by=request.user,
-            **{
-                field: form.cleaned_data[field]
-                for field in form.Meta.fields
-            },
+            application=form.cleaned_data["application"],
+            supplier=form.cleaned_data["supplier"],
+            shartnoma_turi=form.cleaned_data["shartnoma_turi"],
+            status=form.cleaned_data["status"],
+            shartnoma_sanasi=form.cleaned_data["shartnoma_sanasi"],
+            tolash_muddati=form.cleaned_data["tolash_muddati"],
+            muddat_talabi=form.cleaned_data["muddat_talabi"],
+            izoh=form.cleaned_data["izoh"],
         )
 
     messages.success(

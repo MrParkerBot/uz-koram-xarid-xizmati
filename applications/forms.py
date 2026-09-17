@@ -264,6 +264,27 @@ PurchaseApplicationItemFormSet = forms.modelformset_factory(
 )
 
 
+class ApplicationChoiceField(forms.ModelChoiceField):
+    """The Ariza raqami drop-down, labelled so a person can tell them apart.
+
+    Application.__str__ is the number, which is right on a record and wrong in
+    a list of them: a specialist choosing which request to commit the company
+    to a supplier for is the one person who did not pick it by its number. The
+    department and the goods are what they recognise it by, which is also what
+    the select_related on the queryset was already paying for.
+
+    Found by the review of #52.
+    """
+
+    def label_from_instance(self, obj) -> str:
+        lines = list(obj.items.all())
+        ordered = lines[0].buyurtma_nomi if lines else "-"
+        if len(lines) > 1:
+            ordered = f"{ordered} +{len(lines) - 1}"
+
+        return f"{obj.ariza_raqami} - {obj.department.name} - {ordered}"
+
+
 class SupplierSelect(forms.Select):
     """A Firma drop-down whose options carry the firm's INN.
 
@@ -320,6 +341,7 @@ class ContractForm(forms.ModelForm):
             "muddat_talabi",
             "izoh",
         )
+        field_classes = {"application": ApplicationChoiceField}
         labels = {
             "application": "Ariza raqami",
             "supplier": "Firma nomi",
