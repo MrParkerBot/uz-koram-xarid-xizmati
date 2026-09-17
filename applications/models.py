@@ -189,6 +189,19 @@ class Application(models.Model):
             "on the Qabul qilingan page is."
         ),
     )
+    xodim_qabul_qilgan_sana = models.DateTimeField(
+        "Xodim qabul qilgan sana",
+        null=True,
+        blank=True,
+        help_text=(
+            "When the assigned specialist took the work (REQ-ARIZA-013). A "
+            "different fact from qabul_qilingan_sana, which is when the "
+            "department accepted the application itself - one column meaning "
+            "both would make the Qabul qilingan date unreadable. Cleared when "
+            "the application moves to somebody else, because the next holder "
+            "has not taken anything yet."
+        ),
+    )
     tayinlangan_sana = models.DateTimeField(
         "Tayinlangan sana",
         null=True,
@@ -470,6 +483,12 @@ class Application(models.Model):
             assigned_to=specialist,
             assigned_by=by,
             tayinlangan_sana=decided_at,
+            # The acceptance belonged to whoever held it before. DEC-024
+            # allows this move after they accepted, and leaving their
+            # acceptance on the record would say the new holder agreed to
+            # take work they have not seen. Cleared here rather than by every
+            # caller, because forgetting it is silent.
+            xodim_qabul_qilgan_sana=None,
         )
 
         if not assigned:
@@ -480,6 +499,129 @@ class Application(models.Model):
         self.assigned_to = specialist
         self.assigned_by = by
         self.tayinlangan_sana = decided_at
+        self.xodim_qabul_qilgan_sana = None
+
+        return True
+
+    @transaction.atomic
+    def accept_as_specialist(self, by) -> bool:
+        """Record that the holder took this application (REQ-ARIZA-013).
+
+        The stage does not move. Nothing in the specification names a stage
+        after assigned, and DEC-024 needs assign() to keep working afterwards
+        - a new stage would quietly close a door the decision holds open. What
+        changes is that the record now says the work was taken, not only given.
+
+        Args:
+            by: the user accepting. Must be the specialist currently holding
+                it; a manager acting on their behalf passes the holder.
+
+        Returns:
+            True when this call recorded it, False when it was already
+            recorded - the second click of a double click, which does not
+            re-stamp the date.
+
+        Raises:
+            ValueError: when the application is not assigned to this person,
+                or is not at the assigned stage at all.
+        """
+        self.refresh_from_db()
+
+        if self.stage != self.Stage.ASSIGNED:
+            raise ValueError(
+                f"{self.ariza_raqami} is {self.stage}, not assigned, so "
+                "there is nothing for a specialist to accept."
+            )
+
+        if by is None or self.assigned_to_id != getattr(by, "pk", None):
+            raise ValueError(
+                f"{self.ariza_raqami} is not assigned to {by}, so they "
+                "cannot accept it."
+            )
+
+        if self.xodim_qabul_qilgan_sana is not None:
+            return False
+
+        accepted_at = timezone.now()
+
+        # Conditional on the acceptance still being empty as well as on the
+        # holder, so two clicks landing together produce one stamp and one
+        # notification rather than two of each.
+        taken = type(self).objects.filter(
+            pk=self.pk,
+            stage=self.Stage.ASSIGNED,
+            assigned_to=by,
+            xodim_qabul_qilgan_sana__isnull=True,
+        ).update(xodim_qabul_qilgan_sana=accepted_at)
+
+        if not taken:
+            self.refresh_from_db()
+            return False
+
+        self.xodim_qabul_qilgan_sana = accepted_at
+
+        return True
+
+    @property
+    def is_taken(self) -> bool:
+        """Whether the holder has accepted this application."""
+        return self.xodim_qabul_qilgan_sana is not None
+
+    @transaction.atomic
+    def set_status(self, status) -> bool:
+        """Mark the state this application is currently in (REQ-ARIZA-013).
+
+        A status a person chose, beside the ones accept() and reject() set by
+        code. DEC-017 makes the rows editable master data, so what may be
+        chosen is whatever is active now - and an application already holding
+        a row that has since been deactivated keeps it, because DEC-009 keeps
+        the row for exactly that.
+
+        Args:
+            status: the ArizaStatus to move to. Must be active.
+
+        Returns:
+            True when this call changed it, False when it was already that
+            status.
+
+        Raises:
+            ValueError: when status is None, when it is not active, or when
+                this application is not one somebody is working on. Choosing
+                nothing is not a way of clearing the status, an inactive row
+                is one an administrator has taken out of use, and an
+                application nobody holds has no progress to report.
+        """
+        if status is None:
+            raise ValueError(
+                f"{self.ariza_raqami} needs a status to be set to."
+            )
+
+        if not status.is_active:
+            raise ValueError(
+                f"{status.name} is not in use, so {self.ariza_raqami} "
+                "cannot be moved to it."
+            )
+
+        self.refresh_from_db()
+
+        # The stage check belongs here rather than in the view, which is what
+        # the #40 review found: the route is on the Tayinlangan page and had
+        # nothing stopping it writing an application that page never shows. A
+        # manager could move a rejected application to a status, and a
+        # rejected application is off the workflow entirely. accept_as_
+        # specialist() already guards this way; this is the same rule for the
+        # other half of REQ-ARIZA-013.
+        if self.stage != self.Stage.ASSIGNED:
+            raise ValueError(
+                f"{self.ariza_raqami} is {self.stage}, not assigned, so "
+                "there is no work in progress to report a status for."
+            )
+
+        if self.status_id == status.pk:
+            return False
+
+        type(self).objects.filter(pk=self.pk).update(status=status)
+        self.status = status
 
         return True
 

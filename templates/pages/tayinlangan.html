@@ -12,12 +12,21 @@ else's. Everybody else DEC-015 lets in here hands work out, so they see all of
 it and get the Tayinlangan xodim column with it - a column a specialist does
 not get, because one saying their own name on every row tells them nothing.
 
-Two things are deliberately not finished:
+Accept and Holat are wired (TASK-UZK-029). A row nobody has taken offers the
+button; a taken one says so and when, rather than offering to take it twice.
+The Holat drop-down offers the statuses in use now and keeps whichever row the
+application already holds selected, even if an administrator has since retired
+it - DEC-009 keeps the row for exactly that.
 
-- Accept and Holat are on every row and do nothing. TASK-UZK-029 wires them.
-  Rendered visibly waiting rather than hidden, the way the filter bar is.
-- The filter bar and the exports are inert. TASK-UZK-041 and TASK-UZK-042
-  build them for every table at once.
+It has a Save button rather than submitting when the value changes. Submitting
+on change is what the first version did, and the #40 review pointed out what
+that does to somebody without a mouse: arrow keys change the value on every
+keystroke, so each option on the way to the one they wanted submits and
+reloads the page. A button costs a mouse user one click and costs everybody
+else nothing, and it works with no JavaScript at all.
+
+The filter bar and the exports are still inert. TASK-UZK-041 and TASK-UZK-042
+build them for every table at once.
 
 The prototype's Holat column showed a contract status. No contract exists
 until TASK-UZK-035, so the column shows the application's own status, which is
@@ -100,12 +109,26 @@ what this page can say honestly today.
               <td rowspan="{{ lines|length }}"><span class="badge badge-info">{{ ariza.assigned_to.get_full_name|default:ariza.assigned_to.username }}</span></td>
               {% endif %}
               <td style="text-align:center;white-space:nowrap;" rowspan="{{ lines|length }}">
-                <button class="btn btn-outline-custom text-success btn-xs" disabled title="TASK-UZK-029 qabul qilishni quradi"><i class="bi bi-check-lg" aria-hidden="true"></i> Qabul</button>
+                {% if ariza.is_taken %}
+                  <span class="badge badge-success" title="{{ ariza.xodim_qabul_qilgan_sana|date:'Y-m-d H:i' }}"><i class="bi bi-check-lg" aria-hidden="true"></i> Qabul qilingan</span>
+                {% else %}
+                  <form method="post" action="{% url 'tayinlangan-qabul' ariza.pk %}" style="display:inline;" data-confirm="{{ ariza.ariza_raqami }} qabul qilinsinmi?">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline-custom text-success btn-xs"><i class="bi bi-check-lg" aria-hidden="true"></i> Qabul</button>
+                  </form>
+                {% endif %}
               </td>
               <td rowspan="{{ lines|length }}">
-                <select class="form-control" style="width:160px;padding:5px 8px;font-size:11px;" disabled title="TASK-UZK-029 holatni quradi">
-                  <option value="">{{ ariza.status.name|default:"&mdash;" }}</option>
-                </select>
+                <form method="post" action="{% url 'tayinlangan-holat' ariza.pk %}">
+                  {% csrf_token %}
+                  <select class="form-control" name="status" style="width:160px;padding:5px 8px;font-size:11px;">
+                    <option value="">&mdash; {{ ariza.status.name|default:"Tanlang" }} &mdash;</option>
+                    {% for holat in statuses %}
+                      <option value="{{ holat.pk }}"{% if holat.pk == ariza.status_id %} selected{% endif %}>{{ holat.name }}</option>
+                    {% endfor %}
+                  </select>
+                  <button type="submit" class="btn btn-outline-custom btn-xs" style="margin-top:4px;">Saqlash</button>
+                </form>
               </td>
               {% endif %}
             </tr>

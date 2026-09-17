@@ -16,7 +16,9 @@ overturning it is deliberate.
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils.crypto import get_random_string
 
@@ -206,16 +208,69 @@ class ColumnTests(AssignedListTestCase):
         self.assertIn("Hozircha tayinlangan ariza", self.table())
 
 
-class WaitingControlTests(AssignedListTestCase):
-    """Accept and Holat belong to TASK-UZK-029."""
+class WiredControlTests(AssignedListTestCase):
+    """Accept and Holat, wired by TASK-UZK-029.
 
-    def test_they_are_disabled_and_name_the_task_that_wires_them(self) -> None:
-        self.assigned_application()
+    They were rendered disabled with a title naming that task until it
+    arrived. Counted per row rather than as a fixed number, which is the
+    shape the #29 and #38 reviews between them settled on.
+    """
+
+    def test_they_no_longer_name_the_task_that_would_wire_them(self) -> None:
+        rows = 3
+        for index in range(rows):
+            self.assigned_application(izoh=f"Ariza {index}")
         self.client.force_login(self.specialist)
 
         row = self.table()
-        self.assertIn("TASK-UZK-029", row)
-        self.assertEqual(row.count("disabled"), 2)
+        self.assertNotIn("TASK-UZK-029", row)
+        self.assertEqual(row.count("disabled"), 0)
+
+    def test_every_row_offers_both_controls(self) -> None:
+        rows = 3
+        for index in range(rows):
+            self.assigned_application(izoh=f"Ariza {index}")
+        self.client.force_login(self.specialist)
+
+        row = self.table()
+        self.assertEqual(row.count('name="status"'), rows)
+        self.assertEqual(row.count("/qabul/"), rows)
+
+
+class QueryTests(AssignedListTestCase):
+    """What the page costs, which the #38 review found unmeasured."""
+
+    def cost_of_the_page(self, viewer) -> int:
+        """How many queries rendering the page takes, as it stands."""
+        self.client.force_login(viewer)
+        with CaptureQueriesContext(connection) as captured:
+            self.client.get(reverse("tayinlangan"))
+
+        return len(captured.captured_queries)
+
+    def test_the_page_does_not_cost_a_query_per_row(self) -> None:
+        # Counted rather than named. Asserting that no query mentions
+        # reference_arizastatus does not work once the column is joined -
+        # the join puts the table in the list query too - and asserting an
+        # exact total pins the number of unrelated queries the session and
+        # the permission check happen to make today. What the fix actually
+        # claims is that the cost does not grow with the rows, so that is
+        # what is measured.
+        for viewer, label in (
+            (self.specialist, "specialist"),
+            (self.manager, "manager"),
+        ):
+            with self.subTest(viewer=label):
+                self.assigned_application(to=viewer if label == "specialist" else None)
+                with_one_row = self.cost_of_the_page(viewer)
+
+                for index in range(4):
+                    self.assigned_application(
+                        to=viewer if label == "specialist" else None,
+                        izoh=f"Ariza {index}",
+                    )
+
+                self.assertEqual(self.cost_of_the_page(viewer), with_one_row)
 
 
 class AttachmentTests(AssignedListTestCase):
