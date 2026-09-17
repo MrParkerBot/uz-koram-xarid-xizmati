@@ -1,7 +1,7 @@
 """Tests for the page routing and sidebar navigation of TASK-UZK-007.
 
 The sidebar used to be built in the browser from a list of .html filenames.
-Now Django renders it from config/navigation.py, so the thing worth pinning is
+Now Django renders it from core/navigation.py, so the thing worth pinning is
 that the navigation, the URL configuration and the templates on disk all still
 describe the same set of pages - and that a link in the sidebar leads to a page
 that answers.
@@ -17,8 +17,8 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 from django.urls import NoReverseMatch, reverse
 
-from config.navigation import SIDEBAR_NAVIGATION, navigation_url_names
-from config.tests.test_support import SignedInTestCase
+from core.navigation import SIDEBAR_NAVIGATION, navigation_url_names
+from core.tests.test_support import SignedInTestCase
 
 PAGE_TEMPLATE_DIR = Path(settings.BASE_DIR) / "templates" / "pages"
 

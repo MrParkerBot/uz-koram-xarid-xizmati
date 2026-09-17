@@ -7,7 +7,7 @@ from typing import Any
 from django import template
 
 from accounts.permissions import may_open
-from config.navigation import SIDEBAR_NAVIGATION, NavigationGroup
+from core.navigation import SIDEBAR_NAVIGATION, NavigationGroup
 
 register = template.Library()
 

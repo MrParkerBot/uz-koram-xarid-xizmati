@@ -27,7 +27,7 @@ from accounts.roles import (
     USERS,
     assign_user_type,
 )
-from config.navigation import navigation_url_names
+from core.navigation import navigation_url_names
 
 # DEC-015, written out by hand from the decision record.
 EXPECTED_PAGES: dict[str, set[str]] = {

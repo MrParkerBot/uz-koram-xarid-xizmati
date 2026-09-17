@@ -57,8 +57,10 @@ ALLOWED_HOSTS = read_list_setting(
 # administration surface would sit outside the permission matrix TASK-UZK-012
 # builds. Add it only if a requirement asks for it.
 INSTALLED_APPS = [
-    # The project package itself, so its template tag library is discoverable.
-    "config",
+    # What every page is built out of rather than what any one page is about:
+    # the sidebar navigation and the template tag library the shared shell is
+    # rendered with. Installed so that library is discoverable.
+    "core",
     # The department's own facts about a user: their type, and from
     # TASK-UZK-013 what they are permitted to edit.
     "accounts",

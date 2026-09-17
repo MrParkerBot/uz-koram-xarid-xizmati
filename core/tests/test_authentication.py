@@ -22,7 +22,7 @@ from django.utils.crypto import get_random_string
 
 from accounts.models import UserType
 from accounts.roles import ADMIN, assign_user_type
-from config.navigation import navigation_url_names
+from core.navigation import navigation_url_names
 
 USERNAME = "b.toshmatov"
 FIRST_NAME = "Bobur"
