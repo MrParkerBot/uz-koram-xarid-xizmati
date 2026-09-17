@@ -342,7 +342,7 @@ class RejectedAttachmentTests(RejectionTestCase):
     """A rejected application is off every page, and so is its PDF.
 
     Nothing in the specification lists rejected applications, so there is no
-    page to ask about one, and applications.views.PAGE_SHOWING_STAGE has no
+    page to ask about one, and applications.application_views.PAGE_SHOWING_STAGE has no
     entry for the stage. This test records that as the current answer rather
     than leaving it to be discovered: whichever task adds a rejected list has
     to change this deliberately.

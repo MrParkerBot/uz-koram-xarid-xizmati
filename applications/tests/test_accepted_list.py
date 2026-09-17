@@ -398,7 +398,7 @@ class QueryTests(AcceptedListTestCase):
         # Asserting on the count rather than on the table name is what keeps
         # the original finding pinned: a second join means somebody selected
         # a person the page does not show.
-        from applications.views import accepted_applications
+        from applications.application_views import accepted_applications
 
         sql = str(accepted_applications().query)
 
@@ -407,7 +407,7 @@ class QueryTests(AcceptedListTestCase):
 
     def test_the_department_is_joined(self) -> None:
         # Rendered on every row, so it must not be a query each.
-        from applications.views import accepted_applications
+        from applications.application_views import accepted_applications
 
         self.assertIn("reference_department", str(accepted_applications().query))
 
@@ -417,7 +417,7 @@ class QueryTests(AcceptedListTestCase):
         # The category moved onto the line in TASK-UZK-026, so it is no longer
         # a join on this query - it is a join on the prefetch. What matters is
         # unchanged: rendering the page must not cost a query per row.
-        from applications.views import accepted_applications
+        from applications.application_views import accepted_applications
 
         for nomi in ("Birinchi", "Ikkinchi", "Uchinchi"):
             self.accepted_application(buyurtma_nomi=nomi)

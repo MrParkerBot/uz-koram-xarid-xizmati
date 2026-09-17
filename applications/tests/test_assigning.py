@@ -242,7 +242,7 @@ class ReAssignTests(AssignmentTestCase):
         self.assertTrue(moved)
 
     def test_it_leaves_the_first_specialists_list(self) -> None:
-        from applications.views import assigned_applications
+        from applications.application_views import assigned_applications
 
         self.assign()
         self.assign(specialist=self.other_specialist)
@@ -352,14 +352,14 @@ class AssignedListTests(AssignmentTestCase):
     """What the specialist's Tayinlangan Arizalar page will read."""
 
     def test_an_assigned_application_is_in_the_specialists_list(self) -> None:
-        from applications.views import assigned_applications
+        from applications.application_views import assigned_applications
 
         self.assign()
 
         self.assertIn(self.application, assigned_applications(self.specialist))
 
     def test_it_is_not_in_somebody_elses_list(self) -> None:
-        from applications.views import assigned_applications
+        from applications.application_views import assigned_applications
 
         self.assign()
 
@@ -368,7 +368,7 @@ class AssignedListTests(AssignmentTestCase):
         )
 
     def test_an_unassigned_application_is_in_nobodys_list(self) -> None:
-        from applications.views import assigned_applications
+        from applications.application_views import assigned_applications
 
         self.assertNotIn(self.application, assigned_applications(self.specialist))
 

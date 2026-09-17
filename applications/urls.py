@@ -8,25 +8,26 @@ calls and the permission matrix already use.
 from django.urls import path
 
 from accounts.permissions import require_page_permission
-from applications.views import (
+from applications.application_views import (
     accept_application,
     accept_assigned_application,
     accepted_list,
-    agreed_contracts_list,
     application_create,
     application_pdf,
-    approve_purchase_application,
     assign_application,
     assigned_list,
-    contract_create,
     incoming_list,
+    reject_application,
+    set_application_status,
+)
+from applications.contract_views import agreed_contracts_list, contract_create
+from applications.purchase_views import (
+    approve_purchase_application,
     purchase_application_create,
     purchase_application_list,
     purchase_application_original_pdf,
     purchase_application_pdf,
-    reject_application,
     reject_purchase_application,
-    set_application_status,
 )
 
 urlpatterns = [
