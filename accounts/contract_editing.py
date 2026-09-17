@@ -14,8 +14,13 @@ it by hand would leave the rule in two places.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from functools import wraps
+
 from django.contrib.auth.models import AbstractBaseUser
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.http import HttpRequest, HttpResponse
 
 from accounts.models import UserProfile
 from accounts.roles import profile_of
@@ -45,6 +50,45 @@ def may_edit_contracts(user: AbstractBaseUser | None) -> bool:
     return UserProfile.objects.filter(
         user=user, may_edit_contracts=True, user__is_active=True
     ).exists()
+
+
+def require_contract_editing(
+    view: Callable[..., HttpResponse],
+) -> Callable[..., HttpResponse]:
+    """Wrap a view so that only the current holder reaches it (DEC-021).
+
+    REQ-SHARTNOMA-005 opens the entry form filled in "if the user has
+    permission for this", and REQ-USERS-002 says the Edit Permission is what
+    grants it. DEC-021 makes that an exclusive lock: at most one person holds
+    it, and granting it to somebody takes it from whoever had it.
+
+    Nobody bypasses it, including Admin. A bypass would make the exclusivity
+    untrue for every administrator, and DEC-021 exists to settle CONFLICT-001
+    in favour of exclusivity - an Admin who needs to edit grants themselves
+    the permission, which is the same act as taking it from the current holder
+    and is exactly what the decision describes.
+
+    Applied beside require_page_permission rather than instead of it, because
+    the two answer different questions: whether this person may open the
+    Kelishinlingan page at all, and whether they are the one person who may
+    edit a contract on it. The review of #62 showed what collapsing two such
+    rules costs.
+
+    Raises PermissionDenied rather than redirecting, for the reason
+    require_page_permission gives: the visitor is signed in, and sending them
+    to the login page would suggest signing in again would help.
+    """
+
+    @wraps(view)
+    def permitted_view(request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        if not may_edit_contracts(request.user):
+            raise PermissionDenied(
+                f"{request.user} does not hold the contract-edit permission."
+            )
+
+        return view(request, *args, **kwargs)
+
+    return permitted_view
 
 
 @transaction.atomic
