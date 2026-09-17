@@ -32,6 +32,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils.crypto import get_random_string
 
+from accounts.contract_editing import grant_contract_editing
 from accounts.models import UserType
 from accounts.roles import (
     ADMIN,
@@ -419,8 +420,13 @@ class WhoseContractTests(ContractStatusTestCase):
         self.assertIsNone(contract.status)
 
     def test_a_specialist_may_not_edit_somebody_elses(self) -> None:
+        # The Edit Permission is granted, so what refuses is the row rule
+        # rather than TASK-UZK-040's lock. Without the grant this test would
+        # pass for the wrong reason and stop covering anything.
         contract = self.a_contract()
-        self.client.force_login(make_user(KATTA_MUTAXASIS, "Bekzod"))
+        bekzod = make_user(KATTA_MUTAXASIS, "Bekzod")
+        grant_contract_editing(bekzod)
+        self.client.force_login(bekzod)
 
         self.assertEqual(
             self.client.get(

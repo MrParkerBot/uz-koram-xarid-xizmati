@@ -18,6 +18,7 @@ from django.contrib.auth.views import LoginView, LogoutView
 from django.urls import path
 from django.views.generic import TemplateView
 
+from accounts.contract_editing import require_contract_editing
 from accounts.permissions import require_page_permission
 from accounts.specialty_views import (
     specialty_create,
@@ -407,16 +408,21 @@ urlpatterns = [
         name="shartnoma-yaratish",
     ),
     # REQ-SHARTNOMA-005's Edit Button (TASK-UZK-036), which opens the same
-    # form filled in. Under the page's own permission for now; DEC-021 makes
-    # editing an exclusive lock and TASK-UZK-040 is where that lands.
+    # form filled in - "if the user has permission for this". Two guards, and
+    # they answer different questions: whether this person may open the page
+    # at all, and whether they hold the DEC-021 lock TASK-UZK-040 put here.
     path(
         "kelishinlingan/<int:pk>/tahrirlash/",
-        require_page_permission("kelishinlingan")(contract_edit),
+        require_page_permission("kelishinlingan")(
+            require_contract_editing(contract_edit)
+        ),
         name="shartnoma-tahrirlash",
     ),
     path(
         "kelishinlingan/<int:pk>/saqlash/",
-        require_page_permission("kelishinlingan")(contract_update),
+        require_page_permission("kelishinlingan")(
+            require_contract_editing(contract_update)
+        ),
         name="shartnoma-saqlash",
     ),
     # The status control of REQ-ROLE-008 (TASK-UZK-037), on the page the

@@ -24,6 +24,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils.crypto import get_random_string
 
+from accounts.contract_editing import grant_contract_editing
 from accounts.models import UserType
 from accounts.roles import (
     ADMIN,
@@ -376,6 +377,9 @@ class ResendTests(SendingTestCase):
         # The whole of DEC-024: corrected, then resent, and the correction is
         # what goes.
         contract = self.a_rejected_contract()
+        # DEC-024 has the contract corrected before it is resent, and
+        # TASK-UZK-040 made correcting it the exclusive Edit Permission.
+        grant_contract_editing(self.specialist)
 
         self.client.post(
             reverse("shartnoma-saqlash", args=[contract.pk]),

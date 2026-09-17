@@ -28,6 +28,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils.crypto import get_random_string
 
+from accounts.contract_editing import grant_contract_editing
 from accounts.models import UserType
 from accounts.roles import (
     ADMIN,
@@ -69,6 +70,10 @@ class ContractAttachmentTestCase(TestCase):
         self.buyer = make_user(ADMIN, first_name="Alisher")
         self.specialist = make_user(KATTA_MUTAXASIS, first_name="Dilnoza")
         self.application = self.an_assigned_application()
+        # TASK-UZK-040 made editing a contract the exclusive DEC-021 lock, so
+        # the person these tests edit as has to hold it. Granted here rather
+        # than loosening the rule: the rule is the point.
+        grant_contract_editing(self.buyer)
         self.client.force_login(self.buyer)
 
     def an_assigned_application(self) -> Application:

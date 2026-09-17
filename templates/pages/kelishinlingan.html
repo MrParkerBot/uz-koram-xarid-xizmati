@@ -15,9 +15,11 @@ row listing what the department asked for beside a value covering what the
 supplier agreed to would read as one statement and be two.
 
 Tahrirlash opens this same form filled in (REQ-SHARTNOMA-005,
-TASK-UZK-036). It is on the page for every contract still here, and it has no
-permission of its own yet: DEC-021 makes editing an exclusive lock one person
-holds, and TASK-UZK-040 is where that lands.
+TASK-UZK-036), and only for the one person holding the DEC-021 Edit Permission
+(TASK-UZK-040). Everybody else sees it disabled, saying what is missing and
+who currently holds it: a control that is simply absent looks like a page that
+is broken, and a specialist who needs to correct a contract has to know who to
+ask for the permission.
 
 Holati is the status control of REQ-ROLE-008 (TASK-UZK-037). What counts
 as a permitted move is narrower than it looks: DEC-010 makes the statuses rows
@@ -152,7 +154,11 @@ REQ-SHARTNOMA-006 asks for and stores one fact.
                 <button type="button" class="btn btn-outline-custom btn-xs js-sht-korish" data-tafsilot="sht-tafsilot-{{ shartnoma.pk }}" title="Tovarlarni ko'rish"><i class="bi bi-eye" aria-hidden="true"></i></button>
               </td>
               <td style="text-align:center;" rowspan="{{ lines|length }}">
-                <a class="btn btn-outline-custom btn-xs" href="{% url 'shartnoma-tahrirlash' shartnoma.pk %}" title="Tahrirlash"><i class="bi bi-pencil" aria-hidden="true"></i></a>
+                {% if may_edit %}
+                  <a class="btn btn-outline-custom btn-xs" href="{% url 'shartnoma-tahrirlash' shartnoma.pk %}" title="Tahrirlash"><i class="bi bi-pencil" aria-hidden="true"></i></a>
+                {% else %}
+                  <button class="btn btn-outline-custom btn-xs" disabled title="Tahrirlash ruxsati sizda emas (DEC-021). {% if the_editor %}Hozir bu ruxsat {{ the_editor.user.get_full_name|default:the_editor.user.username }}da.{% else %}Hozircha hech kimda yo&#39;q - Administratorga murojaat qiling.{% endif %}"><i class="bi bi-pencil" aria-hidden="true"></i></button>
+                {% endif %}
               </td>
               <td style="text-align:center;" rowspan="{{ lines|length }}">
                 <form method="post" action="{% url 'shartnoma-yuborish' shartnoma.pk %}" data-confirm="{{ shartnoma.shartnoma_raqami }} tasdiqlashga yuborilsinmi?">

@@ -24,6 +24,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from accounts.contract_editing import contract_editor, may_edit_contracts
 from accounts.models import UserProfile
 from accounts.permissions import may_open
 from accounts.roles import (
@@ -848,6 +849,14 @@ def contract_page(
         "open_form": form is not None,
         "editing": editing,
         "statuses": ShartnomaStatus.objects.active(),
+        # DEC-021's lock, so the page can render Tahrir disabled rather than
+        # hidden. A control that is simply absent looks like a page that is
+        # broken; one that says what is missing tells a specialist what to do
+        # about it - and who to ask, which contract_editor() has been able to
+        # answer since TASK-UZK-013 and nothing had asked. Found by the
+        # review of #64.
+        "may_edit": may_edit_contracts(user),
+        "the_editor": contract_editor(),
         "suggested_units": SUGGESTED_UNITS,
     }
 
@@ -1084,12 +1093,12 @@ def contract_edit(request: HttpRequest, pk: int) -> HttpResponse:
     document asks for, and is why this is a state of the Kelishinlingan page
     rather than a page of its own.
 
-    There is no permission of its own here yet. REQ-SHARTNOMA-005 says the
-    form opens "if the user has permission for this", and DEC-021 makes that
-    an exclusive lock one person holds; TASK-UZK-040 is the task that puts it
-    on this route. Until then anybody who may open the page may edit, which
-    is wider than the document intends and is written down rather than left
-    to be noticed.
+    REQ-SHARTNOMA-005 opens it "if the user has permission for this", and
+    DEC-021 makes that an exclusive lock one person holds. TASK-UZK-040 put
+    require_contract_editing on this route, beside the page permission:
+    whether somebody may open Kelishinlingan and whether they are the one
+    person who may edit a contract on it are different questions, and
+    held_contract() below asks a third - whose contract this is.
     """
     contract = held_contract(request, pk)
     moved_on = contract_has_moved_on(request, contract)
@@ -1150,6 +1159,7 @@ def contract_update(request: HttpRequest, pk: int) -> HttpResponse:
 
     contract.revise(
         items=contract_rows(items),
+        by=request.user,
         application=form.cleaned_data["application"],
         supplier=form.cleaned_data["supplier"],
         shartnoma_turi=form.cleaned_data["shartnoma_turi"],

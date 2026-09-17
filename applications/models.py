@@ -1650,6 +1650,26 @@ class Contract(models.Model):
         blank=True,
         verbose_name="Kim yuborgan",
     )
+    tahrirlagan = models.ForeignKey(
+        "auth.User",
+        on_delete=models.PROTECT,
+        related_name="edited_contracts",
+        null=True,
+        blank=True,
+        verbose_name="Kim tahrirlagan",
+        help_text=(
+            "Who last changed this contract's terms. Null until somebody "
+            "does, which is most contracts. TASK-UZK-040 made editing an "
+            "exclusive permission one person holds at a time, and the review "
+            "of #64 pointed out that this was then the only mutation on a "
+            "contract that did not record who made it - so if the permission "
+            "changes hands twice in a week, nothing said which holder changed "
+            "the price."
+        ),
+    )
+    tahrirlangan_sana = models.DateTimeField(
+        "Tahrirlangan sana", null=True, blank=True
+    )
     tasdiqlagan = models.ForeignKey(
         "auth.User",
         on_delete=models.PROTECT,
@@ -2156,7 +2176,9 @@ class Contract(models.Model):
         return True
 
     @transaction.atomic
-    def revise(self, items: Sequence[Mapping[str, object]], **fields) -> None:
+    def revise(
+        self, items: Sequence[Mapping[str, object]], by=None, **fields
+    ) -> None:
         """Replace this contract's rows and header (REQ-SHARTNOMA-005).
 
         The rows are replaced rather than matched up, because the entry form
@@ -2173,6 +2195,10 @@ class Contract(models.Model):
         Args:
             items: one mapping of ContractItem fields per row, as
                 raise_contract() takes them.
+            by: who is making the change, recorded against it. Optional
+                because a migration or a shell fixing data is not a person,
+                and a required argument would be answered with something
+                invented. Every route passes it.
             **fields: the contract's own columns, without qiymati.
 
         Raises:
@@ -2213,6 +2239,10 @@ class Contract(models.Model):
 
         for name, value in fields.items():
             setattr(self, name, value)
+
+        if by is not None:
+            self.tahrirlagan = by
+            self.tahrirlangan_sana = timezone.now()
 
         self.items.all().delete()
         lines = [ContractItem(contract=self, **line) for line in items]
