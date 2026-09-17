@@ -27,6 +27,7 @@ from django.views.decorators.http import require_POST
 from accounts.models import UserProfile
 from accounts.permissions import may_open
 from accounts.roles import (
+    ADMIN,
     KATTA_MUTAXASIS,
     assignable_specialists,
     department_of,
@@ -79,6 +80,7 @@ ACCEPTED_TEMPLATE = "pages/qabul-arizalar.html"
 ASSIGNED_TEMPLATE = "pages/tayinlangan.html"
 PURCHASE_TEMPLATE = "pages/xarid-ariza.html"
 AGREED_CONTRACTS_TEMPLATE = "pages/kelishinlingan.html"
+CREATED_CONTRACTS_TEMPLATE = "pages/tuzilgan.html"
 
 # Which page shows an application at each stage. The attachment follows the
 # record rather than the route: a PDF is downloadable by whoever may open the
@@ -1234,6 +1236,165 @@ def contract_create(request: HttpRequest) -> HttpResponse:
     )
 
     return redirect("kelishinlingan")
+
+
+def created_contracts() -> QuerySet[Contract]:
+    """The contracts on the Tuzilgan Shartnomalar page (REQ-SHARTNOMA-001).
+
+    The ones waiting for the department head, and the ones they have already
+    approved. An approved contract stays rather than disappearing, because
+    this is the only page on which anybody can see that it was approved - the
+    prototype shows it the same way, with a badge instead of the two buttons.
+
+    A rejected one is not here. It goes back to the specialist, which means
+    back to the Kelishinlingan page, where REQ-SHARTNOMA-004 gives its comment
+    a column and DEC-024 gives it a Re-Send control.
+
+    Filtered on the stage code rather than on a ShartnomaStatus name, for the
+    reason every list here gives: DEC-010 makes the statuses examples the
+    department extends, so a list reading one quietly empties the day somebody
+    retires it.
+    """
+    return (
+        Contract.objects.filter(
+            stage__in=(Contract.Stage.SENT, Contract.Stage.SIGNED)
+        )
+        .select_related(
+            "application",
+            "application__department",
+            "supplier",
+            "status",
+            "created_by",
+            "tasdiqlagan",
+        )
+        .prefetch_related(contract_lines())
+    )
+
+
+def may_decide_on_contracts(user) -> bool:
+    """Whether this person is the department head REQ-SHARTNOMA-002 names.
+
+    Four types may open this page and one of them decides. DEC-013 and the
+    project context make Admin the Xarid bo`lim boshlig`i - the department
+    head who receives contracts and approves them - so a page-level permission
+    on its own would let a Menejer approve a contract that binds the company.
+
+    The others are here to see what has been agreed, which is what
+    REQ-SHARTNOMA-001 describes the page as.
+    """
+    return has_user_type(user, (ADMIN,))
+
+
+def created_contracts_list(request: HttpRequest) -> HttpResponse:
+    """The Tuzilgan Shartnomalar table (REQ-SHARTNOMA-001)."""
+    return render(
+        request,
+        CREATED_CONTRACTS_TEMPLATE,
+        {
+            "contracts": created_contracts(),
+            "may_decide": may_decide_on_contracts(request.user),
+        },
+    )
+
+
+def contract_awaiting_decision(request: HttpRequest, pk: int) -> Contract:
+    """The contract this request may decide on, or a refusal.
+
+    Raises:
+        PermissionDenied: when the caller is not the department head. They may
+            open the page, so this is about the action rather than the page -
+            the same separation held_contract() makes about a row.
+        Http404: when there is no such contract.
+    """
+    if not may_decide_on_contracts(request.user):
+        raise PermissionDenied(
+            f"{request.user} is not the department head, so they may not "
+            "decide on a contract."
+        )
+
+    return get_object_or_404(Contract, pk=pk)
+
+
+@require_POST
+def accept_contract(request: HttpRequest, pk: int) -> HttpResponse:
+    """Approve a contract (REQ-SHARTNOMA-002).
+
+    REQ-SHARTNOMA-002 says an accepted contract is sent to the next
+    department. DEC-028 says there is no such department: nothing is built for
+    it, and the contract continues through the status chain TASK-UZK-037 gave
+    it. The gap stays visible rather than being filled with an integration to
+    an unnamed destination.
+    """
+    contract = contract_awaiting_decision(request, pk)
+
+    try:
+        approved = contract.accept(request.user)
+    except ValueError:
+        messages.error(
+            request,
+            f"{contract.shartnoma_raqami} tasdiqlanmadi: shartnoma "
+            "tasdiqlashga yuborilmagan.",
+        )
+
+        return redirect("tuzilgan")
+
+    if approved:
+        messages.success(
+            request, f"{contract.shartnoma_raqami} tasdiqlandi."
+        )
+    else:
+        messages.info(
+            request, f"{contract.shartnoma_raqami} allaqachon tasdiqlangan."
+        )
+
+    return redirect("tuzilgan")
+
+
+@require_POST
+def reject_contract(request: HttpRequest, pk: int) -> HttpResponse:
+    """Send a contract back to its specialist, with a reason.
+
+    The comment is the point of the action, so the page asks for it in a
+    window rather than refusing afterwards - the shape the Kelib tushgan and
+    Xarid Arizasi rejections use. This refuses an empty one anyway, because a
+    page is one way in.
+    """
+    contract = contract_awaiting_decision(request, pk)
+
+    try:
+        rejected = contract.reject(
+            request.user, request.POST.get("inkor_izohi", "")
+        )
+    except ValueError:
+        # Two refusals, and being told the wrong one sends whoever
+        # investigates somewhere unrelated - the point the review of #28 made.
+        if not contract.awaits_approval:
+            messages.error(
+                request,
+                f"{contract.shartnoma_raqami} inkor etilmadi: shartnoma "
+                "tasdiqlashga yuborilmagan.",
+            )
+        else:
+            messages.error(
+                request,
+                f"{contract.shartnoma_raqami} inkor etilmadi: izoh "
+                "kiritilishi shart.",
+            )
+
+        return redirect("tuzilgan")
+
+    if rejected:
+        messages.success(
+            request,
+            f"{contract.shartnoma_raqami} inkor etildi va mutaxassisga "
+            "qaytarildi.",
+        )
+    else:
+        messages.info(
+            request, f"{contract.shartnoma_raqami} allaqachon inkor etilgan."
+        )
+
+    return redirect("tuzilgan")
 
 
 def purchase_applications() -> QuerySet[PurchaseApplication]:
