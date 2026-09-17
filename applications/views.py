@@ -24,7 +24,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from accounts.contract_editing import may_edit_contracts
+from accounts.contract_editing import contract_editor, may_edit_contracts
 from accounts.models import UserProfile
 from accounts.permissions import may_open
 from accounts.roles import (
@@ -851,9 +851,12 @@ def contract_page(
         "statuses": ShartnomaStatus.objects.active(),
         # DEC-021's lock, so the page can render Tahrir disabled rather than
         # hidden. A control that is simply absent looks like a page that is
-        # broken; one that says what is missing tells a specialist to ask
-        # Admin.
+        # broken; one that says what is missing tells a specialist what to do
+        # about it - and who to ask, which contract_editor() has been able to
+        # answer since TASK-UZK-013 and nothing had asked. Found by the
+        # review of #64.
         "may_edit": may_edit_contracts(user),
+        "the_editor": contract_editor(),
         "suggested_units": SUGGESTED_UNITS,
     }
 
@@ -1156,6 +1159,7 @@ def contract_update(request: HttpRequest, pk: int) -> HttpResponse:
 
     contract.revise(
         items=contract_rows(items),
+        by=request.user,
         application=form.cleaned_data["application"],
         supplier=form.cleaned_data["supplier"],
         shartnoma_turi=form.cleaned_data["shartnoma_turi"],

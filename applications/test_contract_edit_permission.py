@@ -180,11 +180,27 @@ class WithoutThePermissionTests(EditPermissionTestCase):
         self.assertEqual(self.open_the_form().status_code, 403)
 
     def test_the_holder_of_the_page_permission_is_not_enough(self) -> None:
-        for type_name in (ADMIN, MENEJER, KATTA_MUTAXASIS):
+        # Katta Mutaxasis is not in this loop, and the review of #64 is why:
+        # a freshly made specialist does not hold this contract either, so
+        # that subtest would still pass with require_contract_editing deleted
+        # - on the row rule - and would stop covering anything. The specialist
+        # case is test_the_holder_still_may_not_edit_somebody_elses, where the
+        # permission is granted so the row rule is what refuses.
+        for type_name in (ADMIN, MENEJER, BOLIM_BOSHLIGI):
             with self.subTest(user_type=type_name):
                 self.client.force_login(make_user(type_name))
 
                 self.assertEqual(self.open_the_form().status_code, 403)
+
+    def test_the_specialist_who_holds_the_contract_is_refused_too(
+        self,
+    ) -> None:
+        # The one person the row rule would let through, refused by the lock
+        # alone. Deleting require_contract_editing fails this and nothing
+        # else in the class.
+        self.client.force_login(self.specialist)
+
+        self.assertEqual(self.open_the_form().status_code, 403)
 
     def test_the_control_says_what_is_missing(self) -> None:
         # Disabled rather than absent: a control that is simply gone looks
@@ -197,6 +213,23 @@ class WithoutThePermissionTests(EditPermissionTestCase):
         self.assertNotIn(
             reverse("shartnoma-tahrirlash", args=[self.contract.pk]), row
         )
+
+    def test_it_says_nobody_holds_it_when_nobody_does(self) -> None:
+        self.client.force_login(self.admin)
+
+        self.assertIn("hech kimda yo", self.table())
+
+    def test_it_names_the_holder_when_there_is_one(self) -> None:
+        # contract_editor() has answered this since TASK-UZK-013 and nothing
+        # asked. The person reading the message is the one who needs to know
+        # who to ask for the permission (the review of #64).
+        grant_contract_editing(self.specialist)
+        self.client.force_login(self.admin)
+
+        row = self.table()
+
+        self.assertIn("Dilnoza", row)
+        self.assertNotIn("hech kimda yo", row)
 
 
 class WithThePermissionTests(EditPermissionTestCase):
@@ -230,6 +263,37 @@ class WithThePermissionTests(EditPermissionTestCase):
             reverse("shartnoma-tahrirlash", args=[self.contract.pk]), row
         )
         self.assertNotIn("Tahrirlash ruxsati sizda emas", row)
+
+    def test_the_edit_records_who_made_it(self) -> None:
+        # The review of #64: every other mutation on a contract records its
+        # actor, and this was the only one that did not - on the one that has
+        # a permission attached, so "which holder changed the price" was a
+        # question the system invited and could not answer.
+        grant_contract_editing(self.specialist)
+        self.client.force_login(self.specialist)
+
+        self.save()
+
+        self.contract.refresh_from_db()
+        self.assertEqual(self.contract.tahrirlagan, self.specialist)
+        self.assertIsNotNone(self.contract.tahrirlangan_sana)
+
+    def test_an_unedited_contract_records_nobody(self) -> None:
+        self.assertIsNone(self.contract.tahrirlagan)
+        self.assertIsNone(self.contract.tahrirlangan_sana)
+
+    def test_the_next_holder_is_recorded_on_their_own_edit(self) -> None:
+        grant_contract_editing(self.specialist)
+        self.client.force_login(self.specialist)
+        self.save()
+
+        grant_contract_editing(self.admin)
+        self.client.force_login(self.admin)
+        self.save(izoh="Ikkinchi tahrir")
+
+        self.contract.refresh_from_db()
+        self.assertEqual(self.contract.tahrirlagan, self.admin)
+        self.assertEqual(self.contract.izoh, "Ikkinchi tahrir")
 
     def test_an_admin_holder_can_edit(self) -> None:
         grant_contract_editing(self.admin)
