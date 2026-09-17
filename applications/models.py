@@ -1650,6 +1650,28 @@ class Contract(models.Model):
         blank=True,
         verbose_name="Kim yuborgan",
     )
+    tasdiqlagan = models.ForeignKey(
+        "auth.User",
+        on_delete=models.PROTECT,
+        related_name="approved_contracts",
+        null=True,
+        blank=True,
+        verbose_name="Kim tasdiqlagan",
+    )
+    tasdiqlangan_sana = models.DateTimeField(
+        "Tasdiqlangan sana", null=True, blank=True
+    )
+    inkor_qilgan = models.ForeignKey(
+        "auth.User",
+        on_delete=models.PROTECT,
+        related_name="rejected_contracts",
+        null=True,
+        blank=True,
+        verbose_name="Kim inkor qilgan",
+    )
+    inkor_sanasi = models.DateTimeField(
+        "Inkor qilingan sana", null=True, blank=True
+    )
     yuborishlar_soni = models.PositiveIntegerField(
         "Necha marta yuborilgan",
         default=0,
@@ -1721,6 +1743,144 @@ class Contract(models.Model):
         choice of words.
         """
         return "Re-Send" if self.is_rejected else "Yuborish"
+
+    @property
+    def awaits_approval(self) -> bool:
+        """Whether the department head still has to decide on this."""
+        return self.stage == self.Stage.SENT
+
+    @property
+    def is_signed(self) -> bool:
+        """Whether the department head approved this contract."""
+        return self.stage == self.Stage.SIGNED
+
+    @transaction.atomic
+    def accept(self, by) -> bool:
+        """Approve this contract (REQ-SHARTNOMA-002).
+
+        The department head's half of the send. REQ-SHARTNOMA-002 says an
+        accepted contract is sent to the next department, and DEC-028 says
+        there is no such department: nothing is built for it, the contract
+        continues through the status chain TASK-UZK-037 gave it, and the gap
+        stays visible rather than being filled with an invented integration.
+
+        The status is not moved here either. DEC-028 has the contract continue
+        through its chain, and TASK-UZK-037 made that chain something a person
+        chooses rather than a consequence of somebody else's decision.
+
+        Args:
+            by: the user approving it, recorded as the decider.
+
+        Returns:
+            True when this call approved it, False when it was already
+            approved - the second click of a double click.
+
+        Raises:
+            ValueError: when the contract is not awaiting approval. A contract
+                still with its specialist has not been offered to anybody, and
+                a rejected one has been decided already.
+        """
+        self.refresh_from_db()
+
+        if self.is_signed:
+            return False
+
+        if not self.awaits_approval:
+            raise ValueError(
+                f"{self.shartnoma_raqami} is {self.stage}, not awaiting "
+                "approval, so there is nothing to approve."
+            )
+
+        decided_at = timezone.now()
+
+        # The condition is part of the write, for the reason
+        # Application.accept() gives at length: a check followed by an
+        # unconditional save lets the loser of a race overwrite the winner.
+        approved = type(self).objects.filter(
+            pk=self.pk, stage=self.Stage.SENT
+        ).update(
+            stage=self.Stage.SIGNED,
+            tasdiqlagan=by,
+            tasdiqlangan_sana=decided_at,
+        )
+        if not approved:
+            self.refresh_from_db()
+            return False
+
+        self.stage = self.Stage.SIGNED
+        self.tasdiqlagan = by
+        self.tasdiqlangan_sana = decided_at
+
+        return True
+
+    @transaction.atomic
+    def reject(self, by, comment: str) -> bool:
+        """Send this contract back to its specialist, with a reason.
+
+        REQ-SHARTNOMA-002 makes the comment the point of the action rather
+        than a decoration on it - the specialist is told why - so a rejection
+        with no reason is not a rejection this method will perform. The check
+        is here and not only in the page, because the reason has to exist
+        wherever the rejection is made from. Application.reject() holds the
+        same rule for the same requirement one section earlier.
+
+        Where it lands matters as much as that it lands. The rejected stage is
+        on the Kelishinlingan page, which renders the comment in the column
+        REQ-SHARTNOMA-004 gives it and offers the Re-Send control DEC-024
+        names - so "the data is returned back" is a contract the specialist
+        finds where they left it.
+
+        Args:
+            by: the user rejecting it, recorded as the decider.
+            comment: why. Stored with its surrounding whitespace stripped.
+
+        Returns:
+            True when this call rejected it, False when it was already
+            rejected.
+
+        Raises:
+            ValueError: when the comment is empty or only whitespace, or when
+                the contract is not awaiting approval. Both leave the record
+                exactly as it was.
+        """
+        reason = (comment or "").strip()
+        if not reason:
+            raise ValueError(
+                f"{self.shartnoma_raqami} cannot be rejected without a "
+                "comment."
+            )
+
+        self.refresh_from_db()
+
+        if self.is_rejected:
+            return False
+
+        if not self.awaits_approval:
+            raise ValueError(
+                f"{self.shartnoma_raqami} is {self.stage}, not awaiting "
+                "approval, so there is nothing to reject."
+            )
+
+        decided_at = timezone.now()
+
+        rejected = type(self).objects.filter(
+            pk=self.pk, stage=self.Stage.SENT
+        ).update(
+            stage=self.Stage.REJECTED,
+            inkor_izohi=reason,
+            inkor_qilgan=by,
+            inkor_sanasi=decided_at,
+        )
+        if not rejected:
+            self.refresh_from_db()
+            return False
+
+        self.stage = self.Stage.REJECTED
+        self.inkor_izohi = reason
+        self.inkor_qilgan = by
+        self.inkor_sanasi = decided_at
+
+        return True
 
     @transaction.atomic
     def send_for_approval(self, by) -> bool:
@@ -1867,21 +2027,45 @@ class Contract(models.Model):
 
         return changes[0] if changes else None
 
-    # The stages at which a contract is still its specialist's to change.
-    # DEC-024 describes correcting a rejected contract and resending it, and
-    # an agreed one has not gone anywhere yet. A contract awaiting somebody's
-    # approval, or already approved, changing underneath them is not something
-    # the document describes.
+    # The stages at which a contract's terms may still be changed. DEC-024
+    # describes correcting a rejected contract and resending it, and an agreed
+    # one has not gone anywhere yet. A contract awaiting somebody's approval,
+    # or already approved, having its rows or its price rewritten is not
+    # something the document describes.
     #
-    # On the model, because three callers ask: the edit form, set_status() and
-    # the template. The review of #56 found the first of them with a copy of
-    # its own in the views.
+    # On the model, because three callers ask: the edit form, the send and the
+    # template. The review of #56 found the first of them with a copy of its
+    # own in the views.
     EDITABLE_STAGES = (Stage.AGREED, Stage.REJECTED)
+
+    # The stages at which its state may still be reported, which is a
+    # different question and was the same one until the review of #62.
+    #
+    # REQ-ROLE-008 has the specialist keep changing a contract's status for
+    # the life of the agreement, and DEC-010 seeds Yetkazib berilgan - a
+    # contract is delivered after it is signed, not before. Sharing
+    # EDITABLE_STAGES meant approving a contract froze its status forever, so
+    # the seeded status for delivery could never be reached and DEC-028's
+    # "continues through its status chain" was impossible. Nothing noticed
+    # because until TASK-UZK-039 nothing wrote SIGNED.
+    #
+    # SENT is the stage that refuses: a contract awaiting a decision must not
+    # change underneath the person making it.
+    MOVABLE_STAGES = (Stage.AGREED, Stage.REJECTED, Stage.SIGNED)
 
     @property
     def is_editable(self) -> bool:
-        """Whether this contract is still its specialist's to change."""
+        """Whether this contract's terms may still be changed."""
         return self.stage in self.EDITABLE_STAGES
+
+    @property
+    def status_may_move(self) -> bool:
+        """Whether this contract's state may still be reported.
+
+        Not the same question as is_editable, although it was until the review
+        of #62: a signed contract's terms are settled and its progress is not.
+        """
+        return self.stage in self.MOVABLE_STAGES
 
     @transaction.atomic
     def set_status(self, status, by) -> bool:
@@ -1896,10 +2080,15 @@ class Contract(models.Model):
         invalidate, which is the thing DEC-010 exists to prevent.
 
         So what is enforced is what the data can say: the status has to be one
-        that is in use, the contract has to be one its specialist is still
-        working on, and moving to the status it already has is not a move. The
-        ordering the department works to is recorded as an open point rather
-        than invented here.
+        that is in use, the contract has to be one whose progress is still
+        being reported, and moving to the status it already has is not a move.
+        The ordering the department works to is recorded as an open point
+        rather than invented here.
+
+        "Still being reported" is MOVABLE_STAGES rather than EDITABLE_STAGES,
+        which the review of #62 separated: a signed contract's terms are
+        settled and its progress is not, and DEC-010 seeds a status for
+        delivery, which happens after signing.
 
         Every move writes a ContractStatusChange in this transaction, so a
         contract cannot arrive at a status with no record of how.
@@ -1932,7 +2121,7 @@ class Contract(models.Model):
 
         self.refresh_from_db()
 
-        if not self.is_editable:
+        if not self.status_may_move:
             raise ValueError(
                 f"{self.shartnoma_raqami} is {self.stage}, so its status is "
                 "not its specialist's to change."

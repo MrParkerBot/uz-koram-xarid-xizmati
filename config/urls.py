@@ -42,6 +42,7 @@ from accounts.views import (
 from applications.views import (
     accept_application,
     accept_assigned_application,
+    accept_contract,
     accepted_list,
     agreed_contracts_list,
     application_create,
@@ -53,12 +54,14 @@ from applications.views import (
     contract_edit,
     contract_pdf,
     contract_update,
+    created_contracts_list,
     incoming_list,
     purchase_application_create,
     purchase_application_list,
     purchase_application_original_pdf,
     purchase_application_pdf,
     reject_application,
+    reject_contract,
     reject_purchase_application,
     send_contract_for_approval,
     set_application_status,
@@ -74,7 +77,6 @@ from reference.supplier_views import supplier_page
 # Every page except the dashboard, which answers at the site root. Each entry
 # is (url path, URL name); the template is pages/<name>.html.
 PAGE_ROUTES: tuple[tuple[str, str], ...] = (
-    ("tuzilgan/", "tuzilgan"),
     ("xodimlar-yuklamasi/", "xodimlar-yuklamasi"),
     ("bolimlar/", "bolimlar"),
     ("mahsulot-tur/", "mahsulot-tur"),
@@ -431,6 +433,28 @@ urlpatterns = [
         "kelishinlingan/<int:pk>/yuborish/",
         require_page_permission("kelishinlingan")(send_contract_for_approval),
         name="shartnoma-yuborish",
+    ),
+    # The Tuzilgan Shartnomalar page of section 4.7 (TASK-UZK-039). It left
+    # PAGE_ROUTES when it stopped being a template with no data behind it; the
+    # path and the name are the ones the sidebar, the permission matrix and
+    # Contract.PAGE_SHOWING_STAGE already use.
+    path(
+        "tuzilgan/",
+        require_page_permission("tuzilgan")(created_contracts_list),
+        name="tuzilgan",
+    ),
+    # REQ-SHARTNOMA-002's Accept and Reject. Under the page's permission, and
+    # the view asks again: four types may open the page and only the
+    # department head decides.
+    path(
+        "tuzilgan/<int:pk>/tasdiqlash/",
+        require_page_permission("tuzilgan")(accept_contract),
+        name="shartnoma-tasdiqlash",
+    ),
+    path(
+        "tuzilgan/<int:pk>/inkor/",
+        require_page_permission("tuzilgan")(reject_contract),
+        name="shartnoma-inkor",
     ),
     # The contract document (REQ-SHARTNOMA-003, DEC-019). No permission on
     # the route: the view asks the matrix about the page the contract's stage
