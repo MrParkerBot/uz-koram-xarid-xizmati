@@ -225,6 +225,22 @@ class SecondSendTests(SendingTestCase):
         contract.refresh_from_db()
         self.assertEqual(contract.stage, Contract.Stage.SIGNED)
 
+    def test_an_approved_contract_is_told_it_was_approved(self) -> None:
+        # Two stages refuse a send and they are different facts. This test
+        # read the stage and not the message, which is how the review of #60
+        # found both refusals saying the contract was awaiting approval.
+        contract = self.a_contract()
+        Contract.objects.filter(pk=contract.pk).update(
+            stage=Contract.Stage.SIGNED
+        )
+
+        response = self.client.post(
+            reverse("shartnoma-yuborish", args=[contract.pk]), follow=True
+        )
+
+        self.assertContains(response, "allaqachon tasdiqlangan")
+        self.assertNotContains(response, "allaqachon tasdiqlashga yuborilgan")
+
     def test_send_for_approval_refuses_a_sent_contract(self) -> None:
         contract = self.a_contract()
         contract.send_for_approval(self.specialist)
@@ -253,6 +269,46 @@ class SecondSendTests(SendingTestCase):
         self.assertFalse(sent)
         contract.refresh_from_db()
         self.assertIsNone(contract.yuborgan)
+
+
+class SendCountTests(SendingTestCase):
+    """How many times a contract has gone for approval (the review of #60)."""
+
+    def test_a_new_contract_has_never_been_sent(self) -> None:
+        self.assertEqual(self.a_contract().yuborishlar_soni, 0)
+
+    def test_sending_counts_once(self) -> None:
+        contract = self.a_contract()
+
+        self.send(contract)
+
+        contract.refresh_from_db()
+        self.assertEqual(contract.yuborishlar_soni, 1)
+
+    def test_a_resend_counts_again(self) -> None:
+        # The question the department will ask is how many times a contract
+        # came back, and the two columns beside this one are overwritten by
+        # each resend - so a log built later could not reconstruct it.
+        contract = self.a_rejected_contract()
+        contract.send_for_approval(self.specialist)
+        Contract.objects.filter(pk=contract.pk).update(
+            stage=Contract.Stage.REJECTED
+        )
+        contract.refresh_from_db()
+
+        contract.send_for_approval(self.specialist)
+
+        contract.refresh_from_db()
+        self.assertEqual(contract.yuborishlar_soni, 2)
+
+    def test_a_refused_send_does_not_count(self) -> None:
+        contract = self.a_contract()
+        self.send(contract)
+
+        self.send(contract)
+
+        contract.refresh_from_db()
+        self.assertEqual(contract.yuborishlar_soni, 1)
 
 
 class ResendTests(SendingTestCase):
