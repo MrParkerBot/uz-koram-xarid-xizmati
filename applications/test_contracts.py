@@ -12,6 +12,11 @@ And the Izoh column has nothing in it. REQ-SHARTNOMA-004 gives the rejection
 comment a column, and nothing rejects a contract until TASK-UZK-038 - so the
 test writes one directly, because a column that has never held anything is a
 column nobody has checked renders.
+
+TASK-UZK-035 gave a contract goods rows of its own, so the fixture here now
+prices them and the contract value falls out of them rather than being typed
+into the fixture. The list shows those rows rather than the application's,
+which is why the row assertions read the same and mean something different.
 """
 
 from __future__ import annotations
@@ -87,16 +92,36 @@ class ContractTestCase(TestCase):
         )
 
     def a_contract(self, lines: int = 1, **overrides) -> Contract:
+        """A contract with one priced row per line.
+
+        Five hundred at 250 000 comes to 125 000 000 a row, which is the
+        figure the value-formatting tests below read - written here rather
+        than passed in, because TASK-UZK-035 made the contract value the sum
+        of the rows and a fixture that could set it directly would be a
+        fixture able to disagree with them.
+        """
+        items = overrides.pop(
+            "items",
+            [
+                {
+                    "buyurtma_nomi": f"Bolt M{index + 1}",
+                    "part_number": f"PN-000{index + 1}",
+                    "buyurtma_soni": Decimal("500"),
+                    "olchov_birligi": "ta",
+                    "narxi": Decimal("250000.00"),
+                }
+                for index in range(lines)
+            ],
+        )
         fields = {
             "application": overrides.pop("application", None)
             or self.an_application(lines),
             "supplier": self.supplier,
-            "qiymati": Decimal("125000000.00"),
             "created_by": self.buyer,
             "status": ShartnomaStatus.objects.filter(is_active=True).first(),
         }
         fields.update(overrides)
-        return Contract.raise_contract(**fields)
+        return Contract.raise_contract(items=items, **fields)
 
     def page(self) -> str:
         return self.client.get(reverse("kelishinlingan")).content.decode()
@@ -118,7 +143,16 @@ class ValueFormatTests(ContractTestCase):
         )
 
     def test_a_small_value_is_not_grouped(self) -> None:
-        contract = self.a_contract(qiymati=Decimal("950.50"))
+        contract = self.a_contract(
+            items=[
+                {
+                    "buyurtma_nomi": "Vint",
+                    "buyurtma_soni": Decimal("1"),
+                    "olchov_birligi": "ta",
+                    "narxi": Decimal("950.50"),
+                }
+            ]
+        )
 
         self.assertEqual(contract.qiymati_display, "950,50")
 
@@ -201,7 +235,7 @@ class ListTests(ContractTestCase):
             self.table(),
         )
 
-    def test_a_multi_line_application_renders_a_row_per_line(self) -> None:
+    def test_a_multi_row_contract_renders_a_row_per_row(self) -> None:
         self.a_contract(lines=3)
         row = self.table()
 
@@ -283,10 +317,12 @@ class WaitingControlTests(ContractTestCase):
     """What belongs to the tasks after this one."""
 
     def test_the_controls_name_the_tasks_that_will_build_them(self) -> None:
+        # TASK-UZK-035 is no longer among them: Shartnoma Kiritish opens the
+        # entry form now rather than sitting disabled with this task's number
+        # on it.
         self.a_contract()
         page = self.page()
 
-        self.assertIn("TASK-UZK-035", page)
         self.assertIn("TASK-UZK-037", page)
         self.assertIn("TASK-UZK-038", page)
 
