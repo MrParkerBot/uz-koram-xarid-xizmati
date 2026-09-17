@@ -932,16 +932,31 @@ def send_contract_for_approval(
     The contract leaves this page when it is sent, because this page is the
     contracts still theirs to work on. That is abrupt if nobody says so, which
     is why the message names where it went rather than only that it went.
+
+    That message names Tuzilgan Shartnomalar, and TASK-UZK-039 is what makes
+    that page show a real contract - until it does, somebody following the
+    sentence finds the prototype's three rows. Recorded rather than softened,
+    because the sentence is true of the record and the page is the next task;
+    a vaguer message would be wrong for longer.
     """
     contract = held_contract(request, pk)
 
     try:
         sent = contract.send_for_approval(request.user)
     except ValueError:
+        # Two stages refuse a send and they are different facts. Telling
+        # somebody an approved contract is "already sent for approval" sends
+        # whoever they ask about it looking for an approval queue the contract
+        # left days ago - the point the review of #28 made about rejection,
+        # found here by the review of #60.
         messages.error(
             request,
-            f"{contract.shartnoma_raqami} yuborilmadi: shartnoma "
-            "allaqachon tasdiqlashga yuborilgan.",
+            f"{contract.shartnoma_raqami} yuborilmadi: "
+            + (
+                "shartnoma allaqachon tasdiqlashga yuborilgan."
+                if contract.is_sent
+                else "shartnoma allaqachon tasdiqlangan."
+            ),
         )
 
         return redirect("kelishinlingan")

@@ -1650,6 +1650,20 @@ class Contract(models.Model):
         blank=True,
         verbose_name="Kim yuborgan",
     )
+    yuborishlar_soni = models.PositiveIntegerField(
+        "Necha marta yuborilgan",
+        default=0,
+        help_text=(
+            "How many times this contract has gone for approval. The two "
+            "columns above hold the last send and are overwritten by a "
+            "resend, and the review of #60 pointed out that the log "
+            "TASK-UZK-052 builds cannot recover what was never recorded - a "
+            "contract rejected and resent three times before that task ships "
+            "would show one send and no sign of the other two. How many times "
+            "it came back is the question the department will actually ask, "
+            "and a count answers it without building that log early."
+        ),
+    )
     yaratilingan_sana = models.DateTimeField(
         "Yaratilingan sana", auto_now_add=True
     )
@@ -1753,6 +1767,7 @@ class Contract(models.Model):
             stage=self.Stage.SENT,
             yuborilgan_sana=sent_at,
             yuborgan=by,
+            yuborishlar_soni=models.F("yuborishlar_soni") + 1,
         )
         if not moved:
             self.refresh_from_db()
@@ -1761,6 +1776,7 @@ class Contract(models.Model):
         self.stage = self.Stage.SENT
         self.yuborilgan_sana = sent_at
         self.yuborgan = by
+        self.yuborishlar_soni += 1
 
         return True
 
