@@ -391,18 +391,26 @@ class EditedValueTests(ContractAttachmentTestCase):
         # DEC-024 describes correcting a rejected contract. One awaiting
         # somebody's approval changing underneath them is not described, so it
         # is refused rather than guessed at.
+        #
+        # The refusal is a message rather than a 404 since the review of #56:
+        # the status control answered one way and this answered another, for
+        # one rule. The case that actually happens is a race - somebody sent
+        # the contract while this page was open - and a person told their
+        # change was not saved needs to know why.
         contract = self.a_contract()
         Contract.objects.filter(pk=contract.pk).update(
             stage=Contract.Stage.SENT
         )
 
-        self.assertEqual(
-            self.client.get(
-                reverse("shartnoma-tahrirlash", args=[contract.pk])
-            ).status_code,
-            404,
+        opened = self.client.get(
+            reverse("shartnoma-tahrirlash", args=[contract.pk]), follow=True
         )
-        self.assertEqual(self.edit(contract, izoh="Tuzatildi").status_code, 404)
+        self.assertContains(opened, "tasdiqlashga yuborilgan")
+
+        self.edit(contract, izoh="Tuzatildi")
+
+        contract.refresh_from_db()
+        self.assertEqual(contract.izoh, "")
 
     def test_a_rejected_contract_can_be_corrected(self) -> None:
         contract = self.a_contract()
