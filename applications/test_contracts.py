@@ -324,10 +324,11 @@ class WaitingControlTests(ContractTestCase):
     """What belongs to the tasks after this one."""
 
     def test_the_controls_name_the_tasks_that_will_build_them(self) -> None:
-        # Two have left the list since TASK-UZK-034 wrote this: TASK-UZK-035
-        # built Shartnoma Kiritish and TASK-UZK-037 built Ko'rish, and each
-        # took its own number off a control with it. Yuborish is the last row
-        # action still waiting.
+        # No row action is waiting any more. TASK-UZK-035 built Shartnoma
+        # Kiritish, TASK-UZK-037 built Ko'rish and TASK-UZK-038 built
+        # Yuborish, and each took its own number off a control with it. What
+        # is left disabled is the filter bar and the exports, which
+        # TASK-UZK-041 and TASK-UZK-042 build for every table at once.
         #
         # Asserted on the disabled control rather than on the task number
         # alone, because the template's own comments name the tasks that
@@ -336,9 +337,11 @@ class WaitingControlTests(ContractTestCase):
         self.a_contract()
         page = self.page()
 
-        self.assertIn('disabled title="TASK-UZK-038', page)
-        self.assertNotIn('disabled title="TASK-UZK-035', page)
-        self.assertNotIn('disabled title="TASK-UZK-037', page)
+        self.assertIn('disabled title="TASK-UZK-041', page)
+        self.assertIn('disabled title="TASK-UZK-042', page)
+        for built in ("035", "037", "038"):
+            with self.subTest(task=built):
+                self.assertNotIn(f'disabled title="TASK-UZK-{built}', page)
 
 
 class QueryTests(ContractTestCase):

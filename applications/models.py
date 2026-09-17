@@ -1631,6 +1631,39 @@ class Contract(models.Model):
     )
     izoh = models.TextField("Izoh", blank=True)
     pdf = contract_pdf_field()
+    yuborilgan_sana = models.DateTimeField(
+        "Tasdiqlashga yuborilgan sana",
+        null=True,
+        blank=True,
+        help_text=(
+            "When this contract was last sent for approval. Overwritten by a "
+            "resend rather than kept per attempt: DEC-024 makes a resend the "
+            "same act again, and the history of the attempts belongs in the "
+            "section 10 log TASK-UZK-052 builds."
+        ),
+    )
+    yuborgan = models.ForeignKey(
+        "auth.User",
+        on_delete=models.PROTECT,
+        related_name="sent_contracts",
+        null=True,
+        blank=True,
+        verbose_name="Kim yuborgan",
+    )
+    yuborishlar_soni = models.PositiveIntegerField(
+        "Necha marta yuborilgan",
+        default=0,
+        help_text=(
+            "How many times this contract has gone for approval. The two "
+            "columns above hold the last send and are overwritten by a "
+            "resend, and the review of #60 pointed out that the log "
+            "TASK-UZK-052 builds cannot recover what was never recorded - a "
+            "contract rejected and resent three times before that task ships "
+            "would show one send and no sign of the other two. How many times "
+            "it came back is the question the department will actually ask, "
+            "and a count answers it without building that log early."
+        ),
+    )
     yaratilingan_sana = models.DateTimeField(
         "Yaratilingan sana", auto_now_add=True
     )
@@ -1671,6 +1704,81 @@ class Contract(models.Model):
     def is_rejected(self) -> bool:
         """Whether this contract was refused."""
         return self.stage == self.Stage.REJECTED
+
+    @property
+    def is_sent(self) -> bool:
+        """Whether this contract is with the department head."""
+        return self.stage == self.Stage.SENT
+
+    @property
+    def send_label(self) -> str:
+        """What the send control reads (DEC-024).
+
+        The decision settles UNKNOWN-028: the document names Re-Send and then
+        says the Send button appears, which describes two different things.
+        Re-Send after a rejection, and the wording is decided here rather than
+        in the template, because it is a rule from a decision rather than a
+        choice of words.
+        """
+        return "Re-Send" if self.is_rejected else "Yuborish"
+
+    @transaction.atomic
+    def send_for_approval(self, by) -> bool:
+        """Submit this contract to the department head (REQ-SHARTNOMA-005).
+
+        The move out of the specialist's hands. A contract at the agreed stage
+        has not been anywhere; a rejected one is coming back for a second
+        time, which DEC-024 describes and which is the same act rather than a
+        different one.
+
+        The rejection comment is not cleared. REQ-SHARTNOMA-004 gives it a
+        column, and the approver about to look at this contract again is the
+        person most helped by seeing why it came back. DEC-024 says nothing
+        either way, so the comment stays and the stage is what says the
+        contract has moved on.
+
+        Args:
+            by: the user sending it, recorded against the send.
+
+        Returns:
+            True when this call sent it, False when somebody else sent it
+            between the read and the write.
+
+        Raises:
+            ValueError: when the contract is not at a stage its specialist
+                still holds - which is what a second send is, because the
+                first one moved it.
+        """
+        self.refresh_from_db()
+
+        if not self.is_editable:
+            raise ValueError(
+                f"{self.shartnoma_raqami} is {self.stage}, so there is "
+                "nothing to send."
+            )
+
+        sent_at = timezone.now()
+
+        # Conditional on the stage, for the reason set_status() gives: two
+        # clicks landing together should send one contract once.
+        moved = type(self).objects.filter(
+            pk=self.pk, stage__in=self.EDITABLE_STAGES
+        ).update(
+            stage=self.Stage.SENT,
+            yuborilgan_sana=sent_at,
+            yuborgan=by,
+            yuborishlar_soni=models.F("yuborishlar_soni") + 1,
+        )
+        if not moved:
+            self.refresh_from_db()
+            return False
+
+        self.stage = self.Stage.SENT
+        self.yuborilgan_sana = sent_at
+        self.yuborgan = by
+        self.yuborishlar_soni += 1
+
+        return True
 
     @property
     def qiymati_display(self) -> str:
