@@ -21,7 +21,16 @@ which is what REQ-SHARTNOMA-001 describes the page as.
 
 REQ-SHARTNOMA-002 says an accepted contract is sent to the next department,
 and DEC-028 says there is no such department: nothing is built for it and the
-contract continues through the status chain TASK-UZK-037 gave it.
+contract continues through the status chain TASK-UZK-037 gave it. That chain
+is on this page once the contract is signed - a contract is delivered after it
+is approved, not before, so Holati carries the control here and a badge while
+the contract is still awaiting a decision. The review of #62 found the status
+frozen at the moment the document says it carries on.
+
+Izoh shows why a contract came back last time, when it did. It is not one of
+REQ-SHARTNOMA-001's columns, and TASK-UZK-038 keeps the comment through a
+resend precisely so the person deciding again can see it - which is this
+page.
 
 Ko'rish opens the contract's goods rows in place, the way the Kelishinlingan
 page does, because the rows are already on the page.
@@ -71,6 +80,7 @@ TASK-UZK-042 build filtering and exporting for every table at once.
             <th>Kim tuzdi</th>
             <th>Yaratilgan</th>
             <th>Qiymati (UZS)</th>
+            <th style="width:180px;">Holati</th>
             <th style="text-align:center;width:50px;">Ilova</th>
             <th style="text-align:center;width:80px;">Ko'rish</th>
             <th style="text-align:center;width:160px;">Amallar</th>
@@ -92,6 +102,35 @@ TASK-UZK-042 build filtering and exporting for every table at once.
               <td rowspan="{{ lines|length }}">{{ shartnoma.created_by.get_full_name|default:shartnoma.created_by.username }}</td>
               <td class="mono-cell" rowspan="{{ lines|length }}">{{ shartnoma.yaratilingan_sana|date:"Y-m-d" }}</td>
               <td style="font-weight:600;color:var(--color-primary);" rowspan="{{ lines|length }}">{{ shartnoma.qiymati_display }}</td>
+              <td rowspan="{{ lines|length }}">
+                {% if shartnoma.status_may_move %}
+                <form method="post" action="{% url 'shartnoma-holat' shartnoma.pk %}">
+                  {% csrf_token %}
+                  <select class="form-control" name="status" style="width:160px;padding:5px 8px;font-size:11px;">
+                    <option value="">&mdash; {{ shartnoma.status.name|default:"Tanlang" }} &mdash;</option>
+                    {% for holat in statuses %}
+                      <option value="{{ holat.pk }}"{% if holat.pk == shartnoma.status_id %} selected{% endif %}>{{ holat.name }}</option>
+                    {% endfor %}
+                  </select>
+                  <button type="submit" class="btn btn-outline-custom btn-xs" style="margin-top:4px;">Saqlash</button>
+                </form>
+                {% else %}
+                  {% if shartnoma.status %}<span class="badge {{ shartnoma.status.badge_class }}">{{ shartnoma.status.name }}</span>{% else %}<span class="muted small">&mdash;</span>{% endif %}
+                {% endif %}
+                {% with oxirgi=shartnoma.last_status_change %}
+                {% if oxirgi %}
+                  <div class="muted" style="font-size:10px;margin-top:4px;">
+                    {{ oxirgi.to_status.name }} &mdash; {{ oxirgi.changed_by.get_full_name|default:oxirgi.changed_by.username }}, {{ oxirgi.changed_at|date:"Y-m-d H:i" }}
+                  </div>
+                {% endif %}
+                {% endwith %}
+                {% if shartnoma.inkor_izohi %}
+                  <div class="muted" style="font-size:10px;margin-top:4px;" title="Oldingi inkor izohi">
+                    <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+                    {{ shartnoma.yuborishlar_soni }}-marta yuborilgan &mdash; {{ shartnoma.inkor_izohi }}
+                  </div>
+                {% endif %}
+              </td>
               <td style="text-align:center;" rowspan="{{ lines|length }}">
                 {% if shartnoma.pdf %}
                   <a class="pdf-badge" href="{% url 'shartnoma-pdf' shartnoma.pk %}" title="{{ shartnoma.shartnoma_raqami }}.pdf"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></a>
@@ -120,7 +159,7 @@ TASK-UZK-042 build filtering and exporting for every table at once.
             </tr>
             {% endfor %}
             <tr class="hidden" id="tz-tafsilot-{{ shartnoma.pk }}">
-              <td colspan="12" style="background:var(--color-surface-alt, #fafafa);">
+              <td colspan="13" style="background:var(--color-surface-alt, #fafafa);">
                 <div style="font-size:11px;color:var(--color-text-muted);margin-bottom:6px;">{{ shartnoma.shartnoma_raqami }} &mdash; tovarlar</div>
                 <table class="table-app">
                   <thead><tr>
@@ -148,7 +187,7 @@ TASK-UZK-042 build filtering and exporting for every table at once.
             </tr>
             {% endwith %}
           {% empty %}
-            <tr><td colspan="12" class="muted" style="text-align:center;">Hozircha tasdiqlashga yuborilgan shartnoma yo'q.</td></tr>
+            <tr><td colspan="13" class="muted" style="text-align:center;">Hozircha tasdiqlashga yuborilgan shartnoma yo'q.</td></tr>
           {% endfor %}
           </tbody>
         </table>
