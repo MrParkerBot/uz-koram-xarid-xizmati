@@ -161,7 +161,7 @@ def first_page_for(user: AbstractBaseUser | AnonymousUser | None) -> str | None:
     would have clicked. None when they may open nothing at all - an account
     that exists but has been given no type.
     """
-    from config.navigation import navigation_url_names
+    from core.navigation import navigation_url_names
 
     for page_name in navigation_url_names():
         if may_open(user, page_name):
