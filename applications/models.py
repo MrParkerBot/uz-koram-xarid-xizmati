@@ -1014,6 +1014,43 @@ class PurchaseApplication(models.Model):
 
         return False
 
+    def moved_past(self, user) -> bool:
+        """Whether this request has gone beyond the step this person decides.
+
+        The #44 review asked for a stale button to be told rather than denied,
+        and this is the line between the two. Past is not the same as not
+        waiting: a request that has not yet reached somebody is out of order,
+        and approving out of order is the failure the whole chain exists to
+        prevent. A Direktor reaching for one still waiting for the department
+        head is refused; a department head reaching for one that has already
+        gone to Direktor is simply late.
+
+        Decided counts as past for both of them, because there is nothing left
+        to do either way.
+        """
+        from accounts.roles import (
+            BOLIM_BOSHLIGI,
+            DIREKTOR,
+            department_of,
+            has_user_type,
+        )
+
+        decided = (self.Stage.APPROVED, self.Stage.REJECTED)
+
+        if (
+            has_user_type(user, (BOLIM_BOSHLIGI,))
+            and department_of(user) == self.department
+        ):
+            # Their step is the first one, so anything else is past it.
+            return self.stage != self.Stage.AWAITING_HEAD
+
+        if has_user_type(user, (DIREKTOR,)):
+            # Their step is the second. Still waiting for the head is before
+            # them, not behind them.
+            return self.stage in decided
+
+        return False
+
     @transaction.atomic
     def approve(self, by) -> bool:
         """Take this request one step along DEC-016's chain.
@@ -1100,6 +1137,13 @@ class PurchaseApplication(models.Model):
         comment and the attachment - and the requester becomes its sender,
         which is the column Application has carried since TASK-UZK-022 and
         has never had a value in.
+
+        The attachment is shared rather than copied: both records name the
+        same stored file, because it is the same document and copying it
+        would make two that could drift. It is also why the race path in
+        approve() can delete the application it just created without taking a
+        file with it - the file was never that record's own. The #44 review
+        asked for this to be written down rather than discovered.
         """
         return Application.raise_application(
             items=[

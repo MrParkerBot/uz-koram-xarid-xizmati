@@ -103,6 +103,12 @@ class ApprovalTestCase(TestCase):
             {"inkor_izohi": comment},
         )
 
+    def told(self) -> str:
+        """What the page said after the last redirect, as one string."""
+        page = self.client.get(reverse("xarid-ariza"))
+
+        return " ".join(str(message) for message in page.context["messages"])
+
     def queue_of(self, user) -> str:
         self.client.force_login(user)
         page = self.client.get(reverse("xarid-ariza")).content.decode()
@@ -184,16 +190,61 @@ class SequenceTests(ApprovalTestCase):
         )
 
     def test_the_head_cannot_approve_twice(self) -> None:
+        # Not a Forbidden page. The #44 review found this answering 403: they
+        # had the permission they needed and what changed is the record, which
+        # is the distinction the #26 review settled for accept_application.
         self.approve_as(self.head)
 
         response = self.approve_as(self.head)
 
         self.application.refresh_from_db()
-        self.assertEqual(response.status_code, 403)
+        self.assertRedirects(response, reverse("xarid-ariza"))
         self.assertEqual(
             self.application.stage,
             PurchaseApplication.Stage.AWAITING_DIREKTOR,
         )
+
+    def test_a_colleague_clicking_a_stale_button_is_told_rather_than_denied(
+        self,
+    ) -> None:
+        second_head = make_user(BOLIM_BOSHLIGI, self.department)
+        self.approve_as(self.head)
+
+        response = self.approve_as(second_head)
+
+        # told() before anything else fetches the page: following the
+        # redirect is what consumes the message.
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("allaqachon", self.told())
+        self.application.refresh_from_db()
+        self.assertEqual(
+            self.application.stage,
+            PurchaseApplication.Stage.AWAITING_DIREKTOR,
+        )
+
+    def test_a_stale_rejection_is_told_rather_than_denied(self) -> None:
+        second_head = make_user(BOLIM_BOSHLIGI, self.department)
+        self.approve_as(self.head)
+
+        response = self.reject_as(second_head)
+
+        self.application.refresh_from_db()
+        self.assertRedirects(response, reverse("xarid-ariza"))
+        self.assertNotEqual(
+            self.application.stage, PurchaseApplication.Stage.REJECTED
+        )
+
+    def test_somebody_who_could_never_decide_is_still_denied(self) -> None:
+        # The distinction has to cut both ways, or it is just a weaker check.
+        for who in (
+            self.other_head,
+            self.requester,
+            make_user(KATTA_MUTAXASIS, self.department),
+        ):
+            with self.subTest(who=who.last_name):
+                response = self.approve_as(who)
+
+                self.assertEqual(response.status_code, 403)
 
     def test_another_departments_head_cannot_approve_it(self) -> None:
         response = self.approve_as(self.other_head)
