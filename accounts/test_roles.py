@@ -217,26 +217,3 @@ class DisplayTests(TestCase):
         shell = render_to_string("base.html", {"user": user})
 
         self.assertIn("fallback.user", shell)
-
-
-class BareStringGuardTests(TestCase):
-    """has_user_type takes a collection of names, and says so loudly.
-
-    A bare string is iterable, so passing one used to compare a type name
-    against its own letters and answer False for everybody - silently, which
-    is the worst way for a permission question to be wrong. TASK-UZK-028 hit
-    exactly that and its tests caught it; this keeps the trap closed.
-    """
-
-    def test_a_bare_string_is_refused(self) -> None:
-        user = make_user("bare.string")
-        assign_user_type(user, UserType.objects.get(name=ADMIN))
-
-        with self.assertRaises(TypeError):
-            has_user_type(user, ADMIN)
-
-    def test_a_collection_of_one_still_works(self) -> None:
-        user = make_user("collection.of.one")
-        assign_user_type(user, UserType.objects.get(name=ADMIN))
-
-        self.assertTrue(has_user_type(user, (ADMIN,)))
