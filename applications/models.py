@@ -1672,7 +1672,20 @@ class Contract(models.Model):
         Raises:
             ValueError: for the same three reasons raise_contract() refuses -
                 no rows, a supplied value, or no document.
+            TypeError: when a keyword is not a column on this model.
+                raise_contract() goes through objects.create(), which raises
+                for a misspelled field before anything is written; this used
+                to set the attribute, save, and lose it in silence. The review
+                of #54 asked for the two halves of one rule to fail the same
+                way.
         """
+        columns = {field.name for field in self._meta.concrete_fields}
+        unknown = sorted(set(fields) - columns)
+        if unknown:
+            raise TypeError(
+                f"Contract has no column {', '.join(unknown)}."
+            )
+
         if "qiymati" in fields:
             raise ValueError(
                 "A contract value is the sum of its rows "
