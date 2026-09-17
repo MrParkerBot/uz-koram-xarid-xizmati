@@ -25,7 +25,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from accounts.permissions import may_open
-from accounts.roles import KATTA_MUTAXASIS, assignable_specialists, has_user_type
+from accounts.roles import assignable_specialists
 from applications.attachments import attachment_response
 from applications.forms import ApplicationForm, ApplicationItemFormSet
 from applications.models import Application, ApplicationItem
@@ -42,7 +42,6 @@ ORDER_LINE_FIELDS = (
 
 INCOMING_TEMPLATE = "pages/kelib-arizalar.html"
 ACCEPTED_TEMPLATE = "pages/qabul-arizalar.html"
-ASSIGNED_TEMPLATE = "pages/tayinlangan.html"
 
 # Which page shows an application at each stage. The attachment follows the
 # record rather than the route: a PDF is downloadable by whoever may open the
@@ -155,23 +154,6 @@ def assigned_applications(specialist) -> QuerySet[Application]:
             stage=Application.Stage.ASSIGNED, assigned_to=specialist
         )
         .select_related("department")
-        .prefetch_related(application_lines())
-        .order_by(F("tayinlangan_sana").desc(nulls_last=True), "-id")
-    )
-
-
-def all_assigned_applications() -> QuerySet[Application]:
-    """Every application somebody is working on, whoever that is.
-
-    What the people who hand work out see on the Tayinlangan page. A
-    specialist gets assigned_applications() instead, which is their own.
-
-    assigned_to is joined because this list renders that name; the specialist
-    view does not, which is why the two queries are not one with a flag.
-    """
-    return (
-        Application.objects.filter(stage=Application.Stage.ASSIGNED)
-        .select_related("department", "assigned_to")
         .prefetch_related(application_lines())
         .order_by(F("tayinlangan_sana").desc(nulls_last=True), "-id")
     )
@@ -314,39 +296,6 @@ def application_create(request: HttpRequest) -> HttpResponse:
     messages.success(request, f"{application.ariza_raqami} yaratildi.")
 
     return redirect("qabul-arizalar")
-
-
-def assigned_list(request: HttpRequest) -> HttpResponse:
-    """The Tayinlangan Arizalar page (REQ-ARIZA-012).
-
-    Whose work it shows depends on who is looking, and that is the one
-    decision this page makes. A Katta Mutaxasis sees the applications
-    assigned to them and nobody else's - work somebody else was given is not
-    theirs to see. Everybody else DEC-015 lets in here is a person who hands
-    work out, and they see all of it, because where the work went is the
-    question this page answers for them.
-
-    The specialist's own list does not render the Tayinlangan xodim column: a
-    column saying their own name on every row is a column that tells them
-    nothing.
-
-    Accept and Holat are on every row and do nothing yet - TASK-UZK-029 wires
-    them. Rendered visibly waiting, the way TASK-UZK-022 left the filter bar.
-    """
-    own_work_only = has_user_type(request.user, (KATTA_MUTAXASIS,))
-
-    return render(
-        request,
-        ASSIGNED_TEMPLATE,
-        {
-            "applications": (
-                assigned_applications(request.user)
-                if own_work_only
-                else all_assigned_applications()
-            ),
-            "shows_the_holder": not own_work_only,
-        },
-    )
 
 
 def application_pdf(request: HttpRequest, pk: int) -> FileResponse:

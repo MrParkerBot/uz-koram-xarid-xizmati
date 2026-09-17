@@ -76,14 +76,6 @@ def has_user_type(
     that changing somebody's type takes effect on their next request rather
     than at their next sign-in.
     """
-    if isinstance(permitted_type_names, str):
-        raise TypeError(
-            "permitted_type_names is a collection of names, not one name. A "
-            f"bare string is iterable, so {permitted_type_names!r} would be "
-            "compared against its own letters and this would quietly answer "
-            "False for everybody."
-        )
-
     user_type = user_type_of(user)
     if user_type is None:
         return False
