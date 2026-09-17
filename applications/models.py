@@ -1662,17 +1662,21 @@ class Contract(models.Model):
 
         return changes[0] if changes else None
 
+    # The stages at which a contract is still its specialist's to change.
+    # DEC-024 describes correcting a rejected contract and resending it, and
+    # an agreed one has not gone anywhere yet. A contract awaiting somebody's
+    # approval, or already approved, changing underneath them is not something
+    # the document describes.
+    #
+    # On the model, because three callers ask: the edit form, set_status() and
+    # the template. The review of #56 found the first of them with a copy of
+    # its own in the views.
+    EDITABLE_STAGES = (Stage.AGREED, Stage.REJECTED)
+
     @property
     def is_editable(self) -> bool:
-        """Whether this contract is still its specialist's to change.
-
-        Agreed and rejected, which are the two stages the Kelishinlingan page
-        shows. A contract awaiting somebody's approval, or already approved,
-        changing underneath them is not something the document describes -
-        the same rule TASK-UZK-036 put on the edit form, asked here so the
-        status control and the edit form cannot drift apart.
-        """
-        return self.stage in (self.Stage.AGREED, self.Stage.REJECTED)
+        """Whether this contract is still its specialist's to change."""
+        return self.stage in self.EDITABLE_STAGES
 
     @transaction.atomic
     def set_status(self, status, by) -> bool:
@@ -1732,13 +1736,27 @@ class Contract(models.Model):
         if self.status_id == status.pk:
             return False
 
+        was = self.status_id
+
+        # Conditional on the status it is moving from, so two clicks landing
+        # together produce one move and one history row rather than two of
+        # each - the guard accept_as_specialist() carries, on a table whose
+        # whole purpose is to answer when a contract passed a status. The
+        # check above is the cheap answer for an ordinary second click; this
+        # is the one that holds when both arrive at once.
+        moved = type(self).objects.filter(pk=self.pk, status_id=was).update(
+            status=status
+        )
+        if not moved:
+            self.refresh_from_db()
+            return False
+
         ContractStatusChange.objects.create(
             contract=self,
-            from_status_id=self.status_id,
+            from_status_id=was,
             to_status=status,
             changed_by=by,
         )
-        type(self).objects.filter(pk=self.pk).update(status=status)
         self.status = status
 
         return True

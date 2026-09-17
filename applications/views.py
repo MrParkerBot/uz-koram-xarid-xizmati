@@ -80,13 +80,6 @@ ASSIGNED_TEMPLATE = "pages/tayinlangan.html"
 PURCHASE_TEMPLATE = "pages/xarid-ariza.html"
 AGREED_CONTRACTS_TEMPLATE = "pages/kelishinlingan.html"
 
-# The stages a contract may be edited at. DEC-024 describes correcting a
-# rejected contract and resending it, and an agreed one has not gone anywhere
-# yet. A contract awaiting somebody's approval, or already approved, changing
-# underneath them is not something the document describes, so it is refused
-# rather than guessed at.
-EDITABLE_CONTRACT_STAGES = (Contract.Stage.AGREED, Contract.Stage.REJECTED)
-
 # Which page shows an application at each stage. The attachment follows the
 # record rather than the route: a PDF is downloadable by whoever may open the
 # page the application is currently on, not by whoever may open the page it
@@ -895,8 +888,12 @@ def set_contract_status(request: HttpRequest, pk: int) -> HttpResponse:
     Each refusal says which refusal it was. Being told the wrong one sends
     whoever investigates somewhere unrelated, which is the point the review of
     #28 made about rejection.
+
+    Whose contract it is, is held_contract()'s question rather than this one's
+    - the same separation the Tayinlangan page makes between the page and the
+    row.
     """
-    contract = get_object_or_404(Contract, pk=pk)
+    contract = held_contract(request, pk)
     chosen = request.POST.get("status")
     status = (
         ShartnomaStatus.objects.filter(pk=int(chosen), is_active=True).first()
@@ -965,18 +962,66 @@ def contract_pdf(request: HttpRequest, pk: int) -> FileResponse:
     )
 
 
-def editable_contract(pk: int) -> Contract:
-    """The contract this request may edit, or a refusal.
+def held_contract(request: HttpRequest, pk: int) -> Contract:
+    """The contract this request may act on, or a refusal.
+
+    The row-level question the Tayinlangan page asks about an application,
+    asked here about a contract. REQ-ROLE-008 has the specialist keep changing
+    the state of the contracts they formed, and TASK-UZK-035 already narrowed
+    which applications each of them may contract against - so without this the
+    rule holds on the way in and disappears afterwards, which is what the
+    review of #56 found.
+
+    A contract is a specialist's when the application it fulfils is assigned
+    to them, rather than when they created it: DEC-024 lets Admin re-assign an
+    application at any time, and the contract goes with the work rather than
+    staying with whoever first typed it.
 
     Raises:
-        Http404: when there is no such contract, or it has left the page the
-            edit form lives on. A contract awaiting approval is not a 403 -
-            there is no such contract to edit on this page, which is what a
-            404 says.
+        PermissionDenied: when a specialist reaches for a contract that is not
+            theirs. They may open the page, so this is about the row rather
+            than the page.
+        Http404: when there is no such contract.
     """
-    return get_object_or_404(
-        Contract, pk=pk, stage__in=EDITABLE_CONTRACT_STAGES
+    contract = get_object_or_404(
+        Contract.objects.select_related("application"), pk=pk
     )
+
+    if (
+        acts_on_own_work_only(request.user)
+        and contract.application.assigned_to_id != request.user.pk
+    ):
+        raise PermissionDenied(
+            f"{request.user} does not hold {contract.shartnoma_raqami}."
+        )
+
+    return contract
+
+
+def contract_has_moved_on(
+    request: HttpRequest, contract: Contract
+) -> HttpResponse | None:
+    """The refusal a contract that has left this page earns, or None.
+
+    One answer for every route guarding that rule, which the review of #56
+    asked for: the edit form used to answer 404 while the status control
+    answered with a message, and two answers for one rule is one too many.
+
+    The message rather than the 404, because the case that actually happens is
+    a race - somebody sent the contract for approval while this page was open -
+    and a person who has just been told their change was not saved needs to
+    know why, which a 404 does not say.
+    """
+    if contract.is_editable:
+        return None
+
+    messages.error(
+        request,
+        f"{contract.shartnoma_raqami} o`zgartirilmadi: shartnoma "
+        "tasdiqlashga yuborilgan.",
+    )
+
+    return redirect("kelishinlingan")
 
 
 def contract_edit(request: HttpRequest, pk: int) -> HttpResponse:
@@ -993,7 +1038,10 @@ def contract_edit(request: HttpRequest, pk: int) -> HttpResponse:
     is wider than the document intends and is written down rather than left
     to be noticed.
     """
-    contract = editable_contract(pk)
+    contract = held_contract(request, pk)
+    moved_on = contract_has_moved_on(request, contract)
+    if moved_on is not None:
+        return moved_on
 
     return render(
         request,
@@ -1024,7 +1072,11 @@ def contract_update(request: HttpRequest, pk: int) -> HttpResponse:
     that would leave the contract without one is refused by the same rule
     that refuses an entry without one.
     """
-    contract = editable_contract(pk)
+    contract = held_contract(request, pk)
+    moved_on = contract_has_moved_on(request, contract)
+    if moved_on is not None:
+        return moved_on
+
     form = ContractForm(
         request.POST,
         request.FILES,

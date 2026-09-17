@@ -22,6 +22,7 @@ passed Shartnoma tuzilgan cannot answer what the department is asking.
 from __future__ import annotations
 
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.db import connection
@@ -390,11 +391,105 @@ class QueryTests(ContractStatusTestCase):
         self.assertEqual(self.cost_of_the_page(), with_one)
 
 
+class WhoseContractTests(ContractStatusTestCase):
+    """REQ-ROLE-008: the specialist keeps changing their own contracts.
+
+    The row-level question the Tayinlangan page asks about an application,
+    asked here about a contract. Without it the rule holds on the way in -
+    TASK-UZK-035 narrowed which applications a specialist may contract
+    against - and disappears afterwards, which is what the review of #56
+    found.
+    """
+
+    def test_a_specialist_may_move_their_own(self) -> None:
+        contract = self.a_contract()
+        self.client.force_login(self.specialist)
+
+        self.move(contract, self.first)
+
+        contract.refresh_from_db()
+        self.assertEqual(contract.status, self.first)
+
+    def test_a_specialist_may_not_move_somebody_elses(self) -> None:
+        contract = self.a_contract()
+        self.client.force_login(make_user(KATTA_MUTAXASIS, "Bekzod"))
+
+        self.assertEqual(self.move(contract, self.first).status_code, 403)
+        contract.refresh_from_db()
+        self.assertIsNone(contract.status)
+
+    def test_a_specialist_may_not_edit_somebody_elses(self) -> None:
+        contract = self.a_contract()
+        self.client.force_login(make_user(KATTA_MUTAXASIS, "Bekzod"))
+
+        self.assertEqual(
+            self.client.get(
+                reverse("shartnoma-tahrirlash", args=[contract.pk])
+            ).status_code,
+            403,
+        )
+
+    def test_a_manager_may_move_anybodys(self) -> None:
+        # The types that hand work out may touch all of it, as they do on the
+        # Tayinlangan page.
+        contract = self.a_contract()
+        self.client.force_login(make_user(MENEJER))
+
+        self.move(contract, self.first)
+
+        contract.refresh_from_db()
+        self.assertEqual(contract.status, self.first)
+
+    def test_the_contract_goes_with_the_work(self) -> None:
+        # Not created_by: DEC-024 lets Admin re-assign an application at any
+        # time, and the contract follows the application rather than staying
+        # with whoever first typed it.
+        contract = self.a_contract()
+        bekzod = make_user(KATTA_MUTAXASIS, "Bekzod")
+        contract.application.assign(self.buyer, bekzod)
+
+        self.client.force_login(bekzod)
+        self.move(contract, self.first)
+
+        contract.refresh_from_db()
+        self.assertEqual(contract.status, self.first)
+
+
+class ConcurrentMoveTests(ContractStatusTestCase):
+    """Two moves landing together (the review of #56)."""
+
+    def test_the_move_that_lands_second_changes_nothing(self) -> None:
+        # The cheap status_id check is a read, and a read followed by a blind
+        # write is two history rows when two clicks arrive at once - on the
+        # table whose whole purpose is to answer when a contract passed a
+        # status. The update is conditional on the status it is moving from,
+        # and this reaches in between the read and the write to prove it.
+        contract = self.a_contract()
+        reading = Contract.refresh_from_db
+
+        def somebody_else_gets_there_first(instance, *args, **kwargs):
+            reading(instance, *args, **kwargs)
+            Contract.objects.filter(pk=instance.pk).update(status=self.second)
+
+        with patch.object(
+            Contract, "refresh_from_db", somebody_else_gets_there_first
+        ):
+            moved = contract.set_status(self.first, self.buyer)
+
+        self.assertFalse(moved)
+        self.assertEqual(ContractStatusChange.objects.count(), 0)
+        contract.refresh_from_db()
+        self.assertEqual(contract.status, self.second)
+
+
 class PermissionTests(ContractStatusTestCase):
     """DEC-015 decides who may move a contract."""
 
-    def test_the_permitted_types_may_move_one(self) -> None:
-        for type_name in (ADMIN, BOLIM_BOSHLIGI, MENEJER, KATTA_MUTAXASIS):
+    def test_the_types_that_hand_work_out_may_move_any_contract(self) -> None:
+        # Katta Mutaxasis is not among them since the review of #56: they may
+        # open the page and may only move the contracts they hold, which
+        # WhoseContractTests covers from both sides.
+        for type_name in (ADMIN, BOLIM_BOSHLIGI, MENEJER):
             with self.subTest(user_type=type_name):
                 contract = self.a_contract()
                 self.client.force_login(make_user(type_name))
