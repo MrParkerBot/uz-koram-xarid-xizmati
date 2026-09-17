@@ -51,6 +51,7 @@ from applications.views import (
     incoming_list,
     purchase_application_create,
     purchase_application_list,
+    purchase_application_original_pdf,
     purchase_application_pdf,
     reject_application,
     reject_purchase_application,
@@ -411,6 +412,16 @@ urlpatterns = [
         "xarid-ariza/<int:pk>/pdf/",
         require_page_permission("xarid-ariza")(purchase_application_pdf),
         name="xarid-ariza-pdf",
+    ),
+    # The attachment as it was uploaded, before an approval stamped it
+    # (TASK-UZK-032). Same permission as the stamped one: anybody who may see
+    # the approved document may see what it was approved from.
+    path(
+        "xarid-ariza/<int:pk>/asl-pdf/",
+        require_page_permission("xarid-ariza")(
+            purchase_application_original_pdf
+        ),
+        name="xarid-ariza-asl-pdf",
     ),
     # Creating an application (TASK-UZK-026). The form is on the Qabul
     # qilingan page, so it answers to that page's permission like every other
