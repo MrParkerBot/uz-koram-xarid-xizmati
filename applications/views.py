@@ -458,11 +458,22 @@ def set_application_status(request: HttpRequest, pk: int) -> HttpResponse:
     try:
         changed = application.set_status(status)
     except ValueError:
-        messages.error(
-            request,
-            f"{application.ariza_raqami} holati o`zgartirilmadi: holat "
-            "tanlanishi shart.",
-        )
+        # Two refusals, and being told the wrong one sends whoever
+        # investigates somewhere unrelated - the point the #28 review made
+        # about rejection.
+        if application.stage != Application.Stage.ASSIGNED:
+            messages.error(
+                request,
+                f"{application.ariza_raqami} holati o`zgartirilmadi: ariza "
+                "tayinlanmagan.",
+            )
+        else:
+            messages.error(
+                request,
+                f"{application.ariza_raqami} holati o`zgartirilmadi: holat "
+                "tanlanishi shart.",
+            )
+
         return redirect("tayinlangan")
 
     if changed:

@@ -18,6 +18,13 @@ The Holat drop-down offers the statuses in use now and keeps whichever row the
 application already holds selected, even if an administrator has since retired
 it - DEC-009 keeps the row for exactly that.
 
+It has a Save button rather than submitting when the value changes. Submitting
+on change is what the first version did, and the #40 review pointed out what
+that does to somebody without a mouse: arrow keys change the value on every
+keystroke, so each option on the way to the one they wanted submits and
+reloads the page. A button costs a mouse user one click and costs everybody
+else nothing, and it works with no JavaScript at all.
+
 The filter bar and the exports are still inert. TASK-UZK-041 and TASK-UZK-042
 build them for every table at once.
 
@@ -112,14 +119,15 @@ what this page can say honestly today.
                 {% endif %}
               </td>
               <td rowspan="{{ lines|length }}">
-                <form method="post" action="{% url 'tayinlangan-holat' ariza.pk %}" class="js-status-form">
+                <form method="post" action="{% url 'tayinlangan-holat' ariza.pk %}">
                   {% csrf_token %}
-                  <select class="form-control js-status-select" name="status" style="width:160px;padding:5px 8px;font-size:11px;">
+                  <select class="form-control" name="status" style="width:160px;padding:5px 8px;font-size:11px;">
                     <option value="">&mdash; {{ ariza.status.name|default:"Tanlang" }} &mdash;</option>
                     {% for holat in statuses %}
                       <option value="{{ holat.pk }}"{% if holat.pk == ariza.status_id %} selected{% endif %}>{{ holat.name }}</option>
                     {% endfor %}
                   </select>
+                  <button type="submit" class="btn btn-outline-custom btn-xs" style="margin-top:4px;">Saqlash</button>
                 </form>
               </td>
               {% endif %}
@@ -134,15 +142,4 @@ what this page can say honestly today.
       </div>
     </div>
 
-{% endblock %}
-{% block extra_scripts %}
-<script>
-  // The status drop-down posts its own form. There is no Save button in the
-  // supplied design and adding one per row would crowd the column, so the
-  // change is the submission - which is also what "the current state is
-  // marked from a drop-down" describes.
-  document.querySelectorAll('.js-status-select').forEach((select) => {
-    select.addEventListener('change', () => select.closest('form').submit());
-  });
-</script>
 {% endblock %}

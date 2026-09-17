@@ -68,6 +68,26 @@ class SpecialistTestCase(TestCase):
             "tayinlangan-holat", args=[self.application.pk]
         )
 
+    def unassigned_application(self) -> Application:
+        """One that has arrived and been given to nobody."""
+        return Application.raise_application(
+            items=[
+                {
+                    "mahsulot_turi": self.category,
+                    "buyurtma_nomi": "Gayka M10",
+                    "buyurtma_soni": 20,
+                    "olchov_birligi": "kg",
+                }
+            ],
+            department=self.department,
+        )
+
+    def rejected_application(self) -> Application:
+        """One that is off the workflow altogether."""
+        application = self.unassigned_application()
+        application.reject(by=self.manager, comment="Byudjet yo`q.")
+        return application
+
     def assigned_application(self, to=None) -> Application:
         application = Application.raise_application(
             items=[
@@ -361,3 +381,48 @@ class StatusTests(SpecialistTestCase):
         self.client.force_login(self.specialist)
 
         self.assertEqual(self.client.get(self.status_url).status_code, 405)
+
+    def test_an_application_nobody_holds_has_no_status_to_report(self) -> None:
+        """The #40 review found this route writing rows off its own page.
+
+        A manager could reach any application by its pk and move it to a
+        status - including a rejected one, which is off the workflow
+        entirely.
+        """
+        for label, application in (
+            ("incoming", self.unassigned_application()),
+            ("rejected", self.rejected_application()),
+        ):
+            with self.subTest(application=label):
+                before = application.status
+                self.client.force_login(self.manager)
+
+                self.client.post(
+                    reverse("tayinlangan-holat", args=[application.pk]),
+                    {"status": self.status.pk},
+                )
+
+                application.refresh_from_db()
+                self.assertEqual(application.status, before)
+
+    def test_the_refusal_says_the_application_is_not_assigned(self) -> None:
+        waiting = self.unassigned_application()
+        self.client.force_login(self.manager)
+
+        self.client.post(
+            reverse("tayinlangan-holat", args=[waiting.pk]),
+            {"status": self.status.pk},
+        )
+
+        self.assertIn("tayinlanmagan", self.told())
+
+    def test_the_status_column_has_a_save_button(self) -> None:
+        # Submitting when the value changes is what the first version did,
+        # and it makes the control unusable with arrow keys: every option on
+        # the way to the wanted one submits.
+        self.client.force_login(self.specialist)
+
+        self.assertIn(
+            "Saqlash",
+            self.client.get(reverse("tayinlangan")).content.decode(),
+        )
