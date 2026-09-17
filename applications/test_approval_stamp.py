@@ -44,6 +44,19 @@ def make_user(type_name: str, department=None, first_name="Test", last_name=""):
     return user
 
 
+# The detector is handed each image at four times its stored size. cv2 reads
+# a code of this size most of the time rather than every time, and the payload
+# carries a timestamp - so every run produces a slightly different image and a
+# small fraction of them defeat it. That is a test that fails once in a few
+# hundred runs and tells nobody anything when it does; it failed twice during
+# TASK-UZK-035 and TASK-UZK-033, on branches that touch neither stamping nor
+# approval.
+#
+# Enlarging is deterministic, costs nothing, and changes nothing about what is
+# being asserted: the same pixels, with more of them.
+DECODER_SCALE = 4
+
+
 def decode_the_stamp(attachment) -> str | None:
     """Read the QR code back out of a stored PDF, or None when there is none.
 
@@ -58,10 +71,17 @@ def decode_the_stamp(attachment) -> str | None:
         attachment.close()
 
     for embedded in page.images:
-        frame = numpy.array(Image.open(BytesIO(embedded.data)).convert("RGB"))
-        text, *_ = cv2.QRCodeDetector().detectAndDecode(frame)
-        if text:
-            return text
+        image = Image.open(BytesIO(embedded.data)).convert("RGB")
+        enlarged = image.resize(
+            (image.width * DECODER_SCALE, image.height * DECODER_SCALE),
+            Image.NEAREST,
+        )
+        for attempt in (enlarged, image):
+            text, *_ = cv2.QRCodeDetector().detectAndDecode(
+                numpy.array(attempt)
+            )
+            if text:
+                return text
 
     return None
 

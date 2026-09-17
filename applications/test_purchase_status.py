@@ -139,8 +139,8 @@ class PurchaseStatusTestCase(TestCase):
             **fields,
         )
 
-    def page(self) -> str:
-        self.client.force_login(self.admin)
+    def page(self, as_user=None) -> str:
+        self.client.force_login(as_user or self.admin)
 
         return self.client.get(reverse("xarid-ariza")).content.decode()
 
@@ -264,6 +264,56 @@ class PageTests(PurchaseStatusTestCase):
 
         self.assertIn(contract.shartnoma_raqami, page)
         self.assertIn("bo'yicha", page)
+
+    def test_the_requester_sees_the_status(self) -> None:
+        # REQ-ARIZA-017 is about what the person who asked for the purchase
+        # can see: DEC-015 gives Users this page because it is the only one
+        # they have. Every other test here opens it as Admin, which the review
+        # of #58 pointed out is not the seat the requirement is written from.
+        request = self.approved()
+        self.a_contract(request, status=self.statuses[0])
+
+        page = self.page(as_user=self.requester)
+
+        self.assertIn(self.statuses[0].name, page)
+        self.assertIn("Shartnoma bo'yicha", page)
+
+    def test_the_requester_is_not_told_the_contract_number(self) -> None:
+        # A contract number is a fact from a page DEC-015 does not give them,
+        # and this list is not filtered by requester - so printing it here
+        # would hand every Users account every contract number in the company.
+        request = self.approved()
+        contract = self.a_contract(request, status=self.statuses[0])
+
+        page = self.page(as_user=self.requester)
+
+        self.assertNotIn(contract.shartnoma_raqami, page)
+
+    def test_somebody_who_may_open_the_contract_page_is_told_it(self) -> None:
+        request = self.approved()
+        contract = self.a_contract(request, status=self.statuses[0])
+
+        page = self.page(as_user=self.admin)
+
+        self.assertIn(contract.shartnoma_raqami, page)
+
+    def test_the_number_follows_the_contract_to_the_next_page(self) -> None:
+        # DEC-015 gives Direktor the Tuzilgan page and not Kelishinlingan, so
+        # the number becomes theirs to see when the contract reaches it - the
+        # same rule the attachment download follows.
+        request = self.approved()
+        contract = self.a_contract(request, status=self.statuses[0])
+        direktor = self.direktor
+
+        self.assertNotIn(
+            contract.shartnoma_raqami, self.page(as_user=direktor)
+        )
+
+        Contract.objects.filter(pk=contract.pk).update(
+            stage=Contract.Stage.SENT
+        )
+
+        self.assertIn(contract.shartnoma_raqami, self.page(as_user=direktor))
 
     def test_the_page_does_not_cost_a_query_per_row(self) -> None:
         def cost() -> int:
