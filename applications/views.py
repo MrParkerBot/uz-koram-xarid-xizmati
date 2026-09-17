@@ -1,4 +1,4 @@
-"""The two application lists of sections 4.1 and 4.2.
+"""The application and contract pages of sections 4.1, 4.2, 4.6 and 4.9.
 
 Lists with row actions and no form, which is why they do not use
 MasterDataPage: that abstraction is a table beside a form, and these are
@@ -37,6 +37,8 @@ from applications.forms import (
     SUGGESTED_UNITS,
     ApplicationForm,
     ApplicationItemFormSet,
+    ContractForm,
+    ContractItemFormSet,
     PurchaseApplicationForm,
     PurchaseApplicationItemFormSet,
 )
@@ -44,6 +46,7 @@ from applications.models import (
     Application,
     ApplicationItem,
     Contract,
+    ContractItem,
     PurchaseApplication,
     PurchaseApplicationItem,
 )
@@ -57,6 +60,17 @@ ORDER_LINE_FIELDS = (
     "buyurtma_nomi",
     "buyurtma_soni",
     "olchov_birligi",
+)
+
+# A contract's row of goods. It shares three columns with an order line
+# and has no category: REQ-SHARTNOMA-006 asks a supplier's price for a
+# part number, not which of the department's categories it falls in.
+CONTRACT_LINE_FIELDS = (
+    "buyurtma_nomi",
+    "part_number",
+    "buyurtma_soni",
+    "olchov_birligi",
+    "narxi",
 )
 
 INCOMING_TEMPLATE = "pages/kelib-arizalar.html"
@@ -729,9 +743,13 @@ def agreed_contracts() -> QuerySet[Contract]:
     Everything the row renders is joined and nothing else. The application and
     its department for the first two columns, the supplier for Firma nomi, the
     status for Holati, and the person who made it for Kim shartnoma qilgan.
-    The application's order lines are prefetched because Buyurtma nomi comes
-    from them - a contract does not repeat what was ordered, it points at the
-    application that asked.
+
+    Buyurtma nomi comes from the contract's own goods rows since
+    TASK-UZK-035. It borrowed the application's lines while a contract had
+    none, and that stopped being right the moment Shartnoma qiymati became
+    the total of the contract's rows: a row listing what the department
+    asked for beside a value covering what the supplier agreed to would
+    read as one statement and be two.
     """
     return (
         Contract.objects.filter(
@@ -744,30 +762,139 @@ def agreed_contracts() -> QuerySet[Contract]:
             "status",
             "created_by",
         )
-        .prefetch_related(
-            Prefetch(
-                "application__items",
-                queryset=ApplicationItem.objects.select_related(
-                    "mahsulot_turi"
-                ),
-            )
-        )
+        .prefetch_related(contract_lines())
     )
+
+
+def contract_lines() -> Prefetch:
+    """The goods rows of a contract, in the order they were entered."""
+    return Prefetch("items", queryset=ContractItem.objects.all())
+
+
+def contractable_applications(user) -> QuerySet[Application]:
+    """The applications a contract may be agreed against (REQ-ROLE-007).
+
+    Assigned ones, because a contract is formed on the basis of an application
+    somebody is working on: one still sitting in Kelib tushgan has not been
+    accepted by the department, and a rejected one is off the workflow
+    entirely.
+
+    Narrowed further for a Katta Mutaxasis, who forms a contract on the basis
+    of the application assigned to them. acts_on_own_work_only() is the same
+    question the Tayinlangan page asks about its rows, asked once so that what
+    a specialist may act on there and what they may contract against here
+    cannot drift apart.
+    """
+    applications = Application.objects.filter(
+        stage=Application.Stage.ASSIGNED
+    ).select_related("department")
+
+    if acts_on_own_work_only(user):
+        return applications.filter(assigned_to=user)
+
+    return applications
+
+
+def contract_page(
+    user,
+    form: ContractForm | None = None,
+    items: ContractItemFormSet | None = None,
+) -> dict[str, object]:
+    """Everything the Kelishinlingan Shartnoma page renders.
+
+    The user is passed in rather than the request, because the only thing this
+    needs from a request is who is asking - and taking the whole request would
+    invite the next reader to reach for something else on it.
+    """
+    return {
+        "contracts": agreed_contracts(),
+        "form": (
+            form
+            if form is not None
+            else ContractForm(applications=contractable_applications(user))
+        ),
+        "item_formset": (
+            items
+            if items is not None
+            else ContractItemFormSet(queryset=ContractItem.objects.none())
+        ),
+        "open_form": form is not None,
+        "suggested_units": SUGGESTED_UNITS,
+    }
 
 
 def agreed_contracts_list(request: HttpRequest) -> HttpResponse:
-    """The Kelishinlingan Shartnoma table.
+    """The Kelishinlingan Shartnoma table and the form that adds to it.
 
-    Shartnoma Kiritish, View and Send are on the page and do nothing yet -
-    TASK-UZK-035, TASK-UZK-037 and TASK-UZK-038 build them. Rendered visibly
-    waiting rather than hidden, the way every page here has left a control
-    that belongs to a later task.
+    View and Send are on the page and do nothing yet - TASK-UZK-037 and
+    TASK-UZK-038 build them. Rendered visibly waiting rather than hidden, the
+    way every page here has left a control that belongs to a later task.
     """
     return render(
-        request,
-        AGREED_CONTRACTS_TEMPLATE,
-        {"contracts": agreed_contracts()},
+        request, AGREED_CONTRACTS_TEMPLATE, contract_page(request.user)
     )
+
+
+def contract_rows(items: ContractItemFormSet) -> list[dict[str, object]]:
+    """The goods rows a valid entry form describes, in the order entered.
+
+    The same shape ordered_lines() produces for an application: mappings
+    rather than saved objects, because raise_contract() totals them before the
+    contract they belong to exists.
+    """
+    return [
+        {field: row.cleaned_data[field] for field in CONTRACT_LINE_FIELDS}
+        for row in items.forms
+        if row.cleaned_data
+    ]
+
+
+@require_POST
+def contract_create(request: HttpRequest) -> HttpResponse:
+    """Enter a contract and its goods rows (REQ-SHARTNOMA-006).
+
+    POST only, under the permission of the page offering the form. Create
+    stores the contract with every row in one transaction; Cancel is a button
+    in the browser that closes the window, so there is nothing here for it to
+    reach - which is REQ-SHARTNOMA-007's "no data is saved", enforced by there
+    being no route rather than by a route that does nothing.
+
+    Shartnoma qiymati is not read from the form even if one is posted.
+    raise_contract() computes it from the rows, which is what makes the value
+    the total of everything rather than a number somebody typed beside a
+    different set of numbers.
+    """
+    applications = contractable_applications(request.user)
+    form = ContractForm(request.POST, applications=applications)
+    items = ContractItemFormSet(
+        request.POST, queryset=ContractItem.objects.none()
+    )
+
+    if not (form.is_valid() and items.is_valid()):
+        messages.error(request, "Shartnoma yaratilmadi: formani tekshiring.")
+        return render(
+            request,
+            AGREED_CONTRACTS_TEMPLATE,
+            contract_page(request.user, form=form, items=items),
+        )
+
+    with transaction.atomic():
+        contract = Contract.raise_contract(
+            items=contract_rows(items),
+            created_by=request.user,
+            **{
+                field: form.cleaned_data[field]
+                for field in form.Meta.fields
+            },
+        )
+
+    messages.success(
+        request,
+        f"{contract.shartnoma_raqami} yaratildi. "
+        f"Shartnoma qiymati: {contract.qiymati_display} UZS.",
+    )
+
+    return redirect("kelishinlingan")
 
 
 def purchase_applications() -> QuerySet[PurchaseApplication]:

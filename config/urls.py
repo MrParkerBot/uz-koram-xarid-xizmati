@@ -49,6 +49,7 @@ from applications.views import (
     approve_purchase_application,
     assign_application,
     assigned_list,
+    contract_create,
     incoming_list,
     purchase_application_create,
     purchase_application_list,
@@ -387,6 +388,16 @@ urlpatterns = [
         "kelishinlingan/",
         require_page_permission("kelishinlingan")(agreed_contracts_list),
         name="kelishinlingan",
+    ),
+    # Shartnoma Kiritish (TASK-UZK-035). Under the Kelishinlingan page's
+    # own permission, because the form is on that page and whoever may
+    # open it is whoever may enter a contract. REQ-SHARTNOMA-007's Cancel
+    # has no route: it closes the window, and nothing is saved because
+    # nothing was posted.
+    path(
+        "kelishinlingan/yaratish/",
+        require_page_permission("kelishinlingan")(contract_create),
+        name="shartnoma-yaratish",
     ),
     # The Xarid Arizasi page of section 4.9 (TASK-UZK-030). It left
     # PAGE_ROUTES when it stopped being a template with no data behind it; the
