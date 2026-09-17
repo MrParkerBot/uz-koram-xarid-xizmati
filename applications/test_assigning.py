@@ -21,9 +21,12 @@ as them.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.crypto import get_random_string
 
 from accounts.models import UserType
@@ -204,14 +207,21 @@ class ReAssignTests(AssignmentTestCase):
         self.assertEqual(self.application.assigned_to, self.other_specialist)
 
     def test_re_assigning_replaces_the_stamp(self) -> None:
+        # The first stamp is written explicitly rather than taken from the
+        # first assignment. Two timezone.now() calls microseconds apart store
+        # as equal at SQLite's resolution, and the #29 review found that shape
+        # passing on an idle machine and failing on a busy one. The #35 review
+        # found it again here.
         self.assign()
-        self.application.refresh_from_db()
-        first_stamp = self.application.tayinlangan_sana
+        earlier = timezone.now() - timedelta(hours=2)
+        Application.objects.filter(pk=self.application.pk).update(
+            tayinlangan_sana=earlier
+        )
 
         self.assign(specialist=self.other_specialist)
 
         self.application.refresh_from_db()
-        self.assertGreater(self.application.tayinlangan_sana, first_stamp)
+        self.assertGreater(self.application.tayinlangan_sana, earlier)
 
     def test_re_assignment_is_allowed_from_the_assigned_stage(self) -> None:
         """DEC-024: a move is allowed at any time, not only before acceptance.
@@ -302,6 +312,37 @@ class RefusalTests(AssignmentTestCase):
         page = self.client.get(reverse("qabul-arizalar"))
 
         return " ".join(str(message) for message in page.context["messages"])
+
+    def test_a_choice_that_is_not_a_number_is_refused_rather_than_crashing(
+        self,
+    ) -> None:
+        """The #35 review found this answering 500 from inside the ORM."""
+        response = self.client.post(self.url, {"xodim": "abc"})
+
+        # told() before any other fetch: assertRedirects follows the redirect,
+        # and following it is what consumes the message.
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("Katta Mutaxasis", self.told())
+        self.application.refresh_from_db()
+        self.assertIsNone(self.application.assigned_to)
+
+    def test_a_number_naming_nobody_is_refused(self) -> None:
+        response = self.client.post(self.url, {"xodim": "999999"})
+
+        self.application.refresh_from_db()
+        self.assertRedirects(response, reverse("qabul-arizalar"))
+        self.assertIsNone(self.application.assigned_to)
+
+    def test_an_inactive_specialist_cannot_be_chosen(self) -> None:
+        # Not offered by the chooser, and not accepted from a request that
+        # did not come from it.
+        self.specialist.is_active = False
+        self.specialist.save(update_fields=["is_active"])
+
+        self.assign()
+
+        self.application.refresh_from_db()
+        self.assertIsNone(self.application.assigned_to)
 
     def test_get_is_refused(self) -> None:
         self.assertEqual(self.client.get(self.url).status_code, 405)
