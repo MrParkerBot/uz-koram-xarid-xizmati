@@ -27,7 +27,7 @@ from accounts.models import UserProfile, UserType
 from accounts.roles import BOLIM_BOSHLIGI, DIREKTOR, USERS, assign_user_type
 from applications.models import PurchaseApplication
 from applications.stamping import PAYLOAD_SEPARATOR, approval_payload
-from applications.test_support import a_pdf
+from applications.tests.test_support import a_pdf
 from reference.models import ArizaStatus, Department, MahsulotTuri
 
 

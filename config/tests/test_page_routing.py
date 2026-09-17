@@ -18,7 +18,7 @@ from django.test import SimpleTestCase
 from django.urls import NoReverseMatch, reverse
 
 from config.navigation import SIDEBAR_NAVIGATION, navigation_url_names
-from config.test_support import SignedInTestCase
+from config.tests.test_support import SignedInTestCase
 
 PAGE_TEMPLATE_DIR = Path(settings.BASE_DIR) / "templates" / "pages"
 

@@ -21,7 +21,7 @@ class SignedInTestCase(TestCase):
     Admin because TASK-UZK-012 closed every page to the types DEC-015 permits,
     and the tests that use this base are about pages rather than about
     permissions: they need an account that can reach what they are testing.
-    The permission matrix itself is tested in accounts/test_permissions.py,
+    The permission matrix itself is tested in accounts/tests/test_permissions.py,
     with an account per type.
     """
 

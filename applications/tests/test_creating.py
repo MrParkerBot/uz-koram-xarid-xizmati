@@ -27,7 +27,7 @@ from django.utils.crypto import get_random_string
 from accounts.models import UserType
 from accounts.roles import ADMIN, DIREKTOR, assign_user_type
 from applications.models import SMALLEST_QUANTITY, Application, ApplicationItem
-from applications.test_support import a_pdf
+from applications.tests.test_support import a_pdf
 from reference.models import ArizaStatus, Department, MahsulotTuri
 
 

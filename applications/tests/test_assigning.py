@@ -41,7 +41,7 @@ from accounts.roles import (
     assignable_specialists,
 )
 from applications.models import Application
-from applications.test_support import a_pdf
+from applications.tests.test_support import a_pdf
 from reference.models import Department, MahsulotTuri
 
 

@@ -1,6 +1,6 @@
 """Test scaffolding shared by the application test modules.
 
-config/test_support.py does this for the pages; this does it for the records.
+config/tests/test_support.py does this for the pages; this does it for the records.
 A fixture that two modules build separately is a fixture that stops agreeing
 with itself, which the #33 review pointed out about the PDF: both copies were
 correct, and neither would have noticed the other going stale when DEC-019's

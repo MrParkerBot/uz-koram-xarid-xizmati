@@ -30,7 +30,7 @@ from applications.attachments import (
     validate_pdf,
 )
 from applications.models import Application
-from applications.test_support import PDF_BYTES, a_pdf
+from applications.tests.test_support import PDF_BYTES, a_pdf
 from reference.models import Department, MahsulotTuri
 
 

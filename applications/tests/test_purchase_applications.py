@@ -39,7 +39,7 @@ from applications.models import (
     PurchaseApplicationItem,
     next_ariza_raqami,
 )
-from applications.test_support import a_pdf
+from applications.tests.test_support import a_pdf
 from reference.models import ArizaStatus, Department, MahsulotTuri
 
 

@@ -33,7 +33,7 @@ from accounts.roles import (
     assign_user_type,
 )
 from applications.models import Application
-from applications.test_support import a_pdf
+from applications.tests.test_support import a_pdf
 from reference.models import Department, MahsulotTuri
 
 

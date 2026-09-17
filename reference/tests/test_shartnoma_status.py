@@ -392,7 +392,7 @@ class PermissionTests(TestCase):
         self.assertFalse(ShartnomaStatus.objects.filter(name=ADDED_STATUS).exists())
 
     def test_a_manager_may_not_edit(self) -> None:
-        # accounts/test_permissions.py walks the page views and the Users
+        # accounts/tests/test_permissions.py walks the page views and the Users
         # page's actions, but not a master data page's actions, so each of
         # the four routes is proved here.
         self.client.force_login(make_user(MENEJER))

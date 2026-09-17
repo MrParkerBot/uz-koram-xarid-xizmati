@@ -109,7 +109,7 @@ class ShellRenderingTests(SimpleTestCase):
         # the task that would fill it. TASK-UZK-012 then made its contents
         # depend on who is asking: rendered with no user, as here, it is empty
         # because nobody unidentified may open anything. The filled case is
-        # asserted in accounts/test_permissions.py, against a real account.
+        # asserted in accounts/tests/test_permissions.py, against a real account.
         shell = render_shell()
 
         self.assertIn('<nav class="sidebar-nav">', shell)
@@ -177,7 +177,7 @@ class ShellAssetReferenceTests(SimpleTestCase):
         # js/sidebar.js is absent by decision, not by accident: TASK-UZK-007
         # moved the navigation to the server, and the script would overwrite
         # the rendered links a moment after the page appeared. The file is
-        # still served - config/test_static_assets.py covers that - but the
+        # still served - config/tests/test_static_assets.py covers that - but the
         # shell no longer loads it.
         expected_assets = {
             "css/bootstrap.min.css",

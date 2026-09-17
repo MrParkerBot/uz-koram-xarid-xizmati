@@ -31,7 +31,7 @@ from accounts.roles import (
 )
 from applications.models import Application, PurchaseApplication
 from applications.notifications import Notification
-from applications.test_support import a_pdf
+from applications.tests.test_support import a_pdf
 from reference.models import ArizaStatus, Department, MahsulotTuri
 
 
