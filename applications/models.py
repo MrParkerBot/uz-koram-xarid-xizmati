@@ -1649,6 +1649,118 @@ class Contract(models.Model):
 
         return contract
 
+    @property
+    def last_status_change(self) -> ContractStatusChange | None:
+        """The most recent move, or None while there has been none.
+
+        Reads the whole list rather than slicing it, so a page that
+        prefetched status_changes pays nothing here: a queryset sliced in a
+        property is a query per row, which is the cost the review of #38
+        found on a list page.
+        """
+        changes = list(self.status_changes.all())
+
+        return changes[0] if changes else None
+
+    # The stages at which a contract is still its specialist's to change.
+    # DEC-024 describes correcting a rejected contract and resending it, and
+    # an agreed one has not gone anywhere yet. A contract awaiting somebody's
+    # approval, or already approved, changing underneath them is not something
+    # the document describes.
+    #
+    # On the model, because three callers ask: the edit form, set_status() and
+    # the template. The review of #56 found the first of them with a copy of
+    # its own in the views.
+    EDITABLE_STAGES = (Stage.AGREED, Stage.REJECTED)
+
+    @property
+    def is_editable(self) -> bool:
+        """Whether this contract is still its specialist's to change."""
+        return self.stage in self.EDITABLE_STAGES
+
+    @transaction.atomic
+    def set_status(self, status, by) -> bool:
+        """Move this contract to a status (REQ-ROLE-008, REQ-SHTSTATUS-001).
+
+        What "permitted" means here is worth stating, because the obvious
+        reading is not available. DEC-010 makes the statuses rows an
+        administrator invents and extends, and ShartnomaStatus carries no code
+        column - deliberately, unlike ArizaStatus - so no code here can name a
+        particular status, let alone draw a graph between them. A transition
+        table over names would be a table the master data page could
+        invalidate, which is the thing DEC-010 exists to prevent.
+
+        So what is enforced is what the data can say: the status has to be one
+        that is in use, the contract has to be one its specialist is still
+        working on, and moving to the status it already has is not a move. The
+        ordering the department works to is recorded as an open point rather
+        than invented here.
+
+        Every move writes a ContractStatusChange in this transaction, so a
+        contract cannot arrive at a status with no record of how.
+
+        Args:
+            status: the ShartnomaStatus to move to. Must be active.
+            by: the user making the move, recorded against it.
+
+        Returns:
+            True when this call moved it, False when it was already there -
+            the second click of a double click, which writes no history.
+
+        Raises:
+            ValueError: when status is None, when it is not active, or when
+                the contract has left the page its specialist works on.
+                Choosing nothing is not a way of clearing a status, an
+                inactive row is one an administrator has taken out of use,
+                and a contract awaiting approval is not one to move.
+        """
+        if status is None:
+            raise ValueError(
+                f"{self.shartnoma_raqami} needs a status to be moved to."
+            )
+
+        if not status.is_active:
+            raise ValueError(
+                f"{status.name} is not in use, so {self.shartnoma_raqami} "
+                "cannot be moved to it."
+            )
+
+        self.refresh_from_db()
+
+        if not self.is_editable:
+            raise ValueError(
+                f"{self.shartnoma_raqami} is {self.stage}, so its status is "
+                "not its specialist's to change."
+            )
+
+        if self.status_id == status.pk:
+            return False
+
+        was = self.status_id
+
+        # Conditional on the status it is moving from, so two clicks landing
+        # together produce one move and one history row rather than two of
+        # each - the guard accept_as_specialist() carries, on a table whose
+        # whole purpose is to answer when a contract passed a status. The
+        # check above is the cheap answer for an ordinary second click; this
+        # is the one that holds when both arrive at once.
+        moved = type(self).objects.filter(pk=self.pk, status_id=was).update(
+            status=status
+        )
+        if not moved:
+            self.refresh_from_db()
+            return False
+
+        ContractStatusChange.objects.create(
+            contract=self,
+            from_status_id=was,
+            to_status=status,
+            changed_by=by,
+        )
+        self.status = status
+
+        return True
+
     @transaction.atomic
     def revise(self, items: Sequence[Mapping[str, object]], **fields) -> None:
         """Replace this contract's rows and header (REQ-SHARTNOMA-005).
@@ -1727,6 +1839,70 @@ def contract_value_of(lines: Iterable[ContractItem]) -> Decimal:
     return sum((line.umumiy_narx for line in lines), Decimal("0")).quantize(
         SOUM, rounding=ROUND_HALF_UP
     )
+
+
+class ContractStatusChange(models.Model):
+    """One move of a contract from one status to another (REQ-ROLE-010).
+
+    The first history table in the application. Everything else here keeps
+    the current state and nothing else - an application's status is a column
+    that gets overwritten - because DEC-024 puts the history in the section 10
+    log and TASK-UZK-052 builds that.
+
+    This one is not waiting for it. REQ-ROLE-008 has the specialist keep
+    changing a contract's state and REQ-ROLE-010 says the same thing again,
+    and "keeps changing" is a sequence: a contract that is at Yetkazib
+    berilgan with no record of when it passed Shartnoma tuzilgan cannot
+    answer the question the department is actually asking. When TASK-UZK-052
+    builds the general log, this is what it reads for contracts rather than
+    something it replaces.
+    """
+
+    contract = models.ForeignKey(
+        Contract,
+        on_delete=models.CASCADE,
+        related_name="status_changes",
+        verbose_name="Shartnoma",
+    )
+    from_status = models.ForeignKey(
+        "reference.ShartnomaStatus",
+        on_delete=models.PROTECT,
+        related_name="moves_away",
+        null=True,
+        blank=True,
+        verbose_name="Oldingi holat",
+        help_text=(
+            "Null for the first move. Contract.status is nullable because "
+            "DEC-010 lets an administrator retire every status, so a contract "
+            "can be entered with none - and the move away from nothing is the "
+            "one most worth recording, not the one to refuse."
+        ),
+    )
+    to_status = models.ForeignKey(
+        "reference.ShartnomaStatus",
+        on_delete=models.PROTECT,
+        related_name="moves_here",
+        verbose_name="Yangi holat",
+    )
+    changed_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.PROTECT,
+        related_name="contract_status_changes",
+        verbose_name="Kim o`zgartirgan",
+    )
+    changed_at = models.DateTimeField("O`zgartirilgan sana", auto_now_add=True)
+
+    class Meta:
+        # Newest first, so contract.status_changes.first() is the last move -
+        # which is what the page shows beside the drop-down.
+        ordering = ("-changed_at", "-id")
+        verbose_name = "Shartnoma holati o`zgarishi"
+        verbose_name_plural = "Shartnoma holati o`zgarishlari"
+
+    def __str__(self) -> str:
+        was = self.from_status.name if self.from_status_id else "-"
+
+        return f"{self.contract.shartnoma_raqami}: {was} -> {self.to_status}"
 
 
 class ContractItem(OrderLine):

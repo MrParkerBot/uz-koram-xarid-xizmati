@@ -246,10 +246,10 @@ class ListTests(ContractTestCase):
         for nomi in ("Bolt M1", "Bolt M2", "Bolt M3"):
             with self.subTest(line=nomi):
                 self.assertIn(nomi, row)
-        # Thirteen cells span the rows: every column except Buyurtma nomi,
-        # which is the one there is a row of. TASK-UZK-036 added two of them,
-        # Ilova and Tahrir.
-        self.assertEqual(row.count('rowspan="3"'), 13)
+        # Fourteen cells span the rows: every column except Buyurtma nomi,
+        # which is the one there is a row of. TASK-UZK-036 added Ilova and
+        # Tahrir, and TASK-UZK-037 added Holati.
+        self.assertEqual(row.count('rowspan="3"'), 14)
 
     def test_an_empty_list_says_so_rather_than_showing_nothing(self) -> None:
         self.assertIn("Hozircha kelishinlingan shartnoma", self.table())
@@ -324,14 +324,21 @@ class WaitingControlTests(ContractTestCase):
     """What belongs to the tasks after this one."""
 
     def test_the_controls_name_the_tasks_that_will_build_them(self) -> None:
-        # TASK-UZK-035 is no longer among them: Shartnoma Kiritish opens the
-        # entry form now rather than sitting disabled with this task's number
-        # on it.
+        # Two have left the list since TASK-UZK-034 wrote this: TASK-UZK-035
+        # built Shartnoma Kiritish and TASK-UZK-037 built Ko'rish, and each
+        # took its own number off a control with it. Yuborish is the last row
+        # action still waiting.
+        #
+        # Asserted on the disabled control rather than on the task number
+        # alone, because the template's own comments name the tasks that
+        # built it and a bare search cannot tell those apart from a control
+        # that is still waiting.
         self.a_contract()
         page = self.page()
 
-        self.assertIn("TASK-UZK-037", page)
-        self.assertIn("TASK-UZK-038", page)
+        self.assertIn('disabled title="TASK-UZK-038', page)
+        self.assertNotIn('disabled title="TASK-UZK-035', page)
+        self.assertNotIn('disabled title="TASK-UZK-037', page)
 
 
 class QueryTests(ContractTestCase):
