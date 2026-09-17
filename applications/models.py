@@ -1662,6 +1662,16 @@ class ContractItem(OrderLine):
 
     CASCADE for the reason ApplicationItem gives: a line is part of its
     contract rather than something the contract refers to.
+
+    There is no Mahsulot Turi here, and the review of #52 asked for the
+    consequence to be written where the task that meets it will read it: these
+    are the only priced rows in the application, and they are not categorised.
+    TASK-UZK-046 reports purchases by category and TASK-UZK-047 by product, and
+    neither can reach a price through ApplicationItem, which has a category and
+    no money. The column is absent because REQ-SHARTNOMA-006 does not put one
+    on the contract form, so adding it here would be inventing it; those tasks
+    have to either reach the category through the contract's application or ask
+    the customer for one on this row.
     """
 
     contract = models.ForeignKey(
