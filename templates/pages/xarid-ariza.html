@@ -9,9 +9,16 @@ modal posted nowhere.
 This is the other way into the department. DEC-016 describes two - Admin
 keying in an application that arrived on paper, which is the section 4.2 form,
 and a Users requester submitting this one. They are different records, and
-this one has not entered the department's workflow yet: TASK-UZK-031 builds
-the approval chain that carries it there, which is why Xozirgi holati reads
-Yangi on everything here.
+this one enters the department's workflow through the approval chain
+(TASK-UZK-031): the requester's own bo`lim boshlig`i, then direktor, and only
+then does the department's own application appear on Kelib tushgan Arizalar.
+
+The queue above the list is that chain. It shows only what is waiting for
+whoever is looking, which is nothing for most people - a requester never sees
+one, including for their own request. DEC-015 names a Xarid Arizasiga
+tasdiqlar page for Direktor and no such template was supplied, so the queue
+lives on the page both approvers already have rather than on a page invented
+for it.
 
 Bo`lim nomi is shown and not editable. DEC-018 fills it from the requester's
 own account, and a field they could change would be filled in rather than
@@ -36,6 +43,57 @@ them for every table at once.
         <span class="role-tag role-admin">Admin</span>
       </div>
     </div>
+
+    {% if approvals %}
+    <!-- APPROVAL QUEUE (TASK-UZK-031) -->
+    <div class="panel" style="margin-bottom:24px;">
+      <div class="page-header" style="margin-bottom:12px;">
+        <div><h2 class="page-title" style="font-size:18px;">Tasdiqlashni kutayotgan arizalar</h2><div class="muted">DEC-016: bo'lim boshlig'i, so'ngra direktor</div></div>
+      </div>
+      <div class="table-wrap">
+        <table class="table-app" id="xa-approvals">
+          <thead><tr>
+            <th style="width:36px;">#</th>
+            <th>Ariza &#8470;</th>
+            <th>Shartnoma nomi</th>
+            <th>Bo'lim</th>
+            <th>Buyurtmachi</th>
+            <th>Izoh</th>
+            <th>PDF</th>
+            <th>Yaratilgan</th>
+            <th style="text-align:center;width:170px;">Amallar</th>
+          </tr></thead>
+          <tbody id="xa-approvals-tbody">
+          {% for ariza in approvals %}
+            <tr data-id="{{ ariza.pk }}">
+              <td>{{ forloop.counter }}</td>
+              <td class="mono-cell">{{ ariza.xarid_raqami }}</td>
+              <td style="font-weight:500;">{{ ariza.shartnoma_nomi }}</td>
+              <td>{{ ariza.department.name }}</td>
+              <td>{{ ariza.created_by.get_full_name|default:ariza.created_by.username }}</td>
+              <td style="font-size:11px;color:var(--color-text-muted);">{{ ariza.izoh|default:"&mdash;" }}</td>
+              <td>
+                {% if ariza.pdf %}
+                  <a class="pdf-badge" href="{% url 'xarid-ariza-pdf' ariza.pk %}" title="{{ ariza.xarid_raqami }}.pdf"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></a>
+                {% else %}
+                  <span class="muted small">&mdash;</span>
+                {% endif %}
+              </td>
+              <td class="mono-cell">{{ ariza.yaratilingan_sana|date:"Y-m-d" }}</td>
+              <td style="text-align:center;white-space:nowrap;">
+                <form method="post" action="{% url 'xarid-ariza-tasdiqlash' ariza.pk %}" style="display:inline;" data-confirm="{{ ariza.xarid_raqami }} tasdiqlansinmi?">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-outline-custom text-success btn-xs"><i class="bi bi-check-lg" aria-hidden="true"></i> Tasdiqlash</button>
+                </form>
+                <button type="button" class="btn btn-outline-custom text-danger btn-xs js-xa-reject" data-reject-url="{% url 'xarid-ariza-inkor' ariza.pk %}" data-reject-ariza="{{ ariza.xarid_raqami }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Inkor</button>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
 
     <div class="panel">
       <!-- FILTER BAR -->
@@ -256,6 +314,40 @@ them for every table at once.
 
     document.getElementById('xa-item-rows').appendChild(row);
     total.value = index + 1;
+  });
+</script>
+
+<!-- REJECT PURCHASE APPLICATION MODAL (TASK-UZK-031) -->
+<div id="xa-reject-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <form method="post" id="xa-reject-form">
+      {% csrf_token %}
+      <div class="modal-title"><i class="bi bi-x-circle" aria-hidden="true"></i> Xarid arizasini inkor etish</div>
+      <p class="modal-desc muted">Ariza <span id="xa-reject-ariza" class="mono-cell"></span> inkor etiladi. Sababi buyurtmachiga yetkaziladi.</p>
+      <div class="form-group">
+        <label class="form-label" for="xa-reject-izoh">Izoh <span style="color:var(--color-danger)">*</span></label>
+        <textarea class="form-control" id="xa-reject-izoh" name="inkor_izohi" rows="4" placeholder="Nima uchun inkor etilmoqda?" required></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-custom" data-close-modal="xa-reject-modal">Bekor qilish</button>
+        <button type="submit" class="btn btn-outline-custom text-danger">OK</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  // REQ-ARIZA-020: the comment is the point of the action, so the button
+  // opens a window asking for one rather than refusing afterwards.
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest('.js-xa-reject');
+    if (!button) return;
+    const form = document.getElementById('xa-reject-form');
+    form.action = button.dataset.rejectUrl;
+    form.reset();
+    document.getElementById('xa-reject-ariza').textContent = button.dataset.rejectAriza;
+    Modal.open('xa-reject-modal');
+    document.getElementById('xa-reject-izoh').focus();
   });
 </script>
 {% endblock %}

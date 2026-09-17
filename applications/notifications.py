@@ -37,6 +37,7 @@ class Notification(models.Model):
         """What happened. The wording belongs to whatever renders it."""
 
         SPECIALIST_ACCEPTED = "specialist_accepted", "Xodim arizani qabul qildi"
+        PURCHASE_REJECTED = "purchase_rejected", "Xarid arizasi inkor etildi"
 
     recipient = models.ForeignKey(
         "auth.User",
@@ -48,7 +49,21 @@ class Notification(models.Model):
         "applications.Application",
         on_delete=models.CASCADE,
         related_name="notifications",
+        null=True,
+        blank=True,
         verbose_name="Ariza",
+    )
+    purchase_application = models.ForeignKey(
+        "applications.PurchaseApplication",
+        on_delete=models.CASCADE,
+        related_name="notifications",
+        null=True,
+        blank=True,
+        verbose_name="Xarid arizasi",
+        help_text=(
+            "The other kind of record a notification can be about. Exactly "
+            "one of the two is set, which the constraint below says."
+        ),
     )
     kind = models.CharField(max_length=32, choices=Kind.choices)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -66,9 +81,33 @@ class Notification(models.Model):
         ordering = ("-created_at", "-id")
         verbose_name = "Bildirishnoma"
         verbose_name_plural = "Bildirishnomalar"
+        # A notification is about exactly one record. Both null is a message
+        # about nothing and both set is a message about two things, and
+        # neither is something any caller should be able to write.
+        constraints = (
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        application__isnull=False,
+                        purchase_application__isnull=True,
+                    )
+                    | models.Q(
+                        application__isnull=True,
+                        purchase_application__isnull=False,
+                    )
+                ),
+                name="notification_is_about_one_record",
+                violation_error_message=(
+                    "A notification is about an application or a purchase "
+                    "application, not both and not neither."
+                ),
+            ),
+        )
 
     def __str__(self) -> str:
-        return f"{self.get_kind_display()}: {self.application.ariza_raqami}"
+        about = self.application or self.purchase_application
+
+        return f"{self.get_kind_display()}: {about}"
 
 
 def notify_admins_of_acceptance(application) -> list[Notification]:
@@ -102,4 +141,25 @@ def notify_admins_of_acceptance(application) -> list[Notification]:
             )
             for admin in admins
         ]
+    )
+
+
+def notify_requester_of_rejection(purchase_application) -> Notification:
+    """Tell a requester their purchase request was refused (REQ-ARIZA-020).
+
+    One person, not a group: the requester is who raised it and who the
+    comment is addressed to. The comment itself lives on the record rather
+    than being copied here, so editing one cannot leave the other saying
+    something else.
+
+    Args:
+        purchase_application: the one that was refused.
+
+    Returns:
+        The notification produced.
+    """
+    return Notification.objects.create(
+        recipient=purchase_application.created_by,
+        purchase_application=purchase_application,
+        kind=Notification.Kind.PURCHASE_REJECTED,
     )

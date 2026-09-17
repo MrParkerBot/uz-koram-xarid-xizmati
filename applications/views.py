@@ -734,8 +734,159 @@ def purchase_lines() -> Prefetch:
     )
 
 
+def approvals_for(user) -> QuerySet[PurchaseApplication]:
+    """The purchase requests waiting for this person to decide (DEC-016).
+
+    A Bo`lim Boshlig`i sees the first step from their own department and
+    nowhere else - own being the part that matters, because a department head
+    approving another department's spending is what the chain exists to
+    prevent. A Direktor sees the second step from anywhere. Everybody else
+    sees none, including a requester looking at their own request.
+
+    Built from the same rule PurchaseApplication.awaits() applies to one
+    record, expressed as a filter rather than re-derived - so a change to who
+    approves what cannot leave the queue and the action disagreeing.
+    """
+    from accounts.roles import BOLIM_BOSHLIGI, DIREKTOR, department_of
+
+    waiting = PurchaseApplication.objects.select_related(
+        "department", "status", "created_by"
+    ).prefetch_related(purchase_lines())
+
+    if has_user_type(user, (BOLIM_BOSHLIGI,)):
+        department = department_of(user)
+        if department is None:
+            return waiting.none()
+
+        return waiting.filter(
+            stage=PurchaseApplication.Stage.AWAITING_HEAD,
+            department=department,
+        )
+
+    if has_user_type(user, (DIREKTOR,)):
+        return waiting.filter(
+            stage=PurchaseApplication.Stage.AWAITING_DIREKTOR
+        )
+
+    return waiting.none()
+
+
+def awaiting_approval(request: HttpRequest, pk: int) -> PurchaseApplication:
+    """The request this person may decide, or a refusal.
+
+    Two different refusals, and telling them apart is the point. Somebody who
+    could never decide this request is denied. Somebody for whom it has simply
+    moved on - a colleague got there first, or they double clicked - had the
+    permission they needed, and what changed is the record. The #26 review
+    settled that for accept_application, and the #44 review found this route
+    answering Forbidden to both.
+
+    Raises:
+        PermissionDenied: when this person could not decide this request at
+            any step - the wrong role, or another department's head.
+        Http404: when there is no such request.
+    """
+    application = get_object_or_404(PurchaseApplication, pk=pk)
+
+    if not (
+        application.awaits(request.user) or application.moved_past(request.user)
+    ):
+        raise PermissionDenied(
+            f"{application.xarid_raqami} is not {request.user} to decide."
+        )
+
+    # Either it is waiting for them, or it has moved while their page sat
+    # open. The second is not a permission problem, so the view says what
+    # happened and sends them back to a queue showing the truth.
+    return application
+
+
+@require_POST
+def approve_purchase_application(
+    request: HttpRequest, pk: int
+) -> HttpResponse:
+    """Take one request a step along the chain (REQ-ARIZA-016).
+
+    POST only, under the permission of the page carrying the queue. Which
+    step, and whether this person may take it, is the record's business
+    rather than the view's.
+    """
+    application = awaiting_approval(request, pk)
+
+    try:
+        approved = application.approve(by=request.user)
+    except ValueError:
+        # Reachable only for a request that has moved on, because anybody who
+        # could never decide it was refused above.
+        messages.info(
+            request,
+            f"{application.xarid_raqami} allaqachon hal qilingan.",
+        )
+        return redirect("xarid-ariza")
+
+    if approved and application.stage == PurchaseApplication.Stage.APPROVED:
+        messages.success(
+            request,
+            f"{application.xarid_raqami} tasdiqlandi va "
+            f"{application.raised_application.ariza_raqami} yaratildi.",
+        )
+    elif approved:
+        messages.success(
+            request,
+            f"{application.xarid_raqami} tasdiqlandi va direktorga yuborildi.",
+        )
+    else:
+        messages.info(
+            request, f"{application.xarid_raqami} allaqachon tasdiqlangan."
+        )
+
+    return redirect("xarid-ariza")
+
+
+@require_POST
+def reject_purchase_application(
+    request: HttpRequest, pk: int
+) -> HttpResponse:
+    """Refuse one request, with a reason (REQ-ARIZA-020)."""
+    application = awaiting_approval(request, pk)
+
+    try:
+        rejected = application.reject(
+            by=request.user, comment=request.POST.get("inkor_izohi", "")
+        )
+    except ValueError:
+        if not application.awaits(request.user):
+            # Either it has been decided, or it has moved to the next step
+            # while this page sat open. Both are "not yours to decide now"
+            # rather than "not yours ever".
+            messages.info(
+                request,
+                f"{application.xarid_raqami} allaqachon hal qilingan.",
+            )
+        else:
+            messages.error(
+                request,
+                f"{application.xarid_raqami} inkor etilmadi: izoh "
+                "kiritilishi shart.",
+            )
+
+        return redirect("xarid-ariza")
+
+    if rejected:
+        messages.success(
+            request, f"{application.xarid_raqami} inkor etildi."
+        )
+    else:
+        messages.info(
+            request, f"{application.xarid_raqami} allaqachon inkor etilgan."
+        )
+
+    return redirect("xarid-ariza")
+
+
 def purchase_page(
     signed_in_department=None,
+    approvals=None,
     form: PurchaseApplicationForm | None = None,
     items: PurchaseApplicationItemFormSet | None = None,
 ) -> dict[str, object]:
@@ -748,6 +899,7 @@ def purchase_page(
     return {
         "applications": purchase_applications(),
         "signed_in_department": signed_in_department,
+        "approvals": approvals,
         "form": form if form is not None else PurchaseApplicationForm(),
         "item_formset": (
             items
@@ -766,7 +918,10 @@ def purchase_application_list(request: HttpRequest) -> HttpResponse:
     return render(
         request,
         PURCHASE_TEMPLATE,
-        purchase_page(signed_in_department=department_of(request.user)),
+        purchase_page(
+            signed_in_department=department_of(request.user),
+            approvals=approvals_for(request.user),
+        ),
     )
 
 
@@ -822,7 +977,12 @@ def purchase_application_create(request: HttpRequest) -> HttpResponse:
         return render(
             request,
             PURCHASE_TEMPLATE,
-            purchase_page(department, form=form, items=items),
+            purchase_page(
+                department,
+                approvals_for(request.user),
+                form=form,
+                items=items,
+            ),
         )
 
     if not (form.is_valid() and items.is_valid()):
@@ -832,7 +992,12 @@ def purchase_application_create(request: HttpRequest) -> HttpResponse:
         return render(
             request,
             PURCHASE_TEMPLATE,
-            purchase_page(department, form=form, items=items),
+            purchase_page(
+                department,
+                approvals_for(request.user),
+                form=form,
+                items=items,
+            ),
         )
 
     with transaction.atomic():
