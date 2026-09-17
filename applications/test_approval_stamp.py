@@ -66,11 +66,14 @@ def decode_the_stamp(attachment) -> str | None:
     """
     attachment.open("rb")
     try:
-        page = PdfReader(BytesIO(attachment.read())).pages[0]
+        content = attachment.read()
     finally:
         attachment.close()
 
-    for embedded in page.images:
+    page = PdfReader(BytesIO(content)).pages[0]
+    images = list(page.images)
+
+    for embedded in images:
         image = Image.open(BytesIO(embedded.data)).convert("RGB")
         enlarged = image.resize(
             (image.width * DECODER_SCALE, image.height * DECODER_SCALE),
@@ -82,6 +85,19 @@ def decode_the_stamp(attachment) -> str | None:
             )
             if text:
                 return text
+
+    # None means "this page carries no stamp", which several tests assert. A
+    # page that carries one and will not decode is a different thing, and
+    # returning None for it is what let an intermittent failure look like an
+    # assertion about the stamp rather than one about the decoder.
+    if images:
+        raise AssertionError(
+            f"{len(images)} image(s) on the stamped page and none decoded, "
+            f"from {len(content)} bytes: "
+            + ", ".join(
+                f"{Image.open(BytesIO(one.data)).size}" for one in images
+            )
+        )
 
     return None
 
