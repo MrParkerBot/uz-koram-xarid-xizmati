@@ -1041,3 +1041,30 @@ def purchase_application_pdf(request: HttpRequest, pk: int) -> FileResponse:
     return attachment_response(
         application.pdf, f"{application.xarid_raqami}.pdf"
     )
+
+
+def purchase_application_original_pdf(
+    request: HttpRequest, pk: int
+) -> FileResponse:
+    """Download the attachment as it was uploaded, before any stamp.
+
+    TASK-UZK-032 keeps the original when an approval rewrites the document,
+    and the #46 review pointed out that nothing could produce it: DEC-019
+    makes the download view the only way to a file, so a file with no view is
+    a file nobody has. A stamped document is evidence, and evidence needs its
+    original.
+
+    Answers to the same permission as the stamped one, on the route. There is
+    nothing more to decide here: anybody who may see the approved document may
+    see what it was approved from.
+
+    Raises:
+        Http404: when there is no such application, or it has no original -
+            which is every application that has not been approved, because
+            until then pdf is the original.
+    """
+    application = get_object_or_404(PurchaseApplication, pk=pk)
+
+    return attachment_response(
+        application.asl_pdf, f"{application.xarid_raqami}-asl.pdf"
+    )

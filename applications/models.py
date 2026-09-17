@@ -890,14 +890,16 @@ class PurchaseApplication(models.Model):
     pdf = application_pdf_field()
     asl_pdf = models.FileField(
         "Asl ilova (PDF)",
-        upload_to="arizalar/asl/%Y/%m",
+        upload_to="arizalar/%Y/%m",
         storage=attachment_storage,
         blank=True,
         help_text=(
             "The attachment exactly as it was uploaded. Blank until an "
-            "approval stamps pdf, and kept from then on: the stamp rewrites "
-            "the document, and what a requester submitted should still be "
-            "producible afterwards."
+            "approval stamps pdf, and from then on it names the original "
+            "file where it already sits - it points at that file rather than "
+            "storing a second copy of it, which is why upload_to matches the "
+            "path the upload used. The #46 review found this declaring a "
+            "directory nothing ever writes to."
         ),
     )
     status = models.ForeignKey(
