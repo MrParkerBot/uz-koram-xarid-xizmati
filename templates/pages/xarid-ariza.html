@@ -27,6 +27,12 @@ filled from - which is a different thing and the wrong one.
 The table shows one row per order line, with the application's own cells
 spanning its lines, the same way the other two lists do since TASK-UZK-026.
 
+Holati follows the contract once there is one (REQ-ARIZA-017, TASK-UZK-033).
+The two status tables are extended independently and nothing defines a
+correspondence between them, so the contract's status is shown as it is - and
+the row says which contract it came from, because a word that changed from one
+table to another with no explanation is worse than no word at all.
+
 The filter bar and the exports are inert. TASK-UZK-041 and TASK-UZK-042 build
 them for every table at once.
 {% endcomment %}
@@ -144,7 +150,12 @@ them for every table at once.
               <td>{{ qator.olchov_birligi }}</td>
               {% if forloop.first %}
               <td rowspan="{{ lines|length }}">
-                {% if ariza.status %}<span class="badge badge-info">{{ ariza.status.name }}</span>{% else %}<span class="muted small">&mdash;</span>{% endif %}
+                {% with holat=ariza.shown_status %}
+                {% if holat %}<span class="badge {{ holat.badge_class|default:'badge-info' }}">{{ holat.name }}</span>{% else %}<span class="muted small">&mdash;</span>{% endif %}
+                {% endwith %}
+                {% if ariza.status_follows_contract %}
+                  <div class="muted" style="font-size:10px;margin-top:4px;">{{ ariza.contract.shartnoma_raqami }} bo'yicha</div>
+                {% endif %}
               </td>
               {% endif %}
               <td style="font-size:11px;" class="mono-cell">{{ qator.mahsulot_turi.category_number }} &mdash; {{ qator.mahsulot_turi.name }}</td>

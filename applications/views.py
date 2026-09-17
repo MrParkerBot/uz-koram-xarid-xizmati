@@ -1202,8 +1202,20 @@ def purchase_applications() -> QuerySet[PurchaseApplication]:
     plan rather than settled here.
     """
     return (
-        PurchaseApplication.objects.select_related("department", "status")
-        .prefetch_related(purchase_lines())
+        PurchaseApplication.objects.select_related(
+            "department", "status", "raised_application"
+        )
+        .prefetch_related(
+            purchase_lines(),
+            # REQ-ARIZA-017: the status shown is the contract's when there is
+            # one, so the walk to it is part of the page rather than a query
+            # per row. Two hops, and missing either would cost one query per
+            # request on a page that has a test about exactly that.
+            Prefetch(
+                "raised_application__contracts",
+                queryset=Contract.objects.select_related("status"),
+            ),
+        )
         .all()
     )
 

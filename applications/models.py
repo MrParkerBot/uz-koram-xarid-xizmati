@@ -1045,6 +1045,69 @@ class PurchaseApplication(models.Model):
         return f"{self.xarid_raqami} - {self.shartnoma_nomi}"
 
     @property
+    def contract(self) -> Contract | None:
+        """The contract formed from this request, or None while there is none.
+
+        Three hops, any of which can be missing, and each missing hop is an
+        ordinary state rather than a fault: a request that has not been
+        approved has raised no department application, and one that has may
+        have no contract against it yet.
+
+        The newest when there is more than one. REQ-SHARTNOMA-004 gives a
+        contract one Ariza raqami and nothing forbids a second contract
+        against the same application, so the ordering Contract already
+        declares is what decides - written as a list rather than a slice, so
+        that a page prefetching the contracts pays nothing here.
+        """
+        if self.raised_application_id is None:
+            return None
+
+        contracts = list(self.raised_application.contracts.all())
+
+        return contracts[0] if contracts else None
+
+    @property
+    def status_follows_contract(self) -> bool:
+        """Whether what this request shows comes from its contract.
+
+        The page asks, so that it can say so. A status that silently changed
+        from one table's word to another table's word would leave a requester
+        with no way to tell why - and the two tables are independent, so the
+        words need not even look related.
+        """
+        contract = self.contract
+
+        return contract is not None and contract.status_id is not None
+
+    @property
+    def shown_status(self):
+        """The state this request is currently in (REQ-ARIZA-017).
+
+        Section 4.9 says the current status changes according to the
+        contract's state, and the interesting part is what it does not say.
+        UNKNOWN-005 asked which statuses exist and how they correspond, and
+        DEC-010 answered the half it answered: they are editable master data
+        and the document's examples are examples. It defines no mapping
+        between an ArizaStatus and a ShartnomaStatus, and the two tables are
+        extended independently by an administrator - so a translation table
+        here would be a table invented in the code and invalidated by the next
+        row somebody adds on either page.
+
+        So the contract's status is shown as it is. That is the whole mapping,
+        and status_follows_contract is how the page says which table the word
+        came from.
+
+        Derived rather than copied. A column kept in step by a hook is a
+        column that is out of step the first time something writes around the
+        hook - and this needs no column: the contract knows its status and the
+        request knows its contract.
+        """
+        if self.status_follows_contract:
+            return self.contract.status
+
+        return self.status
+
+    @property
     def awaits_approval(self) -> bool:
         """Whether somebody still has to decide about this request."""
         return self.stage in (
