@@ -29,6 +29,11 @@ from applications.attachments import application_pdf_field
 ARIZA_NUMBER_PREFIX = "ARZ"
 ARIZA_NUMBER_DIGITS = 5
 
+# The section 4.9 purchase application. DEC-022 names the ARZ and SHT
+# sequences and is silent about this one; XA is what the approved prototype
+# shows, and it takes the same shape so all three read alike.
+XARID_NUMBER_PREFIX = "XA"
+
 # The smallest order anybody can place: one thousandth, which is the finest
 # the quantity column stores. Written as the smallest storable amount rather
 # than as zero, so that the floor moves with decimal_places if that ever
@@ -36,14 +41,19 @@ ARIZA_NUMBER_DIGITS = 5
 SMALLEST_QUANTITY = Decimal("0.001")
 
 
-def next_ariza_raqami(today: date | None = None) -> str:
-    """The next application number for this year (DEC-022).
+def next_number(prefix: str, model, field: str, today: date | None = None) -> str:
+    """The next number in one year's sequence (DEC-022).
+
+    Shared by every DEC-022 sequence, so a mistake in the allocation is one
+    mistake rather than one per record type. TASK-UZK-030 is what made it
+    worth extracting; before there was a second sequence, the general version
+    would have been a guess about what the second one needed.
 
     The sequence restarts annually, so the number is allocated by looking at
     what this year already has rather than by a global counter. Called inside
-    the same transaction as the save, so two applications created at once
-    cannot be handed the same number - and the unique column is what makes
-    that a failure rather than a duplicate if they somehow are.
+    the same transaction as the save, so two records created at once cannot be
+    handed the same number - and the unique column is what makes that a
+    failure rather than a duplicate if they somehow are.
 
     The highest number is found by sorting as text, which is correct only
     because the sequence is zero-padded to a fixed width: ARZ-2026-00009 sorts
@@ -53,19 +63,42 @@ def next_ariza_raqami(today: date | None = None) -> str:
     into an error rather than a duplicate, and a department raising a hundred
     thousand applications a year is not this one - but the constraint is
     invisible otherwise, so it is written down here.
+
+    Args:
+        prefix: the letters in front of the year, such as ARZ or XA.
+        model: the model holding the sequence.
+        field: the name of its number column.
+        today: the date the year is taken from.
     """
     year = (today or date.today()).year
-    prefix = f"{ARIZA_NUMBER_PREFIX}-{year}-"
+    start = f"{prefix}-{year}-"
 
     highest = (
-        Application.objects.filter(ariza_raqami__startswith=prefix)
-        .order_by("-ariza_raqami")
-        .values_list("ariza_raqami", flat=True)
+        model.objects.filter(**{f"{field}__startswith": start})
+        .order_by(f"-{field}")
+        .values_list(field, flat=True)
         .first()
     )
-    used = int(highest.removeprefix(prefix)) if highest else 0
+    used = int(highest.removeprefix(start)) if highest else 0
 
-    return f"{prefix}{used + 1:0{ARIZA_NUMBER_DIGITS}d}"
+    return f"{start}{used + 1:0{ARIZA_NUMBER_DIGITS}d}"
+
+
+def next_ariza_raqami(today: date | None = None) -> str:
+    """The next department application number for this year (DEC-022)."""
+    return next_number(ARIZA_NUMBER_PREFIX, Application, "ariza_raqami", today)
+
+
+def next_xarid_raqami(today: date | None = None) -> str:
+    """The next purchase application number for this year.
+
+    Its own sequence, independent of the ARZ one: the two are different
+    records, and a shared counter would make either one's numbering depend on
+    how busy the other had been.
+    """
+    return next_number(
+        XARID_NUMBER_PREFIX, PurchaseApplication, "xarid_raqami", today
+    )
 
 
 class Application(models.Model):
@@ -672,7 +705,76 @@ class Application(models.Model):
         return application
 
 
-class ApplicationItem(models.Model):
+class OrderLine(models.Model):
+    """One line of what somebody ordered: what, how much, in what unit.
+
+    Abstract, and shared by the department application's lines and the
+    purchase application's. The columns describe the same thing in both
+    places, and REQ-ARIZA-010 and REQ-ARIZA-015 both put a plus button in
+    front of them.
+
+    Abstract rather than one table with two foreign keys: a line belongs to
+    exactly one application of exactly one kind, and a shared table would need
+    a nullable key per kind plus a constraint saying exactly one is set. It is
+    also why extracting this does not touch applications_applicationitem - an
+    abstract base leaves the columns exactly where they already are.
+
+    The quantity floor is repeated as a constraint on each concrete model
+    rather than declared here. A constraint on an abstract base needs a name
+    template, and adopting one would rename the constraint
+    applications_applicationitem already carries: a migration against live
+    data to change nothing.
+    """
+
+    buyurtma_nomi = models.CharField("Buyurtma nomi", max_length=255)
+    # Decimal rather than float: REQ-ARIZA-003 allows a fractional quantity,
+    # and a quantity that is nearly 0.3 is not a quantity anybody ordered.
+    #
+    # The floor is on the column rather than on the form, because the rule is
+    # about what an order line may be and not about what one page accepts.
+    # The #33 review found the form's min attribute doing this job alone,
+    # which meant a posted -5 was stored as an order for minus five bolts.
+    # SMALLEST_QUANTITY excludes zero as well: an order for none of something
+    # is not an order, it is a line somebody meant to delete.
+    buyurtma_soni = models.DecimalField(
+        "Buyurtma soni",
+        max_digits=12,
+        decimal_places=3,
+        validators=[MinValueValidator(SMALLEST_QUANTITY)],
+    )
+    olchov_birligi = models.CharField(
+        "O`lchov birligi",
+        max_length=16,
+        help_text=(
+            "ta, kg, m and so on. Free text: REQ-ARIZA-003 gives examples and "
+            "no page maintains a list of units."
+        ),
+    )
+
+    class Meta:
+        abstract = True
+
+    @property
+    def soni_display(self) -> Decimal:
+        """The quantity without the trailing zeros the column stores.
+
+        Three decimal places are stored because REQ-ARIZA-003 allows a
+        fractional quantity, but rendering them always is actively
+        misleading here: LANGUAGE_CODE is uz, so the decimal separator is a
+        comma, and 2.500 prints as "2,500" - which reads as two and a half
+        thousand rather than as two and a half.
+
+        normalize() strips the zeros, and the quantize guards the other end:
+        it turns Decimal("500").normalize(), which is 5E+2, back into 500.
+        """
+        quantity = self.buyurtma_soni.normalize()
+        if quantity.as_tuple().exponent > 0:
+            return quantity.quantize(Decimal(1))
+
+        return quantity
+
+
+class ApplicationItem(OrderLine):
     """One line of what an application orders (REQ-ARIZA-010).
 
     These four fields sat on Application until TASK-UZK-026, because until
@@ -700,30 +802,6 @@ class ApplicationItem(models.Model):
         related_name="application_items",
         verbose_name="Mahsulot Turi",
     )
-    buyurtma_nomi = models.CharField("Buyurtma nomi", max_length=255)
-    # Decimal rather than float: REQ-ARIZA-003 allows a fractional quantity,
-    # and a quantity that is nearly 0.3 is not a quantity anybody ordered.
-    #
-    # The floor is on the column rather than on the form, because the rule is
-    # about what an order line may be and not about what one page accepts.
-    # The #33 review found the form's min attribute doing this job alone,
-    # which meant a posted -5 was stored as an order for minus five bolts.
-    # SMALLEST_QUANTITY excludes zero as well: an order for none of something
-    # is not an order, it is a line somebody meant to delete.
-    buyurtma_soni = models.DecimalField(
-        "Buyurtma soni",
-        max_digits=12,
-        decimal_places=3,
-        validators=[MinValueValidator(SMALLEST_QUANTITY)],
-    )
-    olchov_birligi = models.CharField(
-        "O`lchov birligi",
-        max_length=16,
-        help_text=(
-            "ta, kg, m and so on. Free text: REQ-ARIZA-003 gives examples and "
-            "no page maintains a list of units."
-        ),
-    )
 
     class Meta:
         # The order they were entered in, which is the order the person who
@@ -750,21 +828,159 @@ class ApplicationItem(models.Model):
     def __str__(self) -> str:
         return f"{self.buyurtma_nomi} - {self.soni_display} {self.olchov_birligi}"
 
-    @property
-    def soni_display(self) -> Decimal:
-        """The quantity without the trailing zeros the column stores.
 
-        Three decimal places are stored because REQ-ARIZA-003 allows a
-        fractional quantity, but rendering them always is actively
-        misleading here: LANGUAGE_CODE is uz, so the decimal separator is a
-        comma, and 2.500 prints as "2,500" - which reads as two and a half
-        thousand rather than as two and a half.
+class PurchaseApplication(models.Model):
+    """What a requester asks the purchasing department for (section 4.9).
 
-        normalize() strips the zeros, and the quantize guards the other end:
-        it turns Decimal("500").normalize(), which is 5E+2, back into 500.
+    The other way in. DEC-016 describes two: Admin keying in an application
+    that arrived on paper, which is Application and the section 4.2 form, and
+    a Users requester submitting this. They are different records rather than
+    one record with a flag - this one carries a contract title and a deadline,
+    which the department's own application has no use for, and it has not
+    entered the department's workflow yet. DEC-016's approval chain is what
+    carries it there, and TASK-UZK-031 builds that.
+
+    The department is not something the requester types. DEC-018 fills it from
+    their own account, which is why there is no department field on the form
+    and why a requester with no department cannot raise one at all.
+    """
+
+    xarid_raqami = models.CharField(
+        "Ariza raqami", max_length=32, unique=True
+    )
+    shartnoma_nomi = models.CharField(
+        "Shartnoma nomi",
+        max_length=255,
+        help_text="What the purchase is for (REQ-ARIZA-015).",
+    )
+    department = models.ForeignKey(
+        "reference.Department",
+        on_delete=models.PROTECT,
+        related_name="purchase_applications",
+        verbose_name="Bo`lim nomi",
+        help_text=(
+            "Filled from the requester's own account (DEC-018), never typed."
+        ),
+    )
+    muddat_talabi = models.DateField(
+        "Muddat talabi",
+        null=True,
+        blank=True,
+        help_text="When it is needed by (REQ-ARIZA-015).",
+    )
+    izoh = models.TextField("Izoh", blank=True)
+    pdf = application_pdf_field()
+    status = models.ForeignKey(
+        "reference.ArizaStatus",
+        on_delete=models.PROTECT,
+        related_name="purchase_applications",
+        null=True,
+        blank=True,
+        verbose_name="Xozirgi holati",
+        help_text=(
+            "Nullable for the reason Application.status is: DEC-017 lets an "
+            "administrator delete every status, and a master data page must "
+            "not be able to stop somebody raising a request."
+        ),
+    )
+    created_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.PROTECT,
+        related_name="purchase_applications",
+        verbose_name="Yaratgan",
+    )
+    yaratilingan_sana = models.DateTimeField(
+        "Yaratilingan sana", auto_now_add=True
+    )
+
+    class Meta:
+        # Newest first, like every other list here: a requester looks at what
+        # they have just asked for, not at what they asked for last year.
+        ordering = ("-yaratilingan_sana", "-id")
+        verbose_name = "Xarid arizasi"
+        verbose_name_plural = "Xarid arizalari"
+
+    def __str__(self) -> str:
+        return f"{self.xarid_raqami} - {self.shartnoma_nomi}"
+
+    @classmethod
+    @transaction.atomic
+    def raise_purchase_application(
+        cls, items: Sequence[Mapping[str, object]], **fields
+    ) -> PurchaseApplication:
+        """Create a purchase application and its order lines, in one write.
+
+        The only way one should be created, for the reason
+        Application.raise_application() gives: nothing should end up without a
+        number, and a failure part way through the order should leave no
+        request rather than one nobody can fill.
+
+        Args:
+            items: one mapping of PurchaseApplicationItem fields per line.
+            **fields: the application's own columns.
+
+        Returns:
+            The created purchase application.
+
+        Raises:
+            ValueError: when items is empty.
         """
-        quantity = self.buyurtma_soni.normalize()
-        if quantity.as_tuple().exponent > 0:
-            return quantity.quantize(Decimal(1))
+        if not items:
+            raise ValueError(
+                "A purchase application needs at least one order line "
+                "(REQ-ARIZA-015)."
+            )
 
-        return quantity
+        application = cls.objects.create(
+            xarid_raqami=next_xarid_raqami(), **fields
+        )
+        PurchaseApplicationItem.objects.bulk_create(
+            [
+                PurchaseApplicationItem(application=application, **line)
+                for line in items
+            ]
+        )
+
+        return application
+
+
+class PurchaseApplicationItem(OrderLine):
+    """One line of what a purchase application asks for (REQ-ARIZA-015).
+
+    The same four columns as ApplicationItem, from the same abstract base, and
+    a separate table: a line belongs to one application of one kind.
+    """
+
+    application = models.ForeignKey(
+        PurchaseApplication,
+        on_delete=models.CASCADE,
+        related_name="items",
+        verbose_name="Xarid arizasi",
+    )
+    mahsulot_turi = models.ForeignKey(
+        "reference.MahsulotTuri",
+        on_delete=models.PROTECT,
+        related_name="purchase_application_items",
+        verbose_name="Mahsulot Turi",
+    )
+
+    class Meta:
+        ordering = ("id",)
+        verbose_name = "Xarid arizasi qatori"
+        verbose_name_plural = "Xarid arizasi qatorlari"
+        # The same rule as ApplicationItem carries, named for this table. It
+        # is repeated rather than declared on OrderLine because a constraint
+        # on an abstract base needs a name template, and adopting one would
+        # rename the constraint the other table already has.
+        constraints = (
+            models.CheckConstraint(
+                condition=models.Q(buyurtma_soni__gte=SMALLEST_QUANTITY),
+                name="purchase_order_line_quantity_is_positive",
+                violation_error_message=(
+                    "Buyurtma soni noldan katta bo`lishi kerak."
+                ),
+            ),
+        )
+
+    def __str__(self) -> str:
+        return f"{self.buyurtma_nomi} - {self.soni_display} {self.olchov_birligi}"

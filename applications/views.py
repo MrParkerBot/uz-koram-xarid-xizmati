@@ -24,11 +24,28 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from accounts.models import UserProfile
 from accounts.permissions import may_open
-from accounts.roles import KATTA_MUTAXASIS, assignable_specialists, has_user_type
+from accounts.roles import (
+    KATTA_MUTAXASIS,
+    assignable_specialists,
+    department_of,
+    has_user_type,
+)
 from applications.attachments import attachment_response
-from applications.forms import ApplicationForm, ApplicationItemFormSet
-from applications.models import Application, ApplicationItem
+from applications.forms import (
+    SUGGESTED_UNITS,
+    ApplicationForm,
+    ApplicationItemFormSet,
+    PurchaseApplicationForm,
+    PurchaseApplicationItemFormSet,
+)
+from applications.models import (
+    Application,
+    ApplicationItem,
+    PurchaseApplication,
+    PurchaseApplicationItem,
+)
 from applications.notifications import notify_admins_of_acceptance
 from reference.models import ArizaStatus
 
@@ -44,6 +61,7 @@ ORDER_LINE_FIELDS = (
 INCOMING_TEMPLATE = "pages/kelib-arizalar.html"
 ACCEPTED_TEMPLATE = "pages/qabul-arizalar.html"
 ASSIGNED_TEMPLATE = "pages/tayinlangan.html"
+PURCHASE_TEMPLATE = "pages/xarid-ariza.html"
 
 # Which page shows an application at each stage. The attachment follows the
 # record rather than the route: a PDF is downloadable by whoever may open the
@@ -688,3 +706,173 @@ def assign_application(request: HttpRequest, pk: int) -> HttpResponse:
         )
 
     return redirect("qabul-arizalar")
+
+
+def purchase_applications() -> QuerySet[PurchaseApplication]:
+    """Every purchase application, newest first (REQ-ARIZA-014).
+
+    Not filtered by requester. USERS is the only type with this page and
+    nothing says a requester sees only their own; the department's own people
+    open it to see what has been asked for, and a list that hid most of it
+    would be answering a different question. Recorded as an unknown on the
+    plan rather than settled here.
+    """
+    return (
+        PurchaseApplication.objects.select_related("department", "status")
+        .prefetch_related(purchase_lines())
+        .all()
+    )
+
+
+def purchase_lines() -> Prefetch:
+    """The order lines of a purchase application, with their categories."""
+    return Prefetch(
+        "items",
+        queryset=PurchaseApplicationItem.objects.select_related(
+            "mahsulot_turi"
+        ),
+    )
+
+
+def purchase_page(
+    signed_in_department=None,
+    form: PurchaseApplicationForm | None = None,
+    items: PurchaseApplicationItemFormSet | None = None,
+) -> dict[str, object]:
+    """Everything the Xarid Arizasi page renders.
+
+    The department is passed in rather than looked up here, because the view
+    that writes has already asked - and asking twice is how the form comes to
+    show one department while the record is written against another.
+    """
+    return {
+        "applications": purchase_applications(),
+        "signed_in_department": signed_in_department,
+        "form": form if form is not None else PurchaseApplicationForm(),
+        "item_formset": (
+            items
+            if items is not None
+            else PurchaseApplicationItemFormSet(
+                queryset=PurchaseApplicationItem.objects.none()
+            )
+        ),
+        "open_form": form is not None,
+        "suggested_units": SUGGESTED_UNITS,
+    }
+
+
+def purchase_application_list(request: HttpRequest) -> HttpResponse:
+    """The Xarid Arizasi table and the form that adds to it."""
+    return render(
+        request,
+        PURCHASE_TEMPLATE,
+        purchase_page(signed_in_department=department_of(request.user)),
+    )
+
+
+def why_no_department(user) -> str:
+    """Which of the two ways a requester can have no department to use.
+
+    department_of() answers None for both - never assigned one, and assigned
+    one an administrator has since retired - and the #42 review found the
+    second being reported as the first. The remedies differ: somebody has to
+    give them a department, or somebody has to bring the department back. A
+    requester cannot do either, so the message is the whole of what they get
+    and it has to name the right one.
+    """
+    profile = UserProfile.objects.filter(user=user).select_related(
+        "department"
+    ).first()
+    retired = profile is not None and profile.department is not None
+
+    if retired:
+        return (
+            f"Xarid arizasi yaratilmadi: bo`limingiz ({profile.department.name}) "
+            "faol emas. Administratorga murojaat qiling."
+        )
+
+    return (
+        "Xarid arizasi yaratilmadi: hisobingizga bo`lim biriktirilmagan. "
+        "Administratorga murojaat qiling."
+    )
+
+
+@require_POST
+def purchase_application_create(request: HttpRequest) -> HttpResponse:
+    """Raise a purchase application (REQ-ARIZA-015).
+
+    POST only, under the permission of the page offering the form - which for
+    a Users requester is the only page they have, so a refusal here is
+    somebody who cannot do anything at all. Each one says what is wrong rather
+    than only that something is.
+
+    The department comes from the requester's own account (DEC-018) and is
+    never read from the form. Somebody with no department is told to ask an
+    administrator for one, because that is the actual remedy and they cannot
+    apply it themselves.
+    """
+    form = PurchaseApplicationForm(request.POST, request.FILES)
+    items = PurchaseApplicationItemFormSet(
+        request.POST, queryset=PurchaseApplicationItem.objects.none()
+    )
+    department = department_of(request.user)
+
+    if department is None:
+        messages.error(request, why_no_department(request.user))
+        return render(
+            request,
+            PURCHASE_TEMPLATE,
+            purchase_page(department, form=form, items=items),
+        )
+
+    if not (form.is_valid() and items.is_valid()):
+        messages.error(
+            request, "Xarid arizasi yaratilmadi: formani tekshiring."
+        )
+        return render(
+            request,
+            PURCHASE_TEMPLATE,
+            purchase_page(department, form=form, items=items),
+        )
+
+    with transaction.atomic():
+        application = PurchaseApplication.raise_purchase_application(
+            items=ordered_lines(items),
+            department=department,
+            shartnoma_nomi=form.cleaned_data["shartnoma_nomi"],
+            muddat_talabi=form.cleaned_data["muddat_talabi"],
+            izoh=form.cleaned_data["izoh"],
+            pdf=form.cleaned_data["pdf"],
+            created_by=request.user,
+            # Yangi, by its code rather than its name: DEC-017 lets an
+            # administrator rename the row, and a request that could not be
+            # raised because somebody renamed a status would be a master data
+            # page breaking the department's work.
+            status=ArizaStatus.objects.filter(
+                code=ArizaStatus.Code.NEW, is_active=True
+            ).first(),
+        )
+
+    messages.success(request, f"{application.xarid_raqami} yaratildi.")
+
+    return redirect("xarid-ariza")
+
+
+def purchase_application_pdf(request: HttpRequest, pk: int) -> FileResponse:
+    """Download one purchase application's PDF (DEC-019).
+
+    The permission is on the route rather than in here, which is the opposite
+    of application_pdf() and deliberate: that one asks about the page showing
+    the record's current stage, and a purchase application is on one page for
+    its whole life. There is no PAGE_SHOWING_STAGE equivalent to consult, so
+    require_page_permission('xarid-ariza') on the route is the whole rule.
+
+    The #42 review found both a wrapper and an in-view check here. Two
+    controls where one can never fail invites somebody to remove the one that
+    matters.
+    """
+    application = get_object_or_404(PurchaseApplication, pk=pk)
+
+    return attachment_response(
+        application.pdf, f"{application.xarid_raqami}.pdf"
+    )
