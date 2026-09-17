@@ -108,19 +108,6 @@ PAGE_SHOWING_STAGE: dict[str, str] = {
 }
 
 
-# Which page shows a contract at each stage, for the same reason
-# PAGE_SHOWING_STAGE exists: the document follows the record rather than the
-# route, so a contract's PDF is downloadable by whoever may open the page the
-# contract is currently on. TASK-UZK-038 is what moves one from the first
-# page to the second.
-PAGE_SHOWING_CONTRACT_STAGE: dict[str, str] = {
-    Contract.Stage.AGREED: "kelishinlingan",
-    Contract.Stage.REJECTED: "kelishinlingan",
-    Contract.Stage.SENT: "tuzilgan",
-    Contract.Stage.SIGNED: "tuzilgan",
-}
-
-
 def application_lines() -> Prefetch:
     """The order lines of an application, with the category each names.
 
@@ -951,7 +938,7 @@ def contract_pdf(request: HttpRequest, pk: int) -> FileResponse:
     """
     contract = get_object_or_404(Contract, pk=pk)
 
-    page_name = PAGE_SHOWING_CONTRACT_STAGE.get(contract.stage)
+    page_name = contract.page_showing
     if page_name is None or not may_open(request.user, page_name):
         raise PermissionDenied(
             f"{request.user} may not see {contract.shartnoma_raqami}."
@@ -1202,8 +1189,20 @@ def purchase_applications() -> QuerySet[PurchaseApplication]:
     plan rather than settled here.
     """
     return (
-        PurchaseApplication.objects.select_related("department", "status")
-        .prefetch_related(purchase_lines())
+        PurchaseApplication.objects.select_related(
+            "department", "status", "raised_application"
+        )
+        .prefetch_related(
+            purchase_lines(),
+            # REQ-ARIZA-017: the status shown is the contract's when there is
+            # one, so the walk to it is part of the page rather than a query
+            # per row. Two hops, and missing either would cost one query per
+            # request on a page that has a test about exactly that.
+            Prefetch(
+                "raised_application__contracts",
+                queryset=Contract.objects.select_related("status"),
+            ),
+        )
         .all()
     )
 
@@ -1373,6 +1372,7 @@ def purchase_page(
     approvals=None,
     form: PurchaseApplicationForm | None = None,
     items: PurchaseApplicationItemFormSet | None = None,
+    user=None,
 ) -> dict[str, object]:
     """Everything the Xarid Arizasi page renders.
 
@@ -1384,6 +1384,17 @@ def purchase_page(
         "applications": purchase_applications(),
         "signed_in_department": signed_in_department,
         "approvals": approvals,
+        # Which contract pages this person may open. REQ-ARIZA-017 asks for
+        # the status, and the row explains where the status came from - but
+        # DEC-015 gives Users this page and no contract page at all, so the
+        # explanation must not print a contract number to them. The status
+        # itself is theirs to see; the contract's number is a fact from a page
+        # they cannot open. Found by the review of #58.
+        "visible_contract_pages": [
+            page
+            for page in ("kelishinlingan", "tuzilgan")
+            if may_open(user, page)
+        ],
         "form": form if form is not None else PurchaseApplicationForm(),
         "item_formset": (
             items
@@ -1405,6 +1416,7 @@ def purchase_application_list(request: HttpRequest) -> HttpResponse:
         purchase_page(
             signed_in_department=department_of(request.user),
             approvals=approvals_for(request.user),
+            user=request.user,
         ),
     )
 
@@ -1466,6 +1478,7 @@ def purchase_application_create(request: HttpRequest) -> HttpResponse:
                 approvals_for(request.user),
                 form=form,
                 items=items,
+                user=request.user,
             ),
         )
 
@@ -1481,6 +1494,7 @@ def purchase_application_create(request: HttpRequest) -> HttpResponse:
                 approvals_for(request.user),
                 form=form,
                 items=items,
+                user=request.user,
             ),
         )
 
