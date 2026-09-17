@@ -44,6 +44,7 @@ from accounts.roles import (
     assign_user_type,
 )
 from applications.models import Application, Contract, next_ariza_raqami
+from applications.test_support import a_pdf
 from reference.models import (
     Department,
     MahsulotTuri,
@@ -119,6 +120,9 @@ class ContractTestCase(TestCase):
             "supplier": self.supplier,
             "created_by": self.buyer,
             "status": ShartnomaStatus.objects.filter(is_active=True).first(),
+            # TASK-UZK-036 made the document a rule about the contract rather
+            # than about the form, so every fixture carries one.
+            "pdf": a_pdf("shartnoma.pdf"),
         }
         fields.update(overrides)
         return Contract.raise_contract(items=items, **fields)
@@ -242,7 +246,10 @@ class ListTests(ContractTestCase):
         for nomi in ("Bolt M1", "Bolt M2", "Bolt M3"):
             with self.subTest(line=nomi):
                 self.assertIn(nomi, row)
-        self.assertEqual(row.count('rowspan="3"'), 11)
+        # Thirteen cells span the rows: every column except Buyurtma nomi,
+        # which is the one there is a row of. TASK-UZK-036 added two of them,
+        # Ilova and Tahrir.
+        self.assertEqual(row.count('rowspan="3"'), 13)
 
     def test_an_empty_list_says_so_rather_than_showing_nothing(self) -> None:
         self.assertIn("Hozircha kelishinlingan shartnoma", self.table())

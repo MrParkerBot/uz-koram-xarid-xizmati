@@ -190,6 +190,7 @@ class PurchaseApplicationForm(forms.ModelForm):
             "shartnoma_nomi": "Shartnoma nomi",
             "muddat_talabi": "Muddat talabi",
             "izoh": "Izoh",
+            "pdf": "Ilova (PDF)",
         }
         widgets = {
             "shartnoma_nomi": forms.TextInput(
@@ -340,6 +341,7 @@ class ContractForm(forms.ModelForm):
             "tolash_muddati",
             "muddat_talabi",
             "izoh",
+            "pdf",
         )
         field_classes = {"application": ApplicationChoiceField}
         labels = {
@@ -373,6 +375,19 @@ class ContractForm(forms.ModelForm):
                     "placeholder": "Qo`shimcha izoh",
                 }
             ),
+            # FileInput rather than ClearableFileInput, which is the whole of
+            # how "and also when it is edited" is built. A clear checkbox is
+            # a way to leave a contract without the document
+            # REQ-SHARTNOMA-003 says it must carry, and a rule enforced by
+            # refusing afterwards is a rule the page offers to break.
+            "pdf": forms.FileInput(
+                attrs={"class": "form-control", "accept": ".pdf"}
+            ),
+        }
+        error_messages = {
+            "pdf": {
+                "required": "Shartnoma uchun PDF ilova yuklanishi shart."
+            }
         }
 
     def __init__(self, *args, applications, **kwargs) -> None:
@@ -407,6 +422,14 @@ class ContractForm(forms.ModelForm):
         # the document lists both. Both columns are nullable because DEC-009
         # and DEC-010 let an administrator retire every row, and a master data
         # page must not be able to stop a contract being recorded.
+
+        # The attachment is required and nothing here says so, which is worth
+        # a sentence because it looks like an omission. REQ-SHARTNOMA-003
+        # asks for it on entry and on edit, and Django's FileField.clean()
+        # returns the stored file when nothing is uploaded - so one required
+        # field covers both: a new contract has no stored file and is
+        # refused, an edit keeps the one it has, and an edit of a contract
+        # that somehow has none is refused too.
 
 
 class ContractItemForm(forms.ModelForm):

@@ -18,6 +18,7 @@ the permission-checked download view the only way to a file rather than the
 intended one.
 
 TASK-UZK-026 and TASK-UZK-036 attach their own documents and reuse this.
+TASK-UZK-036 is the third, and the first whose column is required.
 """
 
 from __future__ import annotations
@@ -111,6 +112,29 @@ def application_pdf_field() -> models.FileField:
         upload_to="arizalar/%Y/%m",
         storage=attachment_storage,
         blank=True,
+        validators=[validate_pdf],
+        help_text="PDF, eng ko`pi bilan 10 MB (DEC-019).",
+    )
+
+
+def contract_pdf_field() -> models.FileField:
+    """The Shartnoma PDF of section 4.8 (REQ-SHARTNOMA-003).
+
+    Required, which is where it differs from the application's. DEC-016 gave
+    that one an exception - Admin keying in something that arrived on paper,
+    with no file to attach - and REQ-SHARTNOMA-003 gives this one none: it
+    says every created contract must carry an attachment when it is entered
+    and when it is edited. A contract without its signed document is not
+    evidence of anything.
+
+    Everything else is shared with the other two: the same storage, which
+    refuses to hand out a URL, and the same validator, which checks the size,
+    the name and the first bytes.
+    """
+    return models.FileField(
+        "Shartnoma (PDF)",
+        upload_to="shartnomalar/%Y/%m",
+        storage=attachment_storage,
         validators=[validate_pdf],
         help_text="PDF, eng ko`pi bilan 10 MB (DEC-019).",
     )

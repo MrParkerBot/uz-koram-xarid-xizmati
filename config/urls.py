@@ -50,6 +50,9 @@ from applications.views import (
     assign_application,
     assigned_list,
     contract_create,
+    contract_edit,
+    contract_pdf,
+    contract_update,
     incoming_list,
     purchase_application_create,
     purchase_application_list,
@@ -398,6 +401,28 @@ urlpatterns = [
         "kelishinlingan/yaratish/",
         require_page_permission("kelishinlingan")(contract_create),
         name="shartnoma-yaratish",
+    ),
+    # REQ-SHARTNOMA-005's Edit Button (TASK-UZK-036), which opens the same
+    # form filled in. Under the page's own permission for now; DEC-021 makes
+    # editing an exclusive lock and TASK-UZK-040 is where that lands.
+    path(
+        "kelishinlingan/<int:pk>/tahrirlash/",
+        require_page_permission("kelishinlingan")(contract_edit),
+        name="shartnoma-tahrirlash",
+    ),
+    path(
+        "kelishinlingan/<int:pk>/saqlash/",
+        require_page_permission("kelishinlingan")(contract_update),
+        name="shartnoma-saqlash",
+    ),
+    # The contract document (REQ-SHARTNOMA-003, DEC-019). No permission on
+    # the route: the view asks the matrix about the page the contract's stage
+    # is on, because a contract moves between Kelishinlingan and Tuzilgan and
+    # a route guarded by one of them would answer wrongly on the other.
+    path(
+        "shartnomalar/<int:pk>/pdf/",
+        contract_pdf,
+        name="shartnoma-pdf",
     ),
     # The Xarid Arizasi page of section 4.9 (TASK-UZK-030). It left
     # PAGE_ROUTES when it stopped being a template with no data behind it; the

@@ -14,6 +14,11 @@ right the moment Shartnoma qiymati became the total of the contract's rows: a
 row listing what the department asked for beside a value covering what the
 supplier agreed to would read as one statement and be two.
 
+Tahrirlash opens this same form filled in (REQ-SHARTNOMA-005,
+TASK-UZK-036). It is on the page for every contract still here, and it has no
+permission of its own yet: DEC-021 makes editing an exclusive lock one person
+holds, and TASK-UZK-040 is where that lands.
+
 Two things are deliberately not finished:
 
 - Ko'rish and Yuborish are TASK-UZK-037 and TASK-UZK-038.
@@ -74,7 +79,9 @@ REQ-SHARTNOMA-006 asks for and stores one fact.
             <th>Kim tuzdi</th>
             <th>Yaratilgan</th>
             <th>Qiymati (UZS)</th>
+            <th style="text-align:center;width:50px;">Ilova</th>
             <th style="text-align:center;width:60px;">Ko'rish</th>
+            <th style="text-align:center;width:60px;">Tahrir</th>
             <th style="text-align:center;width:100px;">Yuborish</th>
             <th>Izoh</th>
           </tr></thead>
@@ -96,7 +103,17 @@ REQ-SHARTNOMA-006 asks for and stores one fact.
               <td class="mono-cell" rowspan="{{ lines|length }}">{{ shartnoma.yaratilingan_sana|date:"Y-m-d" }}</td>
               <td style="font-weight:600;color:var(--color-primary);" rowspan="{{ lines|length }}">{{ shartnoma.qiymati_display }}</td>
               <td style="text-align:center;" rowspan="{{ lines|length }}">
+                {% if shartnoma.pdf %}
+                  <a class="pdf-badge" href="{% url 'shartnoma-pdf' shartnoma.pk %}" title="{{ shartnoma.shartnoma_raqami }}.pdf"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></a>
+                {% else %}
+                  <span class="muted small">&mdash;</span>
+                {% endif %}
+              </td>
+              <td style="text-align:center;" rowspan="{{ lines|length }}">
                 <button class="btn btn-outline-custom btn-xs" disabled title="TASK-UZK-037 ko'rishni quradi"><i class="bi bi-eye" aria-hidden="true"></i></button>
+              </td>
+              <td style="text-align:center;" rowspan="{{ lines|length }}">
+                <a class="btn btn-outline-custom btn-xs" href="{% url 'shartnoma-tahrirlash' shartnoma.pk %}" title="Tahrirlash"><i class="bi bi-pencil" aria-hidden="true"></i></a>
               </td>
               <td style="text-align:center;" rowspan="{{ lines|length }}">
                 <button class="btn btn-primary-custom btn-xs" disabled title="TASK-UZK-038 yuborishni quradi">Yuborish</button>
@@ -107,7 +124,7 @@ REQ-SHARTNOMA-006 asks for and stores one fact.
             {% endfor %}
             {% endwith %}
           {% empty %}
-            <tr><td colspan="12" class="muted" style="text-align:center;">Hozircha kelishinlingan shartnoma yo'q.</td></tr>
+            <tr><td colspan="14" class="muted" style="text-align:center;">Hozircha kelishinlingan shartnoma yo'q.</td></tr>
           {% endfor %}
           </tbody>
         </table>
@@ -123,19 +140,19 @@ REQ-SHARTNOMA-006 asks for and stores one fact.
 <!-- SHARTNOMA KIRITISH FORMASI (TASK-UZK-035) -->
 <div id="sht-modal" class="modal-overlay{% if not open_form %} hidden{% endif %}">
   <div class="modal-box modal-lg" style="max-width:860px;">
-    <form method="post" action="{% url 'shartnoma-yaratish' %}">
+    <form method="post" action="{% if editing %}{% url 'shartnoma-saqlash' editing.pk %}{% else %}{% url 'shartnoma-yaratish' %}{% endif %}" enctype="multipart/form-data">
       {% csrf_token %}
-      <div class="modal-title"><i class="bi bi-file-earmark-text" aria-hidden="true"></i> Shartnoma Kiritish</div>
+      <div class="modal-title"><i class="bi bi-file-earmark-text" aria-hidden="true"></i> {% if editing %}Shartnomani Tahrirlash{% else %}Shartnoma Kiritish{% endif %}</div>
 
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Shartnoma Raqami</label>
-          <input type="text" class="form-control mono" value="Saqlashda beriladi" disabled/>
-          <div class="form-hint">DEC-022: SHT-{% now 'Y' %}-00001.</div>
+          <input type="text" class="form-control mono" value="{% if editing %}{{ editing.shartnoma_raqami }}{% else %}Saqlashda beriladi{% endif %}" disabled/>
+          {% if not editing %}<div class="form-hint">DEC-022: SHT-{% now 'Y' %}-00001.</div>{% endif %}
         </div>
         <div class="form-group">
           <label class="form-label">Yaratilingan Sana</label>
-          <input type="text" class="form-control" value="{% now 'Y-m-d' %}" disabled/>
+          <input type="text" class="form-control" value="{% if editing %}{{ editing.yaratilingan_sana|date:'Y-m-d' }}{% else %}{% now 'Y-m-d' %}{% endif %}" disabled/>
         </div>
       </div>
 
@@ -236,6 +253,16 @@ REQ-SHARTNOMA-006 asks for and stores one fact.
         </div>
       </div>
 
+      <div class="form-group">
+        <label class="form-label" for="{{ form.pdf.id_for_label }}">Ilova (PDF) <span style="color:var(--color-danger)">*</span></label>
+        {{ form.pdf }}
+        <div class="form-hint">
+          PDF, eng ko'pi bilan 10 MB (DEC-019).
+          {% if editing and editing.pdf %}Yangi fayl yuklanmasa, mavjud ilova saqlanib qoladi.{% endif %}
+        </div>
+        <div class="form-error">{{ form.pdf.errors|striptags }}</div>
+      </div>
+
       <div class="form-row">
         <div class="form-group">
           <label class="form-label" for="{{ form.izoh.id_for_label }}">Izoh</label>
@@ -251,7 +278,7 @@ REQ-SHARTNOMA-006 asks for and stores one fact.
 
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-custom" data-close-modal="sht-modal"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</button>
-        <button type="submit" class="btn btn-primary-custom"><i class="bi bi-check-lg" aria-hidden="true"></i> Create</button>
+        <button type="submit" class="btn btn-primary-custom"><i class="bi bi-check-lg" aria-hidden="true"></i> {% if editing %}Saqlash{% else %}Create{% endif %}</button>
       </div>
     </form>
   </div>

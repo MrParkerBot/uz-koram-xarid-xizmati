@@ -79,6 +79,13 @@ ASSIGNED_TEMPLATE = "pages/tayinlangan.html"
 PURCHASE_TEMPLATE = "pages/xarid-ariza.html"
 AGREED_CONTRACTS_TEMPLATE = "pages/kelishinlingan.html"
 
+# The stages a contract may be edited at. DEC-024 describes correcting a
+# rejected contract and resending it, and an agreed one has not gone anywhere
+# yet. A contract awaiting somebody's approval, or already approved, changing
+# underneath them is not something the document describes, so it is refused
+# rather than guessed at.
+EDITABLE_CONTRACT_STAGES = ("agreed", "rejected")
+
 # Which page shows an application at each stage. The attachment follows the
 # record rather than the route: a PDF is downloadable by whoever may open the
 # page the application is currently on, not by whoever may open the page it
@@ -104,6 +111,19 @@ PAGE_SHOWING_STAGE: dict[str, str] = {
     # reachable the moment it is rejected. Deliberate, and tested, so that
     # whichever task adds a rejected list has to decide this rather than
     # inherit it.
+}
+
+
+# Which page shows a contract at each stage, for the same reason
+# PAGE_SHOWING_STAGE exists: the document follows the record rather than the
+# route, so a contract's PDF is downloadable by whoever may open the page the
+# contract is currently on. TASK-UZK-038 is what moves one from the first
+# page to the second.
+PAGE_SHOWING_CONTRACT_STAGE: dict[str, str] = {
+    "agreed": "kelishinlingan",
+    "rejected": "kelishinlingan",
+    "sent": "tuzilgan",
+    "signed": "tuzilgan",
 }
 
 
@@ -806,6 +826,7 @@ def contract_page(
     user,
     form: ContractForm | None = None,
     items: ContractItemFormSet | None = None,
+    editing: Contract | None = None,
 ) -> dict[str, object]:
     """Everything the Kelishinlingan Shartnoma page renders.
 
@@ -826,6 +847,7 @@ def contract_page(
             else ContractItemFormSet(queryset=ContractItem.objects.none())
         ),
         "open_form": form is not None,
+        "editing": editing,
         "suggested_units": SUGGESTED_UNITS,
     }
 
@@ -840,6 +862,135 @@ def agreed_contracts_list(request: HttpRequest) -> HttpResponse:
     return render(
         request, AGREED_CONTRACTS_TEMPLATE, contract_page(request.user)
     )
+
+
+def contract_pdf(request: HttpRequest, pk: int) -> FileResponse:
+    """Download one contract's PDF (DEC-019).
+
+    The file lives outside anything published and has no URL of its own, so
+    this view is the only way to it. It asks the permission matrix about the
+    page the contract is currently on, the way application_pdf() does and for
+    the same reason: the attachment stops being reachable at the same moment
+    the row stops being visible.
+
+    Raises:
+        PermissionDenied: when the caller may not open the page this contract
+            is on, or the contract is at a stage no page shows.
+        Http404: when the contract does not exist or has no attachment - which
+            REQ-SHARTNOMA-003 says cannot happen, and a 404 is the honest
+            answer if it somehow has.
+    """
+    contract = get_object_or_404(Contract, pk=pk)
+
+    page_name = PAGE_SHOWING_CONTRACT_STAGE.get(contract.stage)
+    if page_name is None or not may_open(request.user, page_name):
+        raise PermissionDenied(
+            f"{request.user} may not see {contract.shartnoma_raqami}."
+        )
+
+    return attachment_response(
+        contract.pdf, f"{contract.shartnoma_raqami}.pdf"
+    )
+
+
+def editable_contract(pk: int) -> Contract:
+    """The contract this request may edit, or a refusal.
+
+    Raises:
+        Http404: when there is no such contract, or it has left the page the
+            edit form lives on. A contract awaiting approval is not a 403 -
+            there is no such contract to edit on this page, which is what a
+            404 says.
+    """
+    return get_object_or_404(
+        Contract, pk=pk, stage__in=EDITABLE_CONTRACT_STAGES
+    )
+
+
+def contract_edit(request: HttpRequest, pk: int) -> HttpResponse:
+    """Open the entry form filled in (REQ-SHARTNOMA-005).
+
+    The same form, the same modal and the same rows - which is what the
+    document asks for, and is why this is a state of the Kelishinlingan page
+    rather than a page of its own.
+
+    There is no permission of its own here yet. REQ-SHARTNOMA-005 says the
+    form opens "if the user has permission for this", and DEC-021 makes that
+    an exclusive lock one person holds; TASK-UZK-040 is the task that puts it
+    on this route. Until then anybody who may open the page may edit, which
+    is wider than the document intends and is written down rather than left
+    to be noticed.
+    """
+    contract = editable_contract(pk)
+
+    return render(
+        request,
+        AGREED_CONTRACTS_TEMPLATE,
+        contract_page(
+            request.user,
+            form=ContractForm(
+                instance=contract,
+                applications=contractable_applications(request.user),
+            ),
+            items=ContractItemFormSet(queryset=contract.items.all()),
+            editing=contract,
+        ),
+    )
+
+
+@require_POST
+def contract_update(request: HttpRequest, pk: int) -> HttpResponse:
+    """Save an edited contract (REQ-SHARTNOMA-005, REQ-SHARTNOMA-003).
+
+    The rows are replaced rather than merged, and the contract value is
+    recomputed from whatever is left - both inside Contract.revise(), so that
+    a contract's total cannot end up disagreeing with what is on it.
+
+    The attachment is kept when nothing new is uploaded and replaced when
+    something is. Neither is a branch here: the form field is required and
+    Django hands back the stored file when the upload is empty, so an edit
+    that would leave the contract without one is refused by the same rule
+    that refuses an entry without one.
+    """
+    contract = editable_contract(pk)
+    form = ContractForm(
+        request.POST,
+        request.FILES,
+        instance=contract,
+        applications=contractable_applications(request.user),
+    )
+    items = ContractItemFormSet(request.POST, queryset=contract.items.all())
+
+    if not (form.is_valid() and items.is_valid()):
+        messages.error(request, "Shartnoma saqlanmadi: formani tekshiring.")
+        return render(
+            request,
+            AGREED_CONTRACTS_TEMPLATE,
+            contract_page(
+                request.user, form=form, items=items, editing=contract
+            ),
+        )
+
+    contract.revise(
+        items=contract_rows(items),
+        application=form.cleaned_data["application"],
+        supplier=form.cleaned_data["supplier"],
+        shartnoma_turi=form.cleaned_data["shartnoma_turi"],
+        status=form.cleaned_data["status"],
+        shartnoma_sanasi=form.cleaned_data["shartnoma_sanasi"],
+        tolash_muddati=form.cleaned_data["tolash_muddati"],
+        muddat_talabi=form.cleaned_data["muddat_talabi"],
+        izoh=form.cleaned_data["izoh"],
+        pdf=form.cleaned_data["pdf"],
+    )
+
+    messages.success(
+        request,
+        f"{contract.shartnoma_raqami} saqlandi. "
+        f"Shartnoma qiymati: {contract.qiymati_display} UZS.",
+    )
+
+    return redirect("kelishinlingan")
 
 
 def contract_rows(items: ContractItemFormSet) -> list[dict[str, object]]:
@@ -878,7 +1029,9 @@ def contract_create(request: HttpRequest) -> HttpResponse:
     says a contract must not be stored without.
     """
     applications = contractable_applications(request.user)
-    form = ContractForm(request.POST, applications=applications)
+    form = ContractForm(
+        request.POST, request.FILES, applications=applications
+    )
     items = ContractItemFormSet(
         request.POST, queryset=ContractItem.objects.none()
     )
@@ -903,6 +1056,7 @@ def contract_create(request: HttpRequest) -> HttpResponse:
             tolash_muddati=form.cleaned_data["tolash_muddati"],
             muddat_talabi=form.cleaned_data["muddat_talabi"],
             izoh=form.cleaned_data["izoh"],
+            pdf=form.cleaned_data["pdf"],
         )
 
     messages.success(
