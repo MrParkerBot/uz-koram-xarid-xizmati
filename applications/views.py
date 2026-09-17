@@ -881,6 +881,11 @@ def set_contract_status(request: HttpRequest, pk: int) -> HttpResponse:
     Whose contract it is, is held_contract()'s question rather than this one's
     - the same separation the Tayinlangan page makes between the page and the
     row.
+
+    Two pages carry this control since the review of #62 separated reporting a
+    contract's progress from changing its terms: Kelishinlingan while it is
+    still the specialist's, and Tuzilgan once it is signed. So the redirect
+    reads the page the contract is on rather than naming one.
     """
     contract = held_contract(request, pk)
     chosen = request.POST.get("status")
@@ -890,10 +895,12 @@ def set_contract_status(request: HttpRequest, pk: int) -> HttpResponse:
         else None
     )
 
+    back = contract.page_showing or "kelishinlingan"
+
     try:
         moved = contract.set_status(status, request.user)
     except ValueError:
-        if not contract.is_editable:
+        if not contract.status_may_move:
             messages.error(
                 request,
                 f"{contract.shartnoma_raqami} holati o`zgartirilmadi: "
@@ -906,7 +913,7 @@ def set_contract_status(request: HttpRequest, pk: int) -> HttpResponse:
                 "holat tanlanishi shart.",
             )
 
-        return redirect("kelishinlingan")
+        return redirect(back)
 
     if moved:
         messages.success(
@@ -919,7 +926,7 @@ def set_contract_status(request: HttpRequest, pk: int) -> HttpResponse:
             f"{contract.shartnoma_raqami} allaqachon shu holatda.",
         )
 
-    return redirect("kelishinlingan")
+    return redirect(back)
 
 
 @require_POST
@@ -1267,7 +1274,7 @@ def created_contracts() -> QuerySet[Contract]:
             "created_by",
             "tasdiqlagan",
         )
-        .prefetch_related(contract_lines())
+        .prefetch_related(contract_lines(), contract_status_history())
     )
 
 
@@ -1293,6 +1300,7 @@ def created_contracts_list(request: HttpRequest) -> HttpResponse:
         {
             "contracts": created_contracts(),
             "may_decide": may_decide_on_contracts(request.user),
+            "statuses": ShartnomaStatus.objects.active(),
         },
     )
 

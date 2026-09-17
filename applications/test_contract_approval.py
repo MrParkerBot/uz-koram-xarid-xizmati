@@ -226,7 +226,7 @@ class ViewingTests(ContractApprovalTestCase):
     def test_the_rows_are_the_contracts_own(self) -> None:
         # The prototype's drawer showed one hard-coded line whatever you
         # clicked, which is the failure this replaces.
-        first = self.a_sent_contract()
+        self.a_sent_contract()
         second = self.a_sent_contract()
         second.items.update(buyurtma_nomi="Kabel 4mm", part_number="PN-9999")
 
@@ -234,7 +234,6 @@ class ViewingTests(ContractApprovalTestCase):
 
         self.assertIn("PN-0001", page)
         self.assertIn("PN-9999", page)
-        self.assertNotEqual(first.pk, second.pk)
 
 
 class AcceptTests(ContractApprovalTestCase):
@@ -402,6 +401,111 @@ class RejectTests(ContractApprovalTestCase):
 
         with self.assertRaises(ValueError):
             contract.reject(self.head, "Narx juda baland.")
+
+
+class SignedStatusTests(ContractApprovalTestCase):
+    """The status chain carries on after approval (the review of #62).
+
+    DEC-010 seeds Yetkazib berilgan, which is what happens after a contract is
+    signed, and DEC-028 says an accepted contract continues through its status
+    chain. Sharing one rule between "may the terms change" and "may the state
+    be reported" made both impossible, and nothing noticed until TASK-UZK-039
+    wrote SIGNED for the first time.
+    """
+
+    def delivered(self) -> ShartnomaStatus:
+        return ShartnomaStatus.objects.get(name="Yetkazib berilgan")
+
+    def test_a_signed_contract_can_still_be_moved(self) -> None:
+        contract = self.a_sent_contract()
+        self.accept(contract)
+        contract.refresh_from_db()
+
+        self.assertTrue(contract.set_status(self.delivered(), self.specialist))
+
+        contract.refresh_from_db()
+        self.assertEqual(contract.status, self.delivered())
+
+    def test_its_terms_still_cannot_be_changed(self) -> None:
+        # The two questions are separate now, and this is the half that stays
+        # closed: a signed contract's rows and price are settled.
+        contract = self.a_sent_contract()
+        self.accept(contract)
+        contract.refresh_from_db()
+
+        self.assertTrue(contract.status_may_move)
+        self.assertFalse(contract.is_editable)
+
+    def test_a_contract_awaiting_a_decision_cannot_be_moved(self) -> None:
+        # The stage that refuses is SENT: a contract must not change
+        # underneath the person deciding on it.
+        contract = self.a_sent_contract()
+
+        with self.assertRaises(ValueError):
+            contract.set_status(self.delivered(), self.specialist)
+
+    def test_the_control_is_on_this_page_for_a_signed_contract(self) -> None:
+        contract = self.a_sent_contract()
+        self.accept(contract)
+
+        self.assertIn(
+            reverse("shartnoma-holat", args=[contract.pk]), self.table()
+        )
+
+    def test_moving_it_from_here_comes_back_here(self) -> None:
+        contract = self.a_sent_contract()
+        self.accept(contract)
+        self.client.force_login(self.specialist)
+
+        response = self.client.post(
+            reverse("shartnoma-holat", args=[contract.pk]),
+            {"status": str(self.delivered().pk)},
+        )
+
+        self.assertRedirects(response, reverse("tuzilgan"))
+
+    def test_a_contract_awaiting_a_decision_shows_a_badge(self) -> None:
+        contract = self.a_sent_contract()
+
+        row = self.table()
+
+        self.assertNotIn(
+            reverse("shartnoma-holat", args=[contract.pk]), row
+        )
+        self.assertIn(contract.status.name, row)
+
+
+class ResentContractTests(ContractApprovalTestCase):
+    """What the approver is told about a contract that has been here before."""
+
+    def a_resent_contract(self) -> Contract:
+        contract = self.a_sent_contract()
+        self.reject(contract, "Narx juda baland.")
+        contract.refresh_from_db()
+        contract.send_for_approval(self.specialist)
+
+        return contract
+
+    def test_the_row_says_why_it_came_back(self) -> None:
+        # TASK-UZK-038 keeps the comment through a resend so the person
+        # deciding again can see it, and this is that person's page - where
+        # the review of #62 found it not being shown.
+        self.a_resent_contract()
+
+        self.assertIn("Narx juda baland.", self.table())
+
+    def test_the_row_says_how_many_times(self) -> None:
+        contract = self.a_resent_contract()
+
+        self.assertEqual(contract.yuborishlar_soni, 2)
+        self.assertIn("2-marta yuborilgan", self.table())
+
+    def test_a_first_time_contract_says_neither(self) -> None:
+        self.a_sent_contract()
+
+        row = self.table()
+
+        self.assertNotIn("marta yuborilgan", row)
 
 
 class WhoDecidesTests(ContractApprovalTestCase):
