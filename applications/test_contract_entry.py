@@ -39,6 +39,7 @@ from accounts.roles import (
     assign_user_type,
 )
 from applications.models import Application, Contract, ContractItem
+from applications.test_support import a_pdf
 from reference.models import (
     Department,
     MahsulotTuri,
@@ -128,8 +129,16 @@ class ContractEntryTestCase(TestCase):
         form.update(overrides)
         return form
 
-    def create(self, rows: int = 1, **overrides):
-        return self.client.post(self.url, self.payload(rows, **overrides))
+    def create(self, rows: int = 1, pdf=None, **overrides):
+        """Post the form, attaching a PDF unless the test says otherwise.
+
+        pdf=False posts without one, which TASK-UZK-036 refuses.
+        """
+        payload = self.payload(rows, **overrides)
+        if pdf is not False:
+            payload["pdf"] = pdf if pdf is not None else a_pdf("shartnoma.pdf")
+
+        return self.client.post(self.url, payload)
 
     def page(self) -> str:
         return self.client.get(reverse("kelishinlingan")).content.decode()
@@ -307,6 +316,7 @@ class RefusalTests(ContractEntryTestCase):
                 application=self.application,
                 supplier=self.supplier,
                 created_by=self.buyer,
+                pdf=a_pdf("shartnoma.pdf"),
             )
 
     def test_raise_contract_refuses_a_value_somebody_supplies(self) -> None:
@@ -323,6 +333,7 @@ class RefusalTests(ContractEntryTestCase):
                 application=self.application,
                 supplier=self.supplier,
                 created_by=self.buyer,
+                pdf=a_pdf("shartnoma.pdf"),
                 qiymati=Decimal("1.00"),
             )
 

@@ -23,7 +23,11 @@ from django.core.validators import MinValueValidator
 from django.db import models, transaction
 from django.utils import timezone
 
-from applications.attachments import application_pdf_field, attachment_storage
+from applications.attachments import (
+    application_pdf_field,
+    attachment_storage,
+    contract_pdf_field,
+)
 
 # DEC-022: ARZ-2026-00001, five digits, resetting each year.
 ARIZA_NUMBER_PREFIX = "ARZ"
@@ -1553,6 +1557,7 @@ class Contract(models.Model):
         ),
     )
     izoh = models.TextField("Izoh", blank=True)
+    pdf = contract_pdf_field()
     yaratilingan_sana = models.DateTimeField(
         "Yaratilingan sana", auto_now_add=True
     )
@@ -1608,10 +1613,18 @@ class Contract(models.Model):
             them through .items.
 
         Raises:
-            ValueError: when items is empty, or when qiymati is passed. A
-                contract with nothing on it has no value to have, and a caller
-                supplying one would be a caller able to disagree with the rows.
+            ValueError: when items is empty, when qiymati is passed, or when
+                no document is attached. A contract with nothing on it has no
+                value to have; a caller supplying a value would be a caller
+                able to disagree with the rows; and REQ-SHARTNOMA-003 makes
+                the attachment a rule about the contract rather than about the
+                form, so the rule is here as well as there.
         """
+        if not fields.get("pdf"):
+            raise ValueError(
+                "A contract carries its PDF (REQ-SHARTNOMA-003, DEC-019)."
+            )
+
         if "qiymati" in fields:
             raise ValueError(
                 "A contract value is the sum of its rows "
@@ -1635,6 +1648,72 @@ class Contract(models.Model):
         ContractItem.objects.bulk_create(lines)
 
         return contract
+
+    @transaction.atomic
+    def revise(self, items: Sequence[Mapping[str, object]], **fields) -> None:
+        """Replace this contract's rows and header (REQ-SHARTNOMA-005).
+
+        The rows are replaced rather than matched up, because the entry form
+        sends what the contract should now consist of rather than a list of
+        edits. What that costs is the rows' identity, and nothing has one: a
+        ContractItem is read through its contract and never referred to from
+        anywhere else.
+
+        The value is recomputed here rather than by the caller, which is the
+        point of the method. An edit that rewrote the rows and left qiymati
+        alone would leave a contract whose total disagreed with what is on
+        it, and no view should be able to forget that.
+
+        Args:
+            items: one mapping of ContractItem fields per row, as
+                raise_contract() takes them.
+            **fields: the contract's own columns, without qiymati.
+
+        Raises:
+            ValueError: for the same three reasons raise_contract() refuses -
+                no rows, a supplied value, or no document.
+            TypeError: when a keyword is not a column on this model.
+                raise_contract() goes through objects.create(), which raises
+                for a misspelled field before anything is written; this used
+                to set the attribute, save, and lose it in silence. The review
+                of #54 asked for the two halves of one rule to fail the same
+                way.
+        """
+        columns = {field.name for field in self._meta.concrete_fields}
+        unknown = sorted(set(fields) - columns)
+        if unknown:
+            raise TypeError(
+                f"Contract has no column {', '.join(unknown)}."
+            )
+
+        if "qiymati" in fields:
+            raise ValueError(
+                "A contract value is the sum of its rows "
+                "(REQ-SHARTNOMA-006), not a field a caller sets."
+            )
+
+        if not items:
+            raise ValueError(
+                "A contract needs at least one row of goods "
+                "(REQ-SHARTNOMA-007)."
+            )
+
+        # The document may be left alone by an edit, so this asks what the
+        # contract will have rather than what the caller passed.
+        if not fields.get("pdf", self.pdf):
+            raise ValueError(
+                "A contract carries its PDF (REQ-SHARTNOMA-003, DEC-019)."
+            )
+
+        for name, value in fields.items():
+            setattr(self, name, value)
+
+        self.items.all().delete()
+        lines = [ContractItem(contract=self, **line) for line in items]
+        ContractItem.objects.bulk_create(lines)
+
+        self.qiymati = contract_value_of(lines)
+        self.save()
 
 
 def contract_value_of(lines: Iterable[ContractItem]) -> Decimal:
