@@ -29,9 +29,14 @@ Ko'rish opens the contract's goods rows in place (REQ-SHARTNOMA-005). They are
 already on the page - the Buyurtma nomi column is made of them - so this is
 markup rather than a second request.
 
-One thing is deliberately not finished:
+Yuborish sends the contract to the department head (REQ-SHARTNOMA-005,
+TASK-UZK-038), and the contract leaves this page when it goes: this list is
+the contracts still the specialist's to work on. After a rejection the same
+control reads Re-Send (DEC-024) and the contract may be corrected first, which
+is why Tahrir is still beside it.
 
-- Yuborish is TASK-UZK-038.
+Nothing on this page is waiting for a later task any more, except the filter
+bar and the exports.
 - The filter bar and the exports are inert until TASK-UZK-041 and
   TASK-UZK-042 build them for every table at once.
 
@@ -150,7 +155,10 @@ REQ-SHARTNOMA-006 asks for and stores one fact.
                 <a class="btn btn-outline-custom btn-xs" href="{% url 'shartnoma-tahrirlash' shartnoma.pk %}" title="Tahrirlash"><i class="bi bi-pencil" aria-hidden="true"></i></a>
               </td>
               <td style="text-align:center;" rowspan="{{ lines|length }}">
-                <button class="btn btn-primary-custom btn-xs" disabled title="TASK-UZK-038 yuborishni quradi">Yuborish</button>
+                <form method="post" action="{% url 'shartnoma-yuborish' shartnoma.pk %}" data-confirm="{{ shartnoma.shartnoma_raqami }} tasdiqlashga yuborilsinmi?">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-primary-custom btn-xs">{{ shartnoma.send_label }}</button>
+                </form>
               </td>
               <td style="font-size:11px;color:var(--color-text-muted);" rowspan="{{ lines|length }}">{{ shartnoma.inkor_izohi|default:"&mdash;" }}</td>
               {% endif %}

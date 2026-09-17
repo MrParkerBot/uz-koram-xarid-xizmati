@@ -60,6 +60,7 @@ from applications.views import (
     purchase_application_pdf,
     reject_application,
     reject_purchase_application,
+    send_contract_for_approval,
     set_application_status,
     set_contract_status,
 )
@@ -422,6 +423,14 @@ urlpatterns = [
         "kelishinlingan/<int:pk>/holat/",
         require_page_permission("kelishinlingan")(set_contract_status),
         name="shartnoma-holat",
+    ),
+    # REQ-SHARTNOMA-005's Send, and DEC-024's Re-Send, which is the same
+    # route: a resend is the same act again rather than a different one
+    # (TASK-UZK-038).
+    path(
+        "kelishinlingan/<int:pk>/yuborish/",
+        require_page_permission("kelishinlingan")(send_contract_for_approval),
+        name="shartnoma-yuborish",
     ),
     # The contract document (REQ-SHARTNOMA-003, DEC-019). No permission on
     # the route: the view asks the matrix about the page the contract's stage

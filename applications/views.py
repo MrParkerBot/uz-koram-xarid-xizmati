@@ -920,6 +920,48 @@ def set_contract_status(request: HttpRequest, pk: int) -> HttpResponse:
     return redirect("kelishinlingan")
 
 
+@require_POST
+def send_contract_for_approval(
+    request: HttpRequest, pk: int
+) -> HttpResponse:
+    """Send a contract to the department head (REQ-SHARTNOMA-005).
+
+    POST only, under the permission of the page carrying the button, and
+    through held_contract() so a specialist sends their own.
+
+    The contract leaves this page when it is sent, because this page is the
+    contracts still theirs to work on. That is abrupt if nobody says so, which
+    is why the message names where it went rather than only that it went.
+    """
+    contract = held_contract(request, pk)
+
+    try:
+        sent = contract.send_for_approval(request.user)
+    except ValueError:
+        messages.error(
+            request,
+            f"{contract.shartnoma_raqami} yuborilmadi: shartnoma "
+            "allaqachon tasdiqlashga yuborilgan.",
+        )
+
+        return redirect("kelishinlingan")
+
+    if sent:
+        messages.success(
+            request,
+            f"{contract.shartnoma_raqami} tasdiqlashga yuborildi va "
+            "Tuzilgan Shartnomalar sahifasiga o`tdi.",
+        )
+    else:
+        messages.info(
+            request,
+            f"{contract.shartnoma_raqami} allaqachon tasdiqlashga "
+            "yuborilgan.",
+        )
+
+    return redirect("kelishinlingan")
+
+
 def contract_pdf(request: HttpRequest, pk: int) -> FileResponse:
     """Download one contract's PDF (DEC-019).
 
