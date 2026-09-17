@@ -1101,6 +1101,16 @@ class PurchaseApplication(models.Model):
         column that is out of step the first time something writes around the
         hook - and this needs no column: the contract knows its status and the
         request knows its contract.
+
+        The consequence is worth stating rather than discovering. The status
+        column keeps saying what the request was raised as, so this page and
+        anything counting the column give different answers for the same
+        record - both correct, and different. DEC-010 has TASK-UZK-044 and
+        TASK-UZK-045 generate one counter per active status and count records
+        into them; a request whose page says Shartnoma tuzilgan is counted
+        under Yangi unless those tasks decide otherwise. The review of #58
+        asked for that to be written here, before the query is written rather
+        than after somebody reports the disagreement as a fault.
         """
         if self.status_follows_contract:
             return self.contract.status
@@ -1632,6 +1642,30 @@ class Contract(models.Model):
 
     def __str__(self) -> str:
         return f"{self.shartnoma_raqami} - {self.supplier.name}"
+
+    # Which page shows a contract at each stage. On the model rather than in
+    # the views because two readers ask and one of them is a template: the
+    # download view asks so an attachment stops being reachable when the row
+    # stops being visible, and the Xarid Arizasi row asks so it does not print
+    # a contract number to somebody who may not open a contract page at all.
+    #
+    # TASK-UZK-038 is what moves a contract from the first page to the second.
+    PAGE_SHOWING_STAGE: dict[str, str] = {
+        "agreed": "kelishinlingan",
+        "rejected": "kelishinlingan",
+        "sent": "tuzilgan",
+        "signed": "tuzilgan",
+    }
+
+    @property
+    def page_showing(self) -> str | None:
+        """The page this contract is currently on, or None when no page is.
+
+        None is a real answer rather than an error: a stage no page shows is a
+        contract nobody can reach, and a caller has to decide what that means
+        rather than be handed a page name that does not apply.
+        """
+        return self.PAGE_SHOWING_STAGE.get(self.stage)
 
     @property
     def is_rejected(self) -> bool:
