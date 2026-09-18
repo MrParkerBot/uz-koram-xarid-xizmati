@@ -97,9 +97,17 @@ class SetStatusTests(TestCase):
         self.assertEqual(contract.status, self.first)
         self.assertEqual(ContractStatusChange.objects.count(), 0)
 
-    def test_a_contract_that_has_left_the_specialist_is_refused(self) -> None:
+    def test_a_contract_awaiting_a_decision_is_refused(self) -> None:
+        """SENT is the stage that refuses, not SIGNED.
+
+        Until TASK-UZK-039 this test used SIGNED, because one constant
+        answered both "may the terms change" and "may the progress be
+        reported". Those are different questions: a contract must not change
+        underneath the person deciding on it, and a signed one is still
+        delivered afterwards.
+        """
         contract = self.a_held_contract(status=self.first)
-        Contract.objects.filter(pk=contract.pk).update(stage=Contract.Stage.SIGNED)
+        Contract.objects.filter(pk=contract.pk).update(stage=Contract.Stage.SENT)
 
         with self.assertRaises(ValueError):
             contract.set_status(self.second, by=self.specialist)
@@ -107,6 +115,22 @@ class SetStatusTests(TestCase):
         contract.refresh_from_db()
         self.assertEqual(contract.status, self.first)
         self.assertEqual(ContractStatusChange.objects.count(), 0)
+
+    def test_a_signed_contract_still_moves(self) -> None:
+        """DEC-010 seeds a delivered status, which happens after signing.
+
+        Sharing EDITABLE_STAGES froze an approved contract's status forever,
+        so that status was unreachable and DEC-028's "continues through its
+        status chain" was impossible.
+        """
+        contract = self.a_held_contract(status=self.first)
+        Contract.objects.filter(pk=contract.pk).update(stage=Contract.Stage.SIGNED)
+        contract.refresh_from_db()
+
+        self.assertTrue(contract.set_status(self.second, by=self.specialist))
+
+        contract.refresh_from_db()
+        self.assertEqual(contract.status, self.second)
 
     def test_two_moves_racing_produce_one_move_and_one_history_row(self) -> None:
         """The second caller read the old status before the first one wrote.
@@ -223,14 +247,15 @@ class ContractStatusPageTests(SignedInAdminTestCase):
 
     def test_a_refusal_is_a_message_and_not_a_404(self) -> None:
         contract = self.a_contract_on_the_page()
-        Contract.objects.filter(pk=contract.pk).update(stage=Contract.Stage.SIGNED)
+        # SENT, not SIGNED: since TASK-UZK-039 a signed contract still moves.
+        Contract.objects.filter(pk=contract.pk).update(stage=Contract.Stage.SENT)
 
         response = self.client.post(
             page("kelishinlingan-holat", contract.pk), {"holat": self.second.pk}, follow=True
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "o`zgartirib bo`lmaydi")
+        self.assertContains(response, "tasdiqlashda turibdi")
 
     def test_a_specialist_is_refused_somebody_elses_contract(self) -> None:
         other = make_user("page.other", user_type=KATTA_MUTAXASIS)

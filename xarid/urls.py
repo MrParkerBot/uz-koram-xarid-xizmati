@@ -49,6 +49,7 @@ accepted = require_page_permission("qabul-arizalar")
 assigned = require_page_permission("tayinlangan")
 contracts = require_page_permission("kelishinlingan")
 workload = require_page_permission("xodimlar-yuklamasi")
+signed = require_page_permission("tuzilgan")
 departments_report = require_page_permission("bolimlar")
 products_report = require_page_permission("mahsulotlar")
 category_report = require_page_permission("mahsulot-tur")
@@ -203,7 +204,17 @@ urlpatterns = [
         name="mahsulotlar-eksport",
     ),
     # The pages that are still the supplied prototype.
-    prototype_route("tuzilgan/", "tuzilgan"),
+    path("tuzilgan/", signed(views.signed_contracts_list), name="tuzilgan"),
+    path(
+        "tuzilgan/<int:pk>/tasdiqlash/",
+        signed(views.contract_accept),
+        name="tuzilgan-tasdiqlash",
+    ),
+    path(
+        "tuzilgan/<int:pk>/inkor/",
+        signed(views.contract_reject),
+        name="tuzilgan-inkor",
+    ),
     prototype_route("integration/", "integration"),
     prototype_route("logs/", "logs"),
     # Yuklab olish: each list page's table as Excel or PDF, under the page's

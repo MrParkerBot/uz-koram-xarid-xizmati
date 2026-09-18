@@ -154,8 +154,33 @@ def acts_on_own_work_only(user: AbstractBaseUser | AnonymousUser | None) -> bool
     return has_user_type(user, (KATTA_MUTAXASIS,))
 
 
-def contract_mover(user) -> Callable[[object], bool]:
-    """A test of whether this person may move a contract, asked once.
+def decides_on_contracts(user) -> bool:
+    """Whether this person is the one who approves a contract.
+
+    DEC-013 makes Admin the Xarid bo`lim boshlig`i, which is the department
+    head REQ-SHARTNOMA-002 gives the decision to. Four user types may open the
+    Tuzilgan page and one of them decides, so the route asks this as well as
+    the template: a page-level permission on its own would let a Menejer
+    approve a contract that binds the company.
+
+    Args:
+        user: the person asking.
+
+    Returns:
+        Whether the decision is theirs to make.
+    """
+    return has_user_type(user, (ADMIN,))
+
+
+def own_contract_test(user) -> Callable[[object], bool]:
+    """A test of whether a contract is this person's work, asked once.
+
+    Named for the rule rather than for the first control that needed it. The
+    status drop-down and the send control both ask it, and they are about to
+    stop being interchangeable: TASK-UZK-040 restricts editing to the Edit
+    Permission holder while sending stays with the specialist, so a template
+    asking a status-shaped question about a send would then be either wrong
+    or accidentally right, with nothing to say which.
 
     acts_on_own_work_only reads the person's user type, which is a query. A
     page of contracts asking it per row pays that per row, so the page asks
@@ -196,7 +221,7 @@ def held_contract(user, contract) -> bool:
     Returns:
         Whether the move is theirs to make.
     """
-    return contract_mover(user)(contract)
+    return own_contract_test(user)(contract)
 
 
 # ---------------------------------------------------------------------------

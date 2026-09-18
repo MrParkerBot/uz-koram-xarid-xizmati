@@ -191,6 +191,25 @@ class SendFromThePageTests(SignedInAdminTestCase):
         self.assertEqual(contract.stage, Contract.Stage.AGREED)
         self.assertContains(response, "sizning ishingizga tegishli emas")
 
+    def test_both_controls_ask_the_same_rule(self) -> None:
+        """The status drop-down and the send control are one question.
+
+        TASK-UZK-040 will restrict editing to the Edit Permission holder while
+        sending stays with the specialist, so the day they diverge this test
+        is what says the template was asking on purpose.
+        """
+        other = make_user("controls.other", user_type=KATTA_MUTAXASIS)
+        mine = self.a_contract_on_the_page()
+        theirs = a_contract(an_assigned_application(self.admin, other), other)
+        self.client.force_login(self.specialist)
+
+        response = self.client.get(page("kelishinlingan"))
+
+        for route in ("kelishinlingan-holat", "kelishinlingan-yuborish"):
+            with self.subTest(route=route):
+                self.assertContains(response, page(route, mine.pk))
+                self.assertNotContains(response, page(route, theirs.pk))
+
     def test_the_action_refuses_a_get(self) -> None:
         contract = self.a_contract_on_the_page()
 

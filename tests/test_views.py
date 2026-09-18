@@ -764,7 +764,6 @@ class PrototypePageTests(SignedInAdminTestCase):
     def test_every_page_script_a_template_asks_for_exists(self) -> None:
         for script in (
             "dashboard",
-            "tuzilgan",
             "integration",
             "logs",
         ):
