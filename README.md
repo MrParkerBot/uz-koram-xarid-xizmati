@@ -147,9 +147,10 @@ narrows by, and the two `dan` and `gacha` inputs bound it inclusively: a
 start alone means from that day onward, an end alone means up to and
 including that day, and neither leaves the rows unnarrowed by date. A date
 that cannot be read, and a start later than the end, are refused with a
-message and no period is applied. The `Tartib` drop-down orders the page by
-that same date, newest first by default, and choosing the other direction
-reverses the rows.
+message and no period is applied - the refused dates stay in the bar, and
+`Tozalash` empties it. The `Tartib` drop-down orders the page by that same
+date, newest first by default, and choosing the other direction reverses the
+rows.
 
 The Excel and PDF buttons beside the bar download the table as the page
 shows it, filtered or whole, in the order it shows it, one row per order

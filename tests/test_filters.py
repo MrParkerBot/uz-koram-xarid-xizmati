@@ -444,6 +444,37 @@ class PeriodAndOrderPageTests(SignedInAdminTestCase):
         self.assertContains(response, 'value="2026-02-01"')
         self.assertContains(response, "Tozalash")
 
+    def test_a_refused_period_can_still_be_cleared(self) -> None:
+        arrived_on(date(2026, 2, 20))
+
+        response = self.client.get(
+            page("kelib-arizalar"), {"dan": "2026-03-01", "gacha": "2026-01-01"}
+        )
+
+        self.assertContains(response, REFUSED_INVERTED_PERIOD)
+        self.assertContains(response, "Tozalash")
+
+    def test_an_unreadable_date_can_still_be_cleared(self) -> None:
+        arrived_on(date(2026, 2, 20))
+
+        response = self.client.get(page("kelib-arizalar"), {"dan": "kecha"})
+
+        self.assertContains(response, REFUSED_UNREADABLE_PERIOD)
+        self.assertContains(response, "Tozalash")
+
+    def test_an_untouched_page_offers_nothing_to_clear(self) -> None:
+        arrived_on(date(2026, 2, 20))
+
+        response = self.client.get(page("kelib-arizalar"))
+
+        self.assertNotContains(response, "Tozalash")
+
+    def test_the_date_inputs_are_named_after_the_page_bounds(self) -> None:
+        response = self.client.get(page("kelib-arizalar"))
+
+        self.assertContains(response, 'name="dan" id="f-dan"')
+        self.assertContains(response, 'name="gacha" id="f-gacha"')
+
     def test_the_incoming_page_refuses_an_inverted_period_with_a_message(self) -> None:
         application = arrived_on(date(2026, 2, 20))
 
@@ -473,7 +504,13 @@ class PeriodAndOrderPageTests(SignedInAdminTestCase):
         self.assertLess(ascending.index(older.ariza_raqami), ascending.index(newer.ariza_raqami))
 
     def test_every_list_page_renders_the_period_and_the_ordering(self) -> None:
-        for page_name in ("kelib-arizalar", "qabul-arizalar", "tayinlangan", "xarid-ariza"):
+        for page_name in (
+            "kelib-arizalar",
+            "qabul-arizalar",
+            "tayinlangan",
+            "kelishinlingan",
+            "xarid-ariza",
+        ):
             with self.subTest(page=page_name):
                 response = self.client.get(page(page_name))
 
