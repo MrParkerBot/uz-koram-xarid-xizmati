@@ -28,9 +28,11 @@ from django.db.models import Count, Q
 from xarid.exports import ExportColumn, TableExport
 from xarid.filters import DatePeriod
 from xarid.models import (
+    Contract,
     Department,
     MahsulotTuri,
     ShartnomaStatus,
+    Supplier,
     assignable_specialists,
 )
 
@@ -424,3 +426,83 @@ def category_purchasing(period: DatePeriod | None, chosen_category: str = "") ->
         for category in counted
     )
     return Report(columns=columns, rows=rows, totals=totals_of(columns, rows))
+
+
+# ---------------------------------------------------------------------------
+# The dashboard indicators (section 2, REQ-DASH-001 to REQ-DASH-004)
+# ---------------------------------------------------------------------------
+
+# How many percent make a full progress bar. A supplier may hold more than one
+# contract, so a percentage above this is possible and is reported as it is;
+# only the bar stops at its own end.
+FULL_BAR = 100
+
+
+@dataclass(frozen=True)
+class Indicator:
+    """One counted figure and what it comes to against the supplier count.
+
+    Attributes:
+        count: how many contracts were counted.
+        of: what they were measured against - the supplier count.
+        percentage: count as a percentage of `of`, to the nearest whole
+            percent, and zero when there is nothing to measure against.
+    """
+
+    count: int
+    of: int
+    percentage: int
+
+    @property
+    def bar_width(self) -> int:
+        """How much of the card's progress bar to fill, which cannot overflow."""
+        return min(self.percentage, FULL_BAR)
+
+
+@dataclass(frozen=True)
+class DashboardIndicators:
+    """The three contract indicators the dashboard opens with."""
+
+    supplier_count: int
+    created: Indicator
+    completed: Indicator
+
+
+def against(count: int, supplier_count: int) -> Indicator:
+    """One indicator: a count, and what it is as a percentage of the suppliers.
+
+    A department with no suppliers on file is not an error - it is a database
+    nobody has filled in yet - so the percentage is zero rather than a
+    division.
+    """
+    percentage = round(count * 100 / supplier_count) if supplier_count else 0
+    return Indicator(count=count, of=supplier_count, percentage=percentage)
+
+
+def dashboard_indicators() -> DashboardIndicators:
+    """How many suppliers there are, and how much of that has contracts.
+
+    The specification asks for the created and the completed contracts as
+    percentages of the supplier count (REQ-DASH-003, REQ-DASH-004), which is
+    a ratio rather than a share: one supplier may hold several contracts, so
+    a figure above 100% means exactly that and is not clamped.
+
+    Deleted suppliers are left out. DEC-009 deletes a master data row by
+    deactivating it, so an active row is a supplier the department still has.
+
+    Completed means the status marked as the completed state on the Shartnoma
+    Status page; when no status is marked, nothing counts as completed.
+
+    Returns:
+        The supplier count and the two indicators measured against it.
+    """
+    supplier_count = Supplier.objects.active().count()
+    completed_status = ShartnomaStatus.completed_status()
+    contracts = Contract.objects.all()
+    completed_count = contracts.filter(status=completed_status).count() if completed_status else 0
+
+    return DashboardIndicators(
+        supplier_count=supplier_count,
+        created=against(contracts.count(), supplier_count),
+        completed=against(completed_count, supplier_count),
+    )

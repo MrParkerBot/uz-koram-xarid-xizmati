@@ -477,11 +477,44 @@ class ShartnomaStatus(OrderedStatus):
     """
 
     name = models.CharField("Status Nomi", max_length=MASTER_DATA_NAME_LENGTH, unique=True)
+    is_completed = models.BooleanField(
+        "Tugallangan holat",
+        default=False,
+        help_text=(
+            "A contract in this status is finished, and the dashboard counts "
+            "it as completed. The statuses are editable (DEC-010), so which "
+            "one means completed is marked here rather than named in the "
+            "code. Only one status may hold the marker."
+        ),
+    )
 
     class Meta:
         ordering = ("position", "name")
         verbose_name = "Shartnoma Status"
         verbose_name_plural = "Shartnoma Statuslari"
+
+    def save(self, *args, **kwargs) -> None:
+        """Save, keeping the completed marker on at most one status.
+
+        Marking this row completed takes the marker off whichever row held it,
+        so the dashboard's completed figure always has one definition however
+        the page is used.
+        """
+        super().save(*args, **kwargs)
+        if self.is_completed:
+            type(self).objects.exclude(pk=self.pk).filter(is_completed=True).update(
+                is_completed=False
+            )
+
+    @classmethod
+    def completed_status(cls) -> ShartnomaStatus | None:
+        """The status marked as the completed state, or None when none is.
+
+        None rather than an error: master data may be edited into a state
+        where nothing is marked, and the dashboard then reports no completed
+        contracts instead of failing to render.
+        """
+        return cls.objects.filter(is_completed=True).first()
 
 
 class MahsulotTuri(MasterDataRecord):

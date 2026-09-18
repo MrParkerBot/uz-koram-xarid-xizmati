@@ -99,6 +99,7 @@ from xarid.permissions import (
 )
 from xarid.reports import (
     category_purchasing,
+    dashboard_indicators,
     department_purchasing,
     report_export,
     staff_workload,
@@ -111,19 +112,30 @@ ASSIGNED_TEMPLATE = "xarid/pages/tayinlangan.html"
 AGREED_CONTRACTS_TEMPLATE = "xarid/pages/kelishinlingan.html"
 PURCHASE_TEMPLATE = "xarid/pages/xarid-ariza.html"
 
-# The pages that are still the supplied prototype: reports, the drafted
-# contracts list and the two system pages. Each is a template with no data
-# behind it yet, served under its own permission. The dashboard is index.html.
+# The pages that are still the supplied prototype: the two system pages. Each
+# is a template with no data behind it yet, served under its own permission.
 PROTOTYPE_PAGE_TEMPLATES: dict[str, str] = {
-    "dashboard": "xarid/index.html",
     "integration": "xarid/pages/integration.html",
     "logs": "xarid/pages/logs.html",
 }
+
+DASHBOARD_TEMPLATE = "xarid/index.html"
 
 
 def prototype_page(page_name: str) -> Callable[..., HttpResponse]:
     """A view rendering one prototype page by its page name."""
     return TemplateView.as_view(template_name=PROTOTYPE_PAGE_TEMPLATES[page_name])
+
+
+def dashboard(request: HttpRequest) -> HttpResponse:
+    """Asosiy Panel: the department's position at a glance (section 2).
+
+    Only the three contract indicators are counted here (REQ-DASH-001 to
+    REQ-DASH-004). The spendings figures, the top suppliers list, the category
+    breakdown and the activity list are still the supplied prototype's own
+    numbers, and are UZK-049, UZK-051, UZK-057 and UZK-052.
+    """
+    return render(request, DASHBOARD_TEMPLATE, {"indicators": dashboard_indicators()})
 
 
 @login_required

@@ -173,14 +173,14 @@ class ArizaStatusForm(MasterDataForm):
 
 
 class ShartnomaStatusForm(MasterDataForm):
-    """Capture one contract status."""
+    """Capture one contract status, including which one means completed."""
 
     position = position_form_field()
     category_number = category_number_field()
 
     class Meta:
         model = ShartnomaStatus
-        fields = ("name", "badge_colour", "position", "category_number")
+        fields = ("name", "badge_colour", "position", "category_number", "is_completed")
 
 
 class MahsulotTuriForm(MasterDataForm):

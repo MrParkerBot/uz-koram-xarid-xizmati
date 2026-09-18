@@ -59,7 +59,7 @@ urlpatterns = [
     # Where signing in lands: the first page the user's type may open.
     path("kirish/", views.landing_page, name="landing"),
     # The dashboard answers at the site root.
-    prototype_route("", "dashboard"),
+    path("", require_page_permission("dashboard")(views.dashboard), name="dashboard"),
     # The Users page and everything it does answer to the page's permission.
     path("users/", users(views.user_list), name="users"),
     path("users/add/", users(views.user_create), name="user-create"),
