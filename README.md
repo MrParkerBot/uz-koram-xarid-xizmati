@@ -312,6 +312,42 @@ Nothing is notified. The requirement names no notification, and
 `Notification`'s constraint names two kinds of record, neither of them a
 contract - a third would be building TASK-UZK-054's table early.
 
+## The department head's decision
+
+`Tuzilgan Shartnomalar` is where the contracts sent for approval arrive. Four
+user types may open it and **one of them decides**: DEC-013 makes Admin the
+Xarid bo`lim boshlig`i, the department head REQ-SHARTNOMA-002 gives the
+decision to. The controls render for that one and **the route asks again** - a
+page-level permission on its own would let a Menejer approve a contract that
+binds the company.
+
+**Accepting** marks the contract approved and records who and when.
+REQ-SHARTNOMA-002 says an accepted contract goes to the next department and
+DEC-028 says there is no such department, so nothing is built for it: the
+contract continues through its status chain here, and the gap stays visible
+rather than being filled with an invented integration. Accepting does not move
+the status either - that chain is something a person chooses.
+
+**Rejecting** demands a comment, refused in the model and not only on the page,
+because a page is one way in. Where a rejection lands is the half worth
+stating: *returned back* is not a stage of its own. It is the contract on the
+`Kelishinlingan` page again, with its comment in the column REQ-SHARTNOMA-004
+gives it and the `Re-Send` control DEC-024 names.
+
+### Two questions that look like one
+
+`EDITABLE_STAGES` says whether a contract's **terms** may change.
+`MOVABLE_STAGES` says whether its **progress** may be reported. They were one
+constant until this task, and sharing them would have frozen an approved
+contract's status forever - so DEC-010's seeded *Yetkazib berilgan*, which
+happens after a contract is signed, could never be reached, and DEC-028's
+"continues through its status chain" would have been impossible.
+
+`SENT` is the stage that refuses a status move: a contract awaiting a decision
+must not change underneath the person making it. Which is why the status
+control lives on both pages, and why the status route returns to whichever one
+it was used from.
+
 ## Attachments
 
 Application PDFs live under `ATTACHMENT_ROOT` (`attachments/`, gitignored),
