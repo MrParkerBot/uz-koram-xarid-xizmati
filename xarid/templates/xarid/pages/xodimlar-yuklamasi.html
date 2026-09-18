@@ -1,5 +1,5 @@
 {% extends "xarid/base.html" %}
-{% from "xarid/_filters.html" import filter_bar with context %}
+{% from "xarid/_filters.html" import filter_bar, export_links with context %}
 {#
 The Xodimlar Yuklamasi report: a row per specialist, a counter per active
 contract status and a totals row (REQ-YUKLAMA-002). The status columns are
@@ -31,7 +31,10 @@ generated from the master data, so adding a status adds a column (DEC-010).
     </div>
 
     <div class="panel">
-      <div class="toolbar">{{ filter_bar(table_filter, url('xarid:xodimlar-yuklamasi')) }}</div>
+      <div class="toolbar">{{ filter_bar(table_filter, url('xarid:xodimlar-yuklamasi')) }}<div class="toolbar-group">
+          {{ export_links('xodimlar-yuklamasi', table_filter) }}
+        </div>
+      </div>
       <div class="table-wrap">
         <table class="table-app" id="yukl-table">
           <thead><tr>

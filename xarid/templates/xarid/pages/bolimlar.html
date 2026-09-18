@@ -1,5 +1,5 @@
 {% extends "xarid/base.html" %}
-{% from "xarid/_filters.html" import filter_bar with context %}
+{% from "xarid/_filters.html" import filter_bar, export_links with context %}
 {#
 The Korhona Xaridi | Bo'limlar report: a row per department, a counter per
 active contract status and a totals row (REQ-XARID-001). The status columns
@@ -17,7 +17,10 @@ are generated from the master data, so adding a status adds a column
     </div>
 
     <div class="panel">
-      <div class="toolbar">{{ filter_bar(table_filter, url('xarid:bolimlar')) }}</div>
+      <div class="toolbar">{{ filter_bar(table_filter, url('xarid:bolimlar')) }}<div class="toolbar-group">
+          {{ export_links('bolimlar', table_filter) }}
+        </div>
+      </div>
       <div class="table-wrap">
         <table class="table-app">
           <thead><tr>

@@ -13,17 +13,26 @@ from pypdf import PdfReader
 from tests.support import (
     SignedInAdminTestCase,
     a_category,
+    a_contract,
     a_department,
     a_purchase_application,
     a_supplier,
     an_application,
     an_assigned_application,
     arrived_on,
+    assigned_on,
     make_user,
     page,
 )
 from xarid.exports import EXCEL_CONTENT_TYPE, PDF_CONTENT_TYPE
-from xarid.models import KATTA_MUTAXASIS, USERS, Contract
+from xarid.models import (
+    KATTA_MUTAXASIS,
+    MENEJER,
+    USERS,
+    Application,
+    Contract,
+    ShartnomaStatus,
+)
 
 
 def workbook_rows(response) -> list[list[object]]:
@@ -33,6 +42,28 @@ def workbook_rows(response) -> list[list[object]]:
 
 def pdf_text(response) -> str:
     return "\n".join(page.extract_text() for page in PdfReader(BytesIO(response.content)).pages)
+
+
+def page_width(response) -> float:
+    """The width of the first page of a downloaded PDF, in points."""
+    return float(PdfReader(BytesIO(response.content)).pages[0].mediabox.width)
+
+
+def drawn_width(response) -> float:
+    """How far right anything is actually drawn on the first page.
+
+    Reportlab will happily draw a table wider than the paper, and the text
+    still extracts, so a download can read as complete while its last columns
+    are off the page. This is what says whether it is really there.
+    """
+    first = PdfReader(BytesIO(response.content)).pages[0]
+    positions: list[float] = []
+    first.extract_text(
+        visitor_text=lambda text, cm, tm, font, size: (
+            positions.append(tm[4]) if text.strip() else None
+        )
+    )
+    return max(positions, default=0.0)
 
 
 class ExportRouteTests(SignedInAdminTestCase):
@@ -253,3 +284,170 @@ class ExportPeriodTests(SignedInAdminTestCase):
 
         self.assertContains(response, "dan=2026-02-01")
         self.assertContains(response, "tartib=osish")
+
+
+class ReportExportTests(SignedInAdminTestCase):
+    """The reports download what the page shows (TASK-UZK-065).
+
+    REQ-YUKLAMA-001 and REQ-XARID-001 both end with a download button for all
+    and filtered data in Excel and PDF.
+    """
+
+    REPORTS = ("xodimlar-yuklamasi", "bolimlar")
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.specialist = make_user(
+            "export.specialist",
+            user_type=KATTA_MUTAXASIS,
+            first_name="Dilnoza",
+            last_name="Yusupova",
+        )
+        cls.texnik = a_department("Texnik bo`lim")
+        cls.statuses = tuple(ShartnomaStatus.objects.active())
+
+    def test_both_reports_download_in_both_formats(self) -> None:
+        for report in self.REPORTS:
+            with self.subTest(report=report):
+                excel = self.client.get(page(f"{report}-eksport", "xlsx"))
+                pdf = self.client.get(page(f"{report}-eksport", "pdf"))
+
+                self.assertEqual(excel.status_code, 200)
+                self.assertEqual(excel["Content-Type"], EXCEL_CONTENT_TYPE)
+                self.assertEqual(pdf.status_code, 200)
+                self.assertEqual(pdf["Content-Type"], PDF_CONTENT_TYPE)
+
+    def test_the_headers_are_the_active_statuses_in_their_order(self) -> None:
+        rows = workbook_rows(self.client.get(page("xodimlar-yuklamasi-eksport", "xlsx")))
+
+        expected = ["#", "Xodim", "Telefon", "Xarid topshiriqlari"]
+        expected += [status.name for status in ShartnomaStatus.objects.active()]
+        self.assertEqual(rows[0], expected)
+
+    def test_a_new_status_adds_a_column_to_the_file(self) -> None:
+        before = workbook_rows(self.client.get(page("bolimlar-eksport", "xlsx")))[0]
+
+        ShartnomaStatus.objects.create(name="Tekshiruvda", badge_colour="blue")
+
+        after = workbook_rows(self.client.get(page("bolimlar-eksport", "xlsx")))[0]
+        self.assertEqual(len(after), len(before) + 1)
+        self.assertIn("Tekshiruvda", after)
+
+    def test_the_workload_file_holds_a_row_per_specialist_and_the_totals(self) -> None:
+        a_contract(
+            an_assigned_application(self.admin, self.specialist),
+            self.admin,
+            status=self.statuses[0],
+        )
+
+        rows = workbook_rows(self.client.get(page("xodimlar-yuklamasi-eksport", "xlsx")))
+
+        self.assertEqual(rows[1][1], "Dilnoza Yusupova")
+        self.assertEqual(rows[1][3], 1)
+        self.assertEqual(rows[-1][1], "Jami:")
+        # The totals row has no ordinal; an empty cell reads back as None.
+        self.assertIsNone(rows[-1][0])
+
+    def test_the_totals_row_is_the_sum_of_each_column(self) -> None:
+        for _ in range(2):
+            a_contract(
+                an_assigned_application(self.admin, self.specialist),
+                self.admin,
+                status=self.statuses[0],
+            )
+
+        rows = workbook_rows(self.client.get(page("xodimlar-yuklamasi-eksport", "xlsx")))
+
+        body, totals = rows[1:-1], rows[-1]
+        for column in range(3, len(rows[0])):
+            with self.subTest(column=rows[0][column]):
+                self.assertEqual(totals[column], sum(row[column] for row in body))
+        self.assertEqual(totals[3], 2)
+
+    def test_a_download_holds_only_the_rows_inside_the_period(self) -> None:
+        assigned_on(date(2026, 2, 10), self.admin, self.specialist)
+        assigned_on(date(2026, 5, 10), self.admin, self.specialist)
+
+        rows = workbook_rows(
+            self.client.get(
+                page("xodimlar-yuklamasi-eksport", "xlsx"),
+                {"dan": "2026-02-01", "gacha": "2026-02-28"},
+            )
+        )
+
+        self.assertEqual(rows[-1][3], 1)
+
+    def test_a_download_narrowed_to_one_department_holds_that_row_only(self) -> None:
+        moliya = a_department("Moliya bo" + chr(96) + "limi")
+        an_application(department=self.texnik)
+        an_application(department=moliya)
+
+        rows = workbook_rows(
+            self.client.get(page("bolimlar-eksport", "xlsx"), {"bolim": moliya.pk})
+        )
+
+        names = [row[1] for row in rows[1:-1]]
+        self.assertEqual(names, ["Moliya bo" + chr(96) + "limi"])
+        self.assertEqual(rows[-1][2], 1)
+
+    def test_a_report_with_no_rows_still_downloads_its_headers(self) -> None:
+        Application.objects.all().delete()
+        self.texnik.is_active = False
+        self.texnik.save(update_fields=["is_active"])
+
+        response = self.client.get(page("bolimlar-eksport", "xlsx"))
+        rows = workbook_rows(response)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(rows[0][0], "#")
+        self.assertNotIn("Jami:", [row[1] for row in rows[1:]])
+
+    def test_the_pdf_holds_the_rows_too(self) -> None:
+        an_application(department=self.texnik)
+
+        text = pdf_text(self.client.get(page("bolimlar-eksport", "pdf")))
+
+        self.assertIn("Jami:", text)
+
+    def test_a_report_wider_than_the_page_is_narrowed_to_fit_it(self) -> None:
+        """DEC-010 lets anybody add a status, and a PDF cannot scroll.
+
+        Asserting the text is present is not enough: reportlab draws a table
+        at its natural width and pypdf reads that text back happily, off the
+        page and all. What matters is where it was drawn.
+        """
+        an_application(department=self.texnik)
+        for number in range(25):
+            ShartnomaStatus.objects.create(name=f"Holat {number}", badge_colour="blue")
+
+        response = self.client.get(page("bolimlar-eksport", "pdf"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(drawn_width(response), page_width(response))
+
+    def test_a_report_that_fits_is_not_narrowed(self) -> None:
+        an_application(department=self.texnik)
+
+        response = self.client.get(page("bolimlar-eksport", "pdf"))
+
+        self.assertLessEqual(drawn_width(response), page_width(response))
+        self.assertIn("Jami:", pdf_text(response))
+
+    def test_a_type_the_matrix_refuses_cannot_download_either(self) -> None:
+        manager = make_user("export.manager", user_type=MENEJER)
+        self.client.force_login(manager)
+
+        for report in self.REPORTS:
+            with self.subTest(report=report):
+                response = self.client.get(page(f"{report}-eksport", "xlsx"))
+
+                self.assertEqual(response.status_code, 403)
+
+    def test_the_page_offers_the_download_links(self) -> None:
+        for report in self.REPORTS:
+            with self.subTest(report=report):
+                response = self.client.get(page(report))
+
+                self.assertContains(response, page(f"{report}-eksport", "xlsx"))
+                self.assertContains(response, page(f"{report}-eksport", "pdf"))

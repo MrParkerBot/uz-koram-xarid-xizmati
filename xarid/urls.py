@@ -162,6 +162,18 @@ urlpatterns = [
         departments_report(views.department_purchasing_report),
         name="bolimlar",
     ),
+    # Each report downloads under its own page's permission, named so the
+    # shared export_links macro reverses it (REQ-YUKLAMA-001, REQ-XARID-001).
+    path(
+        "xodimlar-yuklamasi/eksport/<str:file_format>/",
+        workload(views.staff_workload_export),
+        name="xodimlar-yuklamasi-eksport",
+    ),
+    path(
+        "bolimlar/eksport/<str:file_format>/",
+        departments_report(views.department_purchasing_export),
+        name="bolimlar-eksport",
+    ),
     # The pages that are still the supplied prototype.
     prototype_route("tuzilgan/", "tuzilgan"),
     prototype_route("mahsulot-tur/", "mahsulot-tur"),
