@@ -765,7 +765,6 @@ class PrototypePageTests(SignedInAdminTestCase):
         for script in (
             "dashboard",
             "tuzilgan",
-            "xodimlar-yuklamasi",
             "mahsulot-tur",
             "mahsulotlar",
             "integration",

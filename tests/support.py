@@ -11,6 +11,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 from datetime import date, datetime, time
+from decimal import Decimal
 from io import BytesIO
 
 from django.contrib.auth import get_user_model
@@ -26,9 +27,11 @@ from xarid.models import (
     ADMIN,
     Application,
     ArizaStatus,
+    Contract,
     Department,
     MahsulotTuri,
     PurchaseApplication,
+    ShartnomaStatus,
     Supplier,
     UserType,
     assign_user_type,
@@ -159,6 +162,49 @@ def an_assigned_application(
     application = an_accepted_application(assigned_by, **fields)
     application.assign(by=assigned_by, specialist=specialist)
     return application
+
+
+def assigned_on(
+    day: date,
+    assigned_by: AbstractBaseUser,
+    specialist: AbstractBaseUser,
+    **fields,
+) -> Application:
+    """An application assigned to a specialist on a chosen local day.
+
+    The assignment date is written by assign(), so it is rewritten in the
+    database afterwards rather than passed in.
+    """
+    application = an_assigned_application(assigned_by, specialist, **fields)
+    moment = timezone.make_aware(datetime.combine(day, time(12, 0)))
+    Application.objects.filter(pk=application.pk).update(tayinlangan_sana=moment)
+    application.refresh_from_db()
+    return application
+
+
+def a_contract(
+    application: Application,
+    created_by: AbstractBaseUser,
+    *,
+    status: ShartnomaStatus | None = None,
+    supplier: Supplier | None = None,
+) -> Contract:
+    """One contract of one priced row, raised against an application."""
+    return Contract.raise_contract(
+        items=[
+            {
+                "buyurtma_nomi": "Bolt M12x50",
+                "part_number": "",
+                "buyurtma_soni": Decimal("1"),
+                "olchov_birligi": "ta",
+                "narxi": Decimal("10"),
+            }
+        ],
+        created_by=created_by,
+        application=application,
+        supplier=supplier or a_supplier(),
+        status=status,
+    )
 
 
 def a_purchase_application(

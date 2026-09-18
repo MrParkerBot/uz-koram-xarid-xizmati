@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import date
 from urllib.parse import urlencode
 
-from django.db.models import F, QuerySet
+from django.db.models import F, Q, QuerySet
 from django.db.models.expressions import OrderBy
 
 # The query string name of the ordering drop-down, which every page shares.
@@ -202,17 +202,38 @@ class DatePeriod:
             bounds[self.column.end_parameter] = self.end.isoformat()
         return bounds
 
+    def as_condition(self, prefix: str = "") -> Q:
+        """The period as a condition, for a filter or a counted relation.
+
+        A report counts rows across a relation - "this employee's
+        applications inside the period" - where the period cannot be a
+        queryset filter, because filtering the employees is not what is
+        meant. The prefix is the ORM path from the model being counted to
+        the date, such as "assigned_applications__"; it is empty when the
+        rows themselves carry it.
+
+        Args:
+            prefix: the ORM path to prepend to the date lookup.
+
+        Returns:
+            The condition, or an empty Q when no usable period was chosen.
+        """
+        if not self.is_active:
+            return Q()
+
+        lookup = f"{prefix}{self.column.comparison_lookup}"
+        condition = Q()
+        if self.start is not None:
+            condition &= Q(**{f"{lookup}__gte": self.start})
+        if self.end is not None:
+            condition &= Q(**{f"{lookup}__lte": self.end})
+        return condition
+
     def apply(self, rows: QuerySet) -> QuerySet:
         """The rows dated inside the period, or every row when it is not usable."""
         if not self.is_active:
             return rows
-
-        narrowed = rows
-        if self.start is not None:
-            narrowed = narrowed.filter(**{f"{self.column.comparison_lookup}__gte": self.start})
-        if self.end is not None:
-            narrowed = narrowed.filter(**{f"{self.column.comparison_lookup}__lte": self.end})
-        return narrowed
+        return rows.filter(self.as_condition())
 
 
 class TableSort:

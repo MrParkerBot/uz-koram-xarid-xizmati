@@ -48,6 +48,7 @@ incoming = require_page_permission("kelib-arizalar")
 accepted = require_page_permission("qabul-arizalar")
 assigned = require_page_permission("tayinlangan")
 contracts = require_page_permission("kelishinlingan")
+workload = require_page_permission("xodimlar-yuklamasi")
 purchases = require_page_permission("xarid-ariza")
 
 urlpatterns = [
@@ -149,9 +150,14 @@ urlpatterns = [
         purchases(views.purchase_application_original_pdf),
         name="xarid-ariza-asl-pdf",
     ),
+    # Hisobotlar: the reports that read the database.
+    path(
+        "xodimlar-yuklamasi/",
+        workload(views.staff_workload_report),
+        name="xodimlar-yuklamasi",
+    ),
     # The pages that are still the supplied prototype.
     prototype_route("tuzilgan/", "tuzilgan"),
-    prototype_route("xodimlar-yuklamasi/", "xodimlar-yuklamasi"),
     prototype_route("bolimlar/", "bolimlar"),
     prototype_route("mahsulot-tur/", "mahsulot-tur"),
     prototype_route("mahsulotlar/", "mahsulotlar"),
