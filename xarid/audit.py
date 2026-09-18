@@ -22,16 +22,33 @@ from django.contrib.auth.models import AbstractBaseUser
 from django.db import models
 from django.utils import timezone
 
-from xarid.models import AuditEntry, department_of
+from xarid.models import LABEL_LENGTH, AuditEntry, department_of
 
 # What an approval decided, for the log's own column.
 APPROVED = "approved"
 REFUSED = "refused"
 
 
+# What the log calls a model whose own verbose name would not do. Django's
+# User answers with whatever its translation catalogue holds - "foydalanuvchi"
+# under uz, "user" under en - and a column UZK-053 filters by cannot have its
+# values change with a setting.
+FORM_NAMES: dict[str, str] = {
+    "auth.user": "Foydalanuvchi",
+}
+
+
 def form_name_of(record: models.Model) -> str:
-    """What kind of record this is, as the log's Forma nomi column prints it."""
-    return str(record._meta.verbose_name)
+    """What kind of record this is, as the log's Forma nomi column prints it.
+
+    The application's own models answer with the Uzbek Meta name they were
+    given. A model from Django itself answers through its translation
+    catalogue, which would make the stored value depend on LANGUAGE_CODE at
+    the moment of writing, so those are named here instead.
+    """
+    named = FORM_NAMES.get(record_type_of(record))
+
+    return named if named else str(record._meta.verbose_name)
 
 
 def record_type_of(record: models.Model) -> str:
@@ -61,7 +78,7 @@ def write(
         actor=by,
         actor_department=department_of(by),
         form_name=form_name_of(record),
-        record_label=str(record),
+        record_label=str(record)[:LABEL_LENGTH],
         record_type=record_type_of(record),
         record_id=record.pk,
         action=action,
@@ -94,17 +111,26 @@ def record_deleted(by: AbstractBaseUser, record: models.Model) -> AuditEntry:
 
 
 def entry_for(record: models.Model) -> AuditEntry | None:
-    """The entry left by this record's creation, or None when it has none.
+    """The entry a decision about this record should complete, or None.
+
+    The oldest entry that is still waiting for one: a record is created once,
+    and its approval belongs to that row.
+
+    An entry that already carries a decision is passed over. DEC-016 gives a
+    purchase application two approvals - the department head, then the
+    director - and REQ-LOG-001's columns hold one approver, so the second
+    decision cannot share the first's row without erasing it. It gets a row
+    of its own instead, and the log keeps both names.
 
     None for a record made before this log existed, or by a path that does
-    not write to it. The oldest matching entry, because a record is created
-    once and the approval belongs to that row.
+    not write to it, or one whose creation entry is already decided.
     """
     return (
         AuditEntry.objects.filter(
             record_type=record_type_of(record),
             record_id=record.pk,
             action=AuditEntry.Action.CREATED,
+            approved_at__isnull=True,
         )
         .order_by("created_at", "id")
         .first()

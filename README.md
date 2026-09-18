@@ -71,8 +71,12 @@ a dash, not nought days.
   department, the comment and the time, which is the row section 10's columns
   describe. Entries are kept indefinitely and the application builds no way to
   edit or delete one (DEC-029); the Django admin registers the table for
-  reading only. Writes made through the admin, a shell or a migration are not
-  logged. The Logs page that reads this table is UZK-053.
+  reading only, and deleting a user there is now refused while they hold
+  entries. A record approved twice - a purchase request goes to the
+  department head and then to the director (DEC-016) - gets a second entry
+  rather than having the first approver overwritten, because the columns
+  hold one approver. Writes made through the admin, a shell or a migration
+  are not logged. The Logs page that reads this table is UZK-053.
 - **Drafted contracts and 1C integration** are still the supplied prototype
   pages with sample data.
 

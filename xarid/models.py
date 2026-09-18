@@ -2419,6 +2419,13 @@ class Notification(models.Model):
 # ---------------------------------------------------------------------------
 
 
+# How much of a record's label the log keeps. Long enough for every number,
+# name and title the application produces; a label longer than this is cut
+# rather than refused, because an audit entry is worth more than the tail of
+# a name.
+LABEL_LENGTH = 255
+
+
 class AuditEntry(models.Model):
     """One thing the application did to one record, and who approved it.
 
@@ -2471,7 +2478,7 @@ class AuditEntry(models.Model):
     )
     record_label = models.CharField(
         "Yozuv",
-        max_length=255,
+        max_length=LABEL_LENGTH,
         help_text="What the record printed as when this happened.",
     )
     record_type = models.CharField(
