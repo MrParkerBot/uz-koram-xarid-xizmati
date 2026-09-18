@@ -1,0 +1,62 @@
+{% extends "xarid/base.html" %}
+{% from "xarid/_filters.html" import filter_bar with context %}
+{#
+Top Yetkazib beruvchilar (REQ-DASH-005, REQ-DASH-006). The page the dashboard
+panel links to: every firm ranked by what its contracts come to inside the
+period (DEC-025), narrowed by the firm's Daraja.
+
+A firm with no contracts in the period is not listed. The note under the table
+says so, because an absent row and a zero row answer different questions.
+#}
+{% block title %}Top Yetkazib beruvchilar{% endblock %}
+{% block breadcrumb %}Hisobotlar / Top Yetkazib beruvchilar{% endblock %}
+{% block page_heading %}Top Yetkazib beruvchilar{% endblock %}
+{% block content %}
+
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Top Yetkazib beruvchilar</h1>
+        <div class="muted">Shartnomalar qiymati bo'yicha reyting.</div>
+      </div>
+      <div class="page-actions">
+        <a class="btn btn-outline-custom" href="{{ url('xarid:dashboard') }}"><i class="bi bi-speedometer2" aria-hidden="true"></i> <span class="label-text">Dashboard</span></a>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Reyting</div>
+        <div class="toolbar">{{ filter_bar(table_filter, url('xarid:top-suppliers')) }}</div>
+      </div>
+      <div class="table-wrap">
+        <table class="table-app">
+          <thead><tr>
+            <th style="width:60px;">#</th>
+            <th class="sortable">Firma nomi<span class="sort-icon"></span></th>
+            <th style="width:140px;">INN</th>
+            <th style="width:140px;">Daraja</th>
+            <th style="width:140px;text-align:center;">Shartnomalar</th>
+            <th style="width:220px;text-align:right;">Umumiy qiymat (UZS)</th>
+          </tr></thead>
+          <tbody>
+          {% for row in ranking %}
+            <tr>
+              <td><span class="badge {% if row.place == 1 %}badge-primary{% else %}badge-soft{% endif %}">{{ row.place }}</span></td>
+              <td style="font-weight:600;">{{ row.supplier.name }}</td>
+              <td class="mono">{{ row.supplier.inn or "—" }}</td>
+              <td>{% if row.supplier.daraja %}<span class="badge badge-info">{{ row.supplier.daraja }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+              <td style="text-align:center;">{{ row.contracts }}</td>
+              <td style="text-align:right;font-weight:600;color:var(--color-primary);">{{ row.total.display }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6" class="muted" style="text-align:center;">Tanlangan davrda shartnomasi bo'lgan firma topilmadi.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-body footer-note">
+        Reyting DEC-025 bo'yicha shartnomalar umumiy qiymatiga asoslanadi. Tanlangan davrda shartnomasi bo'lmagan firma ro'yhatga kirmaydi.
+      </div>
+    </div>
+
+{% endblock %}

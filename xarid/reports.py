@@ -30,7 +30,7 @@ from django.db.models.functions import Coalesce, TruncDate
 from django.utils import timezone
 
 from xarid.exports import ExportColumn, TableExport
-from xarid.filters import DateColumn, DatePeriod
+from xarid.filters import DateColumn, DatePeriod, FilterColumn
 from xarid.models import (
     Contract,
     ContractStatusChange,
@@ -475,25 +475,34 @@ class DashboardIndicators:
     completed: Indicator
 
 
-def as_percentage_of(count: int, supplier_count: int) -> Indicator:
-    """One indicator: a count, and what it is as a percentage of the suppliers.
+def whole_percent(part: Decimal | int, whole: Decimal | int) -> int:
+    """`part` as a percentage of `whole`, to the nearest whole percent.
 
-    A department with no suppliers on file is not an error - it is a database
-    nobody has filled in yet - so the percentage is zero rather than a
-    division.
+    Zero when there is nothing to measure against, rather than a division: a
+    database nobody has filled in yet is not an error.
 
-    A half rounds up, which is the arithmetic somebody checking the card by
+    A half rounds up, which is the arithmetic somebody checking the figure by
     hand will have done. Python's own round() would send 12.5% down to 12 and
     13.5% up to 14, which is defensible statistics and an odd thing to have to
-    explain to the department.
+    explain to the department. Every percentage on the dashboard comes through
+    here, so there is one answer to "how does this round" rather than one per
+    panel.
     """
-    if not supplier_count:
-        return Indicator(count=count, measured_against=supplier_count, percentage=0)
+    if not whole:
+        return 0
 
-    exact = Decimal(count * 100) / Decimal(supplier_count)
-    whole = int(exact.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    exact = Decimal(part) * 100 / Decimal(whole)
 
-    return Indicator(count=count, measured_against=supplier_count, percentage=whole)
+    return int(exact.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def as_percentage_of(count: int, supplier_count: int) -> Indicator:
+    """One indicator: a count, and what it is as a percentage of the suppliers."""
+    return Indicator(
+        count=count,
+        measured_against=supplier_count,
+        percentage=whole_percent(count, supplier_count),
+    )
 
 
 def dashboard_indicators() -> DashboardIndicators:
@@ -819,4 +828,235 @@ def processing_times() -> tuple[StageAverage, ...]:
         averaged(APPROVAL, approval),
         averaged(DELIVERY, delivery),
         averaged(INVOICE, invoice),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Top suppliers (section 2 and its own page, REQ-DASH-005, REQ-DASH-006)
+# ---------------------------------------------------------------------------
+
+# How many rows the dashboard's panel shows. The page itself shows them all.
+DASHBOARD_TOP_SUPPLIERS = 5
+
+# The Daraja filter both the page and its bar use. Free text on the supplier
+# record (DEC-025), so the options are whatever levels have been recorded.
+BY_DARAJA = FilterColumn(
+    parameter="daraja",
+    label="Daraja",
+    value_lookup="daraja",
+    label_lookups=("daraja",),
+)
+
+
+@dataclass(frozen=True)
+class SupplierRank:
+    """One firm's place in the ranking.
+
+    Attributes:
+        place: its position in the list, counting from one.
+        supplier: the firm.
+        contracts: how many of its contracts fall inside the period.
+        total: what those contracts come to, in UZS.
+        share_of_leader: the total as a percentage of the first row's, for the
+            panel's bar. One hundred for the leader; zero when nothing is
+            ranked.
+    """
+
+    place: int
+    supplier: Supplier
+    contracts: int
+    total: Money
+    share_of_leader: int
+
+
+def daraja_options() -> QuerySet:
+    """The suppliers a Daraja drop-down draws its options from.
+
+    Only those with a level recorded: a blank Daraja would otherwise become an
+    option whose value is the empty string, which the bar already spends on
+    "barchasi".
+    """
+    return Supplier.objects.active().exclude(daraja="")
+
+
+def top_suppliers(
+    period: DatePeriod | None,
+    daraja: str = "",
+    limit: int | None = None,
+) -> tuple[SupplierRank, ...]:
+    """The firms ranked by what their contracts come to (DEC-025).
+
+    Ranked by total contract value inside the period, highest first, with the
+    firm's name breaking a tie so that two equal totals do not swap places
+    between one render and the next.
+
+    A firm with no contracts in the period is not ranked. A ranking of what
+    the department spent has nothing to say about a firm it spent nothing
+    with, and padding the list with zeros would push the firms the page is
+    read for further down it.
+
+    A deleted firm is still ranked, unlike the dashboard's supplier count,
+    which leaves it out. The two are asking different questions: the count is
+    how many firms the department has, which a deleted one is not, and this
+    is what the department spent, which a deletion does not unspend. Deleting
+    a firma deactivates it (DEC-009), and money already paid to it stays in
+    its own row rather than vanishing from the ranking's totals.
+
+    Args:
+        period: the period chosen in the bar, applied to the contract's
+            accounting date exactly as the dashboard's spend is. None, or a
+            refused period, means every contract on file.
+        daraja: the level chosen in the bar; empty means every level.
+        limit: how many rows to return, for the dashboard's panel. None means
+            the whole ranking.
+
+    Returns:
+        The ranking, in order, each row carrying its place and its share of
+        the leader's total.
+    """
+    contracts = dated_contracts()
+    if period:
+        contracts = period.apply(contracts)
+    if daraja:
+        contracts = contracts.filter(supplier__daraja=daraja)
+
+    totalled = (
+        contracts.values("supplier")
+        .annotate(qiymat=Sum("qiymati"), soni=Count("pk"))
+        .order_by("-qiymat", "supplier__name")
+    )
+    if limit is not None:
+        totalled = totalled[:limit]
+
+    counted = list(totalled)
+    suppliers = Supplier.objects.in_bulk([row["supplier"] for row in counted])
+
+    # Every row resolves: Contract.supplier is PROTECT, so a firm holding a
+    # contract cannot be deleted from under it. One that somehow does not is
+    # dropped here rather than raising a KeyError out of a report - and
+    # dropped before the places are handed out, so the ranking cannot come
+    # back numbered 1, 3, 4.
+    rows = [row for row in counted if row["supplier"] in suppliers]
+    leader = rows[0]["qiymat"] if rows else NOTHING
+
+    return tuple(
+        SupplierRank(
+            place=place,
+            supplier=suppliers[row["supplier"]],
+            contracts=row["soni"],
+            total=Money(row["qiymat"]),
+            share_of_leader=whole_percent(row["qiymat"], leader),
+        )
+        for place, row in enumerate(rows, start=1)
+    )
+
+
+# ---------------------------------------------------------------------------
+# The supplier category block (section 2, REQ-DASH-007, REQ-DASH-009)
+# ---------------------------------------------------------------------------
+
+# The ORM path from a product type to the firms that supply it: the order
+# lines naming the type, the applications carrying those lines, and the
+# contracts raised against them.
+#
+# A contract is against an application, not against one of its lines, so an
+# application ordering steel and cable with a single contract credits that
+# firm with both. Nothing in the data model says which line a contract
+# covers; the block answers "which types is this firm involved in" rather
+# than "which types did it deliver", and there is no narrower question to
+# ask of these tables.
+CATEGORY_SUPPLIERS = "application_items__application__contracts__supplier"
+
+# The same path, continued to the status of those contracts, for counting the
+# types that actually reached the completed state.
+CATEGORY_CONTRACT_STATE = "application_items__application__contracts__status"
+
+
+@dataclass(frozen=True)
+class CategoryShare:
+    """One product type and how much of the department's supply base it is.
+
+    Attributes:
+        category: the product type.
+        firms: how many distinct firms supply it. A firm with four contracts
+            for one type is one firm.
+        share: that count as a percentage of every count in the table.
+    """
+
+    category: MahsulotTuri
+    firms: int
+    share: int
+
+
+@dataclass(frozen=True)
+class SupplierCategories:
+    """The category block: its rows, what the shares divide by, and the total.
+
+    Attributes:
+        rows: a row per active product type, busiest first.
+        placements: the sum of the rows' counts, which the shares are a share
+            of. A firm supplying two types is in that sum twice, which is
+            what lets the column add up to a hundred.
+        delivered_types: how many product types have reached the status
+            marked as completed (REQ-DASH-007). Delivered, literally: a type
+            somebody has merely contracted for is not one the department has
+            received. Zero while no status carries the completed marker
+            (DEC-010, TASK-UZK-048).
+    """
+
+    rows: tuple[CategoryShare, ...]
+    placements: int
+    delivered_types: int
+
+
+def supplier_categories() -> SupplierCategories:
+    """How the department's firms are spread across the product types.
+
+    A type nobody supplies is listed with zero rather than left out: the
+    block is read to see where the supply base is thin, and a missing row
+    answers that question with silence.
+
+    Delivered means reached the status marked as completed (DEC-010), not
+    merely contracted for: a type somebody has a contract against is not one
+    the department has received. While no status carries that marker, nothing
+    counts as delivered.
+
+    The share is each type's count as a percentage of the whole table, so the
+    column adds to a hundred (within rounding). REQ-DASH-009 words it as a
+    percentage "relative to total firms", which is the same number only while
+    every firm supplies exactly one type - a firm supplying two is counted
+    under both, and against a count of firms the column would then pass a
+    hundred. The page prints what the share divides by so the two readings
+    cannot be confused.
+
+    Returns:
+        The rows busiest first, what the shares divide by, and how many types
+        are actually supplied.
+    """
+    completed = ShartnomaStatus.completed_status()
+    delivered = (
+        Q(**{CATEGORY_CONTRACT_STATE: completed}) if completed else Q(pk__in=())
+    )
+    counted = (
+        MahsulotTuri.objects.active()
+        .annotate(
+            firmalar=Count(CATEGORY_SUPPLIERS, distinct=True),
+            yetkazilgan=Count(CATEGORY_SUPPLIERS, filter=delivered, distinct=True),
+        )
+        .order_by("-firmalar", "name")
+    )
+    categories = list(counted)
+    placements = sum(category.firmalar for category in categories)
+
+    return SupplierCategories(
+        rows=tuple(
+            CategoryShare(
+                category=category,
+                firms=category.firmalar,
+                share=whole_percent(category.firmalar, placements),
+            )
+            for category in categories
+        ),
+        placements=placements,
+        delivered_types=sum(1 for category in categories if category.yetkazilgan),
     )

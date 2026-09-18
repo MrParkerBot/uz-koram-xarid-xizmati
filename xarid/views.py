@@ -31,6 +31,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
 
 from xarid.attachments import attachment_response
+from xarid.audit import record_created, record_decision, record_deleted, record_edited
 from xarid.exports import ExportColumn, TableExport, export_response, lines_of, local_date
 from xarid.filters import (
     DateColumn,
@@ -66,6 +67,7 @@ from xarid.models import (
     Application,
     ApplicationItem,
     ArizaStatus,
+    AuditEntry,
     Contract,
     ContractItem,
     ContractStatusChange,
@@ -86,6 +88,7 @@ from xarid.models import (
     department_of,
     has_user_type,
 )
+from xarid.notifications import tell_sender_of_acceptance, tell_sender_of_refusal
 from xarid.permissions import (
     acts_on_own_work_only,
     contract_editor,
@@ -98,8 +101,11 @@ from xarid.permissions import (
     revoke_contract_editing,
 )
 from xarid.reports import (
+    BY_DARAJA,
+    DASHBOARD_TOP_SUPPLIERS,
     SPENDINGS_PERIOD,
     category_purchasing,
+    daraja_options,
     dashboard_indicators,
     dated_contracts,
     department_purchasing,
@@ -107,6 +113,8 @@ from xarid.reports import (
     report_export,
     spending_indicators,
     staff_workload,
+    supplier_categories,
+    top_suppliers,
 )
 
 USERS_TEMPLATE = "xarid/pages/users.html"
@@ -116,14 +124,15 @@ ASSIGNED_TEMPLATE = "xarid/pages/tayinlangan.html"
 AGREED_CONTRACTS_TEMPLATE = "xarid/pages/kelishinlingan.html"
 PURCHASE_TEMPLATE = "xarid/pages/xarid-ariza.html"
 
-# The pages that are still the supplied prototype: the two system pages. Each
-# is a template with no data behind it yet, served under its own permission.
+# The page that is still the supplied prototype: the 1C integration screen,
+# which stays mocked until an API specification is supplied. A template with
+# no data behind it, served under its own permission.
 PROTOTYPE_PAGE_TEMPLATES: dict[str, str] = {
     "integration": "xarid/pages/integration.html",
-    "logs": "xarid/pages/logs.html",
 }
 
 DASHBOARD_TEMPLATE = "xarid/index.html"
+TOP_SUPPLIERS_TEMPLATE = "xarid/pages/top-suppliers.html"
 
 
 def prototype_page(page_name: str) -> Callable[..., HttpResponse]:
@@ -135,22 +144,25 @@ def dashboard(request: HttpRequest) -> HttpResponse:
     """Asosiy Panel: the department's position at a glance (section 2).
 
     Counted here: the three contract indicators (REQ-DASH-001 to REQ-DASH-004),
-    the spendings (REQ-DASH-008, REQ-DASH-010) and the four processing-time
-    averages (REQ-DASH-012). The period bar narrows the spend and nothing else
+    the spendings (REQ-DASH-008, REQ-DASH-010), the four processing-time
+    averages (REQ-DASH-012) and the head of the supplier ranking
+    (REQ-DASH-005). The period bar narrows the spend and the ranking, which
+    are both about money inside a period, and nothing else
     - the contract indicators are the department's position now, not its
     position during a week, and an average of how long a stage takes is not a
     figure a fortnight has an answer for - which is why the cards and the
     panel say what each figure covers.
 
-    The top suppliers list, the category breakdown, the charts and the
-    activity list are still the supplied prototype's own numbers, and are
-    UZK-051, UZK-057 and UZK-052.
+    The spendings chart and the activity list are still the supplied
+    prototype's own numbers; the activity list is UZK-052's log, which has a
+    page of its own.
     """
     # The bar offers no column filters and no ordering, so it is built for
     # its period and its rendering alone; spending_indicators() applies that
     # period to its own query, and nothing calls table_filter.apply().
     table_filter = TableFilter((), dated_contracts(), request.GET, date_column=SPENDINGS_PERIOD)
     report_invalid_filters(request, table_filter)
+    categories = supplier_categories()
 
     return render(
         request,
@@ -159,9 +171,166 @@ def dashboard(request: HttpRequest) -> HttpResponse:
             "indicators": dashboard_indicators(),
             "spendings": spending_indicators(table_filter.period),
             "stages": processing_times(),
+            "top_suppliers": top_suppliers(table_filter.period, limit=DASHBOARD_TOP_SUPPLIERS),
+            "categories": categories,
+            "category_chart": [
+                {"label": row.category.name, "firms": row.firms} for row in categories.rows
+            ],
             "table_filter": table_filter,
         },
     )
+
+
+def top_suppliers_filter(chosen: Mapping[str, str]) -> TableFilter:
+    """The Top suppliers bar: a Daraja drop-down and the contract period.
+
+    Its options come from the suppliers that have a Daraja recorded, so the
+    drop-down cannot offer a blank level beside its own "barchasi". Only the
+    bar's choices are used: top_suppliers() ranks contracts, not the supplier
+    rows this filter would narrow.
+    """
+    return TableFilter(
+        (BY_DARAJA,),
+        daraja_options(),
+        chosen,
+        date_column=SPENDINGS_PERIOD,
+    )
+
+
+def top_suppliers_page(request: HttpRequest) -> HttpResponse:
+    """Top Yetkazib beruvchilar: the firms ranked by what they were paid.
+
+    The page REQ-DASH-005 asks for beside the dashboard panel, ranked by
+    total contract value in the period (DEC-025) and narrowed by the firm's
+    level (REQ-DASH-006).
+    """
+    table_filter = top_suppliers_filter(request.GET)
+    report_invalid_filters(request, table_filter)
+
+    return render(
+        request,
+        TOP_SUPPLIERS_TEMPLATE,
+        {
+            "ranking": top_suppliers(table_filter.period, table_filter.fields[0].selected),
+            "table_filter": table_filter,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# The Logs page (section 10, REQ-LOG-001)
+# ---------------------------------------------------------------------------
+
+LOGS_TEMPLATE = "xarid/pages/logs.html"
+
+# The period narrows by when the thing happened, which is the entry's own
+# Sana/Soat column.
+LOGS_PERIOD = DateColumn("Sana/Soat", "created_at")
+
+# One drop-down per column REQ-LOG-001 asks to filter by. The action's
+# options are labelled from the model's own choices, so the bar and the
+# column under it call a value the same thing: Created, Edited, Deleted -
+# the words section 10's own column header uses.
+LOGS_FILTERS = (
+    FilterColumn(
+        parameter="foydalanuvchi",
+        label="Foydalanuvchi",
+        value_lookup="actor_id",
+        label_lookups=("actor__first_name", "actor__last_name"),
+        label_fallback_lookup="actor__username",
+    ),
+    FilterColumn(
+        parameter="bolim",
+        label="Bo`lim",
+        value_lookup="actor_department_id",
+        label_lookups=("actor_department__name",),
+    ),
+    FilterColumn(
+        parameter="forma",
+        label="Forma",
+        value_lookup="form_name",
+        label_lookups=("form_name",),
+    ),
+    FilterColumn(
+        parameter="amal",
+        label="Amal",
+        value_lookup="action",
+        label_lookups=("action",),
+        option_labels=dict(AuditEntry.Action.choices),
+    ),
+)
+
+
+def logged_events() -> QuerySet:
+    """Every entry, newest first, with the people and departments joined."""
+    return AuditEntry.objects.select_related(
+        "actor", "actor_department", "approver", "approver_department"
+    )
+
+
+def logs_page(request: HttpRequest) -> HttpResponse:
+    """The Logs page: what the application did, and who did it.
+
+    Reads the table TASK-UZK-052 writes. Nothing on this page writes to it:
+    DEC-029 keeps entries indefinitely and gives the application no way to
+    edit or delete one, and no export - section 10 is the one page that does
+    not ask for a download.
+    """
+    table_filter = TableFilter(LOGS_FILTERS, logged_events(), request.GET, date_column=LOGS_PERIOD)
+    report_invalid_filters(request, table_filter)
+    # Evaluated once: the page prints the rows and how many of them there are,
+    # and counting them again would be a second pass over the same table.
+    entries = list(table_filter.apply())
+
+    return render(
+        request,
+        LOGS_TEMPLATE,
+        {
+            "entries": entries,
+            "entry_count": len(entries),
+            "table_filter": table_filter,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Notifications (REQ-ARIZA-004, REQ-ARIZA-005, DEC-012)
+# ---------------------------------------------------------------------------
+
+NOTIFICATIONS_TEMPLATE = "xarid/pages/bildirishnomalar.html"
+
+
+@login_required
+def notifications_page(request: HttpRequest) -> HttpResponse:
+    """Everything this person has been told, newest first.
+
+    Not in the DEC-015 matrix on purpose: it is not a page a user type may
+    open, it is everybody's own, and the matrix answers the first question
+    rather than the second. login_required alone is the whole rule.
+
+    Showing a notification is what marks it read, so the bell stops counting
+    what the reader has just been shown. The page says so.
+
+    The rows are read first and marked afterwards, and the page renders what
+    was read - so this once, the entries that were new still say so while the
+    bell beside them is already empty. That is the point: somebody should see
+    what changed before it stops being new. A reload shows them unmarked.
+
+    The marking is one statement over this person's unread rows rather than a
+    list of the ids just read: an account that has collected more
+    notifications than SQLite will bind at once would otherwise lose its own
+    panel.
+    """
+    shown = list(
+        Notification.objects.filter(recipient=request.user).select_related(
+            "application", "purchase_application"
+        )
+    )
+    Notification.objects.filter(recipient=request.user, read_at__isnull=True).update(
+        read_at=timezone.now()
+    )
+
+    return render(request, NOTIFICATIONS_TEMPLATE, {"notifications": shown})
 
 
 @login_required
@@ -266,7 +435,7 @@ class MasterDataPage:
         if not form.is_valid():
             return self._render_page(request, form)
 
-        form.save()
+        record_created(request.user, form.save())
         return redirect(f"xarid:{self.page_name}")
 
     def _update_record(self, request: HttpRequest, pk: int) -> HttpResponse:
@@ -276,11 +445,16 @@ class MasterDataPage:
         if not form.is_valid():
             return self._render_page(request, form, edited)
 
-        form.save()
+        record_edited(request.user, form.save())
         return redirect(f"xarid:{self.page_name}")
 
     def _delete_record(self, request: HttpRequest, pk: int) -> HttpResponse:
-        deactivate(self._active_record(pk))
+        deleted = self._active_record(pk)
+
+        # Logged before the deactivation, while the record still says what it
+        # said: the entry keeps its label, not a pointer to it.
+        record_deleted(request.user, deleted)
+        deactivate(deleted)
 
         return redirect(f"xarid:{self.page_name}")
 
@@ -431,7 +605,7 @@ def user_create(request: HttpRequest) -> HttpResponse:
     if not form.is_valid():
         return render_users_page(request, form)
 
-    form.save()
+    record_created(request.user, form.save())
     return redirect("xarid:users")
 
 
@@ -444,7 +618,7 @@ def user_update(request: HttpRequest, pk: int) -> HttpResponse:
     if not form.is_valid():
         return render_users_page(request, form, edited_user.pk)
 
-    form.save()
+    record_edited(request.user, form.save())
     return redirect("xarid:users")
 
 
@@ -456,6 +630,7 @@ def user_delete(request: HttpRequest, pk: int) -> HttpResponse:
     if deleted_user.pk == request.user.pk:
         return HttpResponseForbidden("O'z hisobingizni o'chira olmaysiz.")
 
+    record_deleted(request.user, deleted_user)
     deleted_user.is_active = False
     deleted_user.save(update_fields=["is_active"])
 
@@ -717,6 +892,7 @@ def application_create(request: HttpRequest) -> HttpResponse:
             status=ArizaStatus.with_code(ArizaStatus.Code.ACCEPTED),
         )
 
+    record_created(request.user, application)
     messages.success(request, f"{application.ariza_raqami} yaratildi.")
 
     return redirect("xarid:qabul-arizalar")
@@ -788,6 +964,7 @@ def accept_assigned_application(request: HttpRequest, pk: int) -> HttpResponse:
         return redirect("xarid:tayinlangan")
 
     if taken:
+        record_edited(request.user, application)
         messages.success(request, f"{application.ariza_raqami} qabul qilindi.")
     else:
         messages.info(request, f"{application.ariza_raqami} allaqachon qabul qilingan.")
@@ -823,6 +1000,7 @@ def set_application_status(request: HttpRequest, pk: int) -> HttpResponse:
         return redirect("xarid:tayinlangan")
 
     if changed:
+        record_edited(request.user, application)
         messages.success(request, f"{application.ariza_raqami} holati: {status.name}.")
     else:
         messages.info(request, f"{application.ariza_raqami} allaqachon shu holatda.")
@@ -872,6 +1050,8 @@ def accept_application(request: HttpRequest, pk: int) -> HttpResponse:
         return redirect("xarid:kelib-arizalar")
 
     if accepted:
+        record_decision(request.user, application, approved=True)
+        tell_sender_of_acceptance(application)
         messages.success(request, f"{application.ariza_raqami} qabul qilindi.")
     else:
         messages.info(request, f"{application.ariza_raqami} allaqachon qabul qilingan.")
@@ -901,6 +1081,13 @@ def reject_application(request: HttpRequest, pk: int) -> HttpResponse:
         return redirect("xarid:kelib-arizalar")
 
     if rejected:
+        record_decision(
+            request.user,
+            application,
+            approved=False,
+            comment=application.inkor_izohi,
+        )
+        tell_sender_of_refusal(application)
         messages.success(request, f"{application.ariza_raqami} inkor etildi.")
     else:
         messages.info(request, f"{application.ariza_raqami} allaqachon inkor etilgan.")
@@ -943,6 +1130,7 @@ def assign_application(request: HttpRequest, pk: int) -> HttpResponse:
         return redirect("xarid:qabul-arizalar")
 
     if assigned:
+        record_edited(request.user, application)
         name = specialist.get_full_name() or specialist.username
         messages.success(request, f"{application.ariza_raqami} {name}ga tayinlandi.")
     else:
@@ -1079,6 +1267,7 @@ def contract_create(request: HttpRequest) -> HttpResponse:
             izoh=form.cleaned_data["izoh"],
         )
 
+    record_created(request.user, contract)
     messages.success(
         request,
         f"{contract.shartnoma_raqami} yaratildi. "
@@ -1172,6 +1361,9 @@ def approve_purchase_application(request: HttpRequest, pk: int) -> HttpResponse:
         messages.info(request, f"{application.xarid_raqami} allaqachon hal qilingan.")
         return redirect("xarid:xarid-ariza")
 
+    if approved:
+        record_decision(request.user, application, approved=True)
+
     if approved and application.stage == PurchaseApplication.Stage.APPROVED:
         messages.success(
             request,
@@ -1207,6 +1399,12 @@ def reject_purchase_application(request: HttpRequest, pk: int) -> HttpResponse:
         return redirect("xarid:xarid-ariza")
 
     if rejected:
+        record_decision(
+            request.user,
+            application,
+            approved=False,
+            comment=application.inkor_izohi,
+        )
         messages.success(request, f"{application.xarid_raqami} inkor etildi.")
     else:
         messages.info(request, f"{application.xarid_raqami} allaqachon inkor etilgan.")
@@ -1343,6 +1541,7 @@ def purchase_application_create(request: HttpRequest) -> HttpResponse:
             status=ArizaStatus.with_code(ArizaStatus.Code.NEW),
         )
 
+    record_created(request.user, application)
     messages.success(request, f"{application.xarid_raqami} yaratildi.")
 
     return redirect("xarid:xarid-ariza")
@@ -1846,6 +2045,7 @@ def contract_set_status(request: HttpRequest, pk: int) -> HttpResponse:
         return back_to_contract_page(request)
 
     if moved:
+        record_edited(request.user, contract)
         messages.success(
             request,
             f"{contract.shartnoma_raqami} holati o`zgartirildi: {status.name}.",
@@ -1884,6 +2084,7 @@ def contract_send_for_approval(request: HttpRequest, pk: int) -> HttpResponse:
         return redirect("xarid:kelishinlingan")
 
     if sent:
+        record_edited(request.user, contract)
         messages.success(
             request,
             f"{contract.shartnoma_raqami} tasdiqlashga yuborildi va "
@@ -1977,6 +2178,7 @@ def contract_accept(request: HttpRequest, pk: int) -> HttpResponse:
         return redirect("xarid:tuzilgan")
 
     if approved:
+        record_decision(request.user, contract, approved=True)
         messages.success(request, f"{contract.shartnoma_raqami} tasdiqlandi.")
     else:
         messages.info(request, f"{contract.shartnoma_raqami} allaqachon tasdiqlangan.")
@@ -2001,6 +2203,12 @@ def contract_reject(request: HttpRequest, pk: int) -> HttpResponse:
         return redirect("xarid:tuzilgan")
 
     if rejected:
+        record_decision(
+            request.user,
+            contract,
+            approved=False,
+            comment=contract.inkor_izohi,
+        )
         messages.success(
             request,
             f"{contract.shartnoma_raqami} inkor qilindi va mutaxassisga qaytarildi.",
