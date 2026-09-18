@@ -154,6 +154,24 @@ def acts_on_own_work_only(user: AbstractBaseUser | AnonymousUser | None) -> bool
     return has_user_type(user, (KATTA_MUTAXASIS,))
 
 
+def decides_on_contracts(user) -> bool:
+    """Whether this person is the one who approves a contract.
+
+    DEC-013 makes Admin the Xarid bo`lim boshlig`i, which is the department
+    head REQ-SHARTNOMA-002 gives the decision to. Four user types may open the
+    Tuzilgan page and one of them decides, so the route asks this as well as
+    the template: a page-level permission on its own would let a Menejer
+    approve a contract that binds the company.
+
+    Args:
+        user: the person asking.
+
+    Returns:
+        Whether the decision is theirs to make.
+    """
+    return has_user_type(user, (ADMIN,))
+
+
 def own_contract_test(user) -> Callable[[object], bool]:
     """A test of whether a contract is this person's work, asked once.
 
