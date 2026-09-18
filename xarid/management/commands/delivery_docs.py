@@ -22,17 +22,24 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from django.apps import apps
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import models
 
 APPLICATION = "xarid"
 
-# Where the delivery set lives, relative to the repository root.
-DOCS = Path("docs")
-SCHEMA_FILE = DOCS / "database-schema.md"
-UML_FILE = DOCS / "uml" / "domain-model.puml"
-PURCHASE_BPMN = DOCS / "bpmn" / "xarid-arizasi.bpmn"
-CONTRACT_BPMN = DOCS / "bpmn" / "shartnoma.bpmn"
+# Where the delivery set lives. Anchored to the project rather than to the
+# working directory, so the command writes the same files whichever directory
+# it is run from and --check cannot report them all missing from the wrong one.
+DOCS = Path(settings.BASE_DIR) / "docs"
+
+# Where each document sits inside the set. Relative, so the whole set can be
+# written somewhere else - a test needs to make a document stale without
+# touching what is committed.
+SCHEMA_FILE = Path("database-schema.md")
+UML_FILE = Path("uml") / "domain-model.puml"
+PURCHASE_BPMN = Path("bpmn") / "xarid-arizasi.bpmn"
+CONTRACT_BPMN = Path("bpmn") / "shartnoma.bpmn"
 
 BPMN_NS = "http://www.omg.org/spec/BPMN/20100524/MODEL"
 BPMNDI_NS = "http://www.omg.org/spec/BPMN/20100524/DI"
@@ -45,6 +52,9 @@ TASK_SIZE = (120, 80)
 EVENT_SIZE = (36, 36)
 GATEWAY_SIZE = (50, 50)
 ROW_TOP = 120
+
+# How far under the row a backward flow travels on its way home.
+BACKWARD_DROP = 60
 
 
 @dataclass(frozen=True)
@@ -204,9 +214,14 @@ def uml_document() -> str:
         lines.append("")
         for field_ in meta.concrete_fields:
             if field_.many_to_one or field_.one_to_one:
-                arrow = "--|>" if field_.one_to_one else "-->"
+                # Both are associations. A one-to-one is drawn with its
+                # multiplicity rather than with PlantUML's "--|>", which is
+                # generalisation: that would say a UserProfile is a kind of
+                # User and a purchase request is a kind of application, and
+                # neither is true.
+                ends = ' "1" -- "1" ' if field_.one_to_one else ' "*" --> "1" '
                 relations.append(
-                    f"{model.__name__} {arrow} {field_.related_model.__name__} : {field_.name}"
+                    f"{model.__name__}{ends}{field_.related_model.__name__} : {field_.name}"
                 )
 
     lines.extend(sorted(relations))
@@ -231,6 +246,37 @@ def laid_out(flow: Flow) -> dict[str, tuple[int, int, int, int]]:
         boxes[step.key] = (left, ROW_TOP + (TASK_SIZE[1] - height) // 2, width, height)
 
     return boxes
+
+
+def waypoints_between(
+    source: tuple[int, int, int, int],
+    target: tuple[int, int, int, int],
+) -> list[dict[str, str]]:
+    """The path one sequence flow takes, as BPMN waypoints.
+
+    Forward is a straight line between two edges. Backward - a refused
+    contract returning to its specialist, six boxes to the left - drops under
+    the row and travels back beneath it, rather than being drawn straight
+    through every shape in between.
+    """
+    left, top, width, height = source
+    to_left, to_top, to_width, to_height = target
+    middle, to_middle = top + height // 2, to_top + to_height // 2
+
+    if to_left >= left:
+        return [
+            {"x": str(left + width), "y": str(middle)},
+            {"x": str(to_left), "y": str(to_middle)},
+        ]
+
+    under = max(top + height, to_top + to_height) + BACKWARD_DROP
+
+    return [
+        {"x": str(left + width // 2), "y": str(top + height)},
+        {"x": str(left + width // 2), "y": str(under)},
+        {"x": str(to_left + to_width // 2), "y": str(under)},
+        {"x": str(to_left + to_width // 2), "y": str(to_top + to_height)},
+    ]
 
 
 def bpmn_document(flow: Flow) -> str:
@@ -305,13 +351,8 @@ def bpmn_document(flow: Flow) -> str:
             f"{{{BPMNDI_NS}}}BPMNEdge",
             {"id": f"edge-{edge_id}", "bpmnElement": edge_id},
         )
-        for key in (source, target):
-            left, top, width, height = boxes[key]
-            ElementTree.SubElement(
-                edge,
-                f"{{{DI_NS}}}waypoint",
-                {"x": str(left + width // 2), "y": str(top + height // 2)},
-            )
+        for point in waypoints_between(boxes[source], boxes[target]):
+            ElementTree.SubElement(edge, f"{{{DI_NS}}}waypoint", point)
 
     ElementTree.indent(definitions, space="  ")
 
@@ -367,15 +408,21 @@ def index_document() -> str:
     )
 
 
-def documents() -> dict[Path, str]:
-    """Every file of the delivery set, by path."""
+def documents(root: Path | None = None) -> dict[Path, str]:
+    """Every file of the delivery set, by path.
+
+    Args:
+        root: where the set is written. The project's own docs directory
+            unless a caller says otherwise.
+    """
+    inside = root if root is not None else DOCS
     written = {
-        DOCS / "README.md": index_document(),
-        SCHEMA_FILE: schema_document(),
-        UML_FILE: uml_document(),
+        inside / "README.md": index_document(),
+        inside / SCHEMA_FILE: schema_document(),
+        inside / UML_FILE: uml_document(),
     }
     for flow, path in FLOWS:
-        written[path] = bpmn_document(flow)
+        written[inside / path] = bpmn_document(flow)
 
     return written
 
@@ -387,6 +434,11 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser) -> None:
         parser.add_argument(
+            "--root",
+            default=None,
+            help="Write the set somewhere other than the project's docs directory.",
+        )
+        parser.add_argument(
             "--check",
             action="store_true",
             help="Write nothing; fail when a document differs from what would be written.",
@@ -394,7 +446,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options) -> None:
         stale = []
-        for path, content in documents().items():
+        root = Path(options["root"]) if options["root"] else None
+        for path, content in documents(root).items():
             if options["check"]:
                 current = path.read_text(encoding="utf-8") if path.exists() else ""
                 if current != content:

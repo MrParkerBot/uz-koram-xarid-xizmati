@@ -51,44 +51,44 @@
         <dc:Bounds x="1560" y="142" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="edge-start-submit" bpmnElement="start-submit">
-        <di:waypoint x="138" y="160" />
-        <di:waypoint x="360" y="160" />
+        <di:waypoint x="156" y="160" />
+        <di:waypoint x="300" y="160" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="edge-submit-head" bpmnElement="submit-head">
-        <di:waypoint x="360" y="160" />
-        <di:waypoint x="505" y="160" />
+        <di:waypoint x="420" y="160" />
+        <di:waypoint x="480" y="160" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="edge-head-head_ok" bpmnElement="head-head_ok">
-        <di:waypoint x="505" y="160" />
-        <di:waypoint x="720" y="160" />
+        <di:waypoint x="530" y="160" />
+        <di:waypoint x="660" y="160" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="edge-head-refused" bpmnElement="head-refused">
-        <di:waypoint x="505" y="160" />
-        <di:waypoint x="1440" y="160" />
+        <di:waypoint x="530" y="160" />
+        <di:waypoint x="1380" y="160" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="edge-head_ok-director" bpmnElement="head_ok-director">
-        <di:waypoint x="720" y="160" />
-        <di:waypoint x="865" y="160" />
+        <di:waypoint x="780" y="160" />
+        <di:waypoint x="840" y="160" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="edge-director-approved" bpmnElement="director-approved">
-        <di:waypoint x="865" y="160" />
-        <di:waypoint x="1080" y="160" />
+        <di:waypoint x="890" y="160" />
+        <di:waypoint x="1020" y="160" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="edge-director-refused" bpmnElement="director-refused">
-        <di:waypoint x="865" y="160" />
-        <di:waypoint x="1440" y="160" />
+        <di:waypoint x="890" y="160" />
+        <di:waypoint x="1380" y="160" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="edge-approved-arrived" bpmnElement="approved-arrived">
-        <di:waypoint x="1080" y="160" />
-        <di:waypoint x="1260" y="160" />
+        <di:waypoint x="1140" y="160" />
+        <di:waypoint x="1200" y="160" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="edge-arrived-done" bpmnElement="arrived-done">
-        <di:waypoint x="1260" y="160" />
-        <di:waypoint x="1578" y="160" />
+        <di:waypoint x="1320" y="160" />
+        <di:waypoint x="1560" y="160" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="edge-refused-done" bpmnElement="refused-done">
-        <di:waypoint x="1440" y="160" />
-        <di:waypoint x="1578" y="160" />
+        <di:waypoint x="1500" y="160" />
+        <di:waypoint x="1560" y="160" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

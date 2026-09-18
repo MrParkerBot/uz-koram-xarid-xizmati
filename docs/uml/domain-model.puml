@@ -223,46 +223,46 @@ class UserType <<xarid_usertype>> {
   is_system_role : BooleanField
 }
 
-Application --> ArizaStatus : status
-Application --> Department : department
-Application --> User : accepted_by
-Application --> User : assigned_by
-Application --> User : assigned_to
-Application --> User : rejected_by
-Application --> User : sender
-ApplicationItem --> Application : application
-ApplicationItem --> MahsulotTuri : mahsulot_turi
-AuditEntry --> Department : actor_department
-AuditEntry --> Department : approver_department
-AuditEntry --> User : actor
-AuditEntry --> User : approver
-Contract --> Application : application
-Contract --> ShartnomaStatus : status
-Contract --> ShartnomaTuri : shartnoma_turi
-Contract --> Supplier : supplier
-Contract --> User : created_by
-Contract --> User : inkor_qilgan
-Contract --> User : tasdiqlagan
-Contract --> User : yuborgan
-ContractItem --> Contract : contract
-ContractStatusChange --> Contract : contract
-ContractStatusChange --> ShartnomaStatus : from_status
-ContractStatusChange --> ShartnomaStatus : to_status
-ContractStatusChange --> User : changed_by
-Notification --> Application : application
-Notification --> PurchaseApplication : purchase_application
-Notification --> User : recipient
-PurchaseApplication --> ArizaStatus : status
-PurchaseApplication --> Department : department
-PurchaseApplication --> User : created_by
-PurchaseApplication --> User : inkor_qilgan
-PurchaseApplication --> User : tasdiqlagan_bolim_boshligi
-PurchaseApplication --> User : tasdiqlagan_direktor
-PurchaseApplication --|> Application : raised_application
-PurchaseApplicationItem --> MahsulotTuri : mahsulot_turi
-PurchaseApplicationItem --> PurchaseApplication : application
-UserProfile --> Department : department
-UserProfile --> UserType : user_type
-UserProfile --|> User : user
+Application "*" --> "1" ArizaStatus : status
+Application "*" --> "1" Department : department
+Application "*" --> "1" User : accepted_by
+Application "*" --> "1" User : assigned_by
+Application "*" --> "1" User : assigned_to
+Application "*" --> "1" User : rejected_by
+Application "*" --> "1" User : sender
+ApplicationItem "*" --> "1" Application : application
+ApplicationItem "*" --> "1" MahsulotTuri : mahsulot_turi
+AuditEntry "*" --> "1" Department : actor_department
+AuditEntry "*" --> "1" Department : approver_department
+AuditEntry "*" --> "1" User : actor
+AuditEntry "*" --> "1" User : approver
+Contract "*" --> "1" Application : application
+Contract "*" --> "1" ShartnomaStatus : status
+Contract "*" --> "1" ShartnomaTuri : shartnoma_turi
+Contract "*" --> "1" Supplier : supplier
+Contract "*" --> "1" User : created_by
+Contract "*" --> "1" User : inkor_qilgan
+Contract "*" --> "1" User : tasdiqlagan
+Contract "*" --> "1" User : yuborgan
+ContractItem "*" --> "1" Contract : contract
+ContractStatusChange "*" --> "1" Contract : contract
+ContractStatusChange "*" --> "1" ShartnomaStatus : from_status
+ContractStatusChange "*" --> "1" ShartnomaStatus : to_status
+ContractStatusChange "*" --> "1" User : changed_by
+Notification "*" --> "1" Application : application
+Notification "*" --> "1" PurchaseApplication : purchase_application
+Notification "*" --> "1" User : recipient
+PurchaseApplication "*" --> "1" ArizaStatus : status
+PurchaseApplication "*" --> "1" Department : department
+PurchaseApplication "*" --> "1" User : created_by
+PurchaseApplication "*" --> "1" User : inkor_qilgan
+PurchaseApplication "*" --> "1" User : tasdiqlagan_bolim_boshligi
+PurchaseApplication "*" --> "1" User : tasdiqlagan_direktor
+PurchaseApplication "1" -- "1" Application : raised_application
+PurchaseApplicationItem "*" --> "1" MahsulotTuri : mahsulot_turi
+PurchaseApplicationItem "*" --> "1" PurchaseApplication : application
+UserProfile "*" --> "1" Department : department
+UserProfile "*" --> "1" UserType : user_type
+UserProfile "1" -- "1" User : user
 
 @enduml
