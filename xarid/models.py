@@ -2412,3 +2412,119 @@ class Notification(models.Model):
             purchase_application=purchase_application,
             kind=cls.Kind.PURCHASE_REJECTED,
         )
+
+
+# ---------------------------------------------------------------------------
+# The log (section 10, REQ-LOG-001)
+# ---------------------------------------------------------------------------
+
+
+class AuditEntry(models.Model):
+    """One thing the application did to one record, and who approved it.
+
+    The nine columns REQ-LOG-001 names put a record's creation and its
+    approval on one row - who, their department, what, when, which of
+    created/edited/deleted, then the approver, their department, their
+    comment and the approval time. So an approval is not a second entry: it
+    completes the entry the creation left.
+
+    The record is held as a name, a label and a plain integer rather than by
+    foreign key, because an entry about a deletion has to outlive the record
+    it describes. Deletion is deactivation here (DEC-009), so today the row
+    survives anyway; the entry does not depend on that staying true.
+
+    Entries are kept indefinitely and the application builds no way to edit
+    or delete one (DEC-029). The only write after the fact is an approval
+    filling in its half of a row.
+    """
+
+    class Action(models.TextChoices):
+        """What was done, in the words section 10's column uses."""
+
+        CREATED = "created", "Created"
+        EDITED = "edited", "Edited"
+        DELETED = "deleted", "Deleted"
+
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="audit_entries",
+        verbose_name="Foydalanuvchi",
+    )
+    actor_department = models.ForeignKey(
+        Department,
+        on_delete=models.PROTECT,
+        related_name="audit_entries",
+        null=True,
+        blank=True,
+        verbose_name="Foydalanuvchi bo`limi",
+        help_text=(
+            "The department the actor was in at the time. Recorded rather "
+            "than read back from the account, so moving somebody between "
+            "departments does not rewrite what the log says they did."
+        ),
+    )
+    form_name = models.CharField(
+        "Forma nomi",
+        max_length=64,
+        help_text="What kind of record it was, such as Firma or Shartnoma.",
+    )
+    record_label = models.CharField(
+        "Yozuv",
+        max_length=255,
+        help_text="What the record printed as when this happened.",
+    )
+    record_type = models.CharField(
+        max_length=64,
+        help_text=(
+            "The model's label, such as xarid.supplier, for matching an "
+            "approval to the creation it completes."
+        ),
+    )
+    record_id = models.PositiveIntegerField(
+        help_text=(
+            "The record's primary key, as a number rather than a foreign "
+            "key: an entry about a deleted record must outlive it."
+        ),
+    )
+    action = models.CharField("Amal", max_length=16, choices=Action.choices)
+    created_at = models.DateTimeField("Sana/Soat", auto_now_add=True)
+
+    approver = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="approved_audit_entries",
+        null=True,
+        blank=True,
+        verbose_name="Tasdiqlovchi foydalanuvchi",
+    )
+    approver_department = models.ForeignKey(
+        Department,
+        on_delete=models.PROTECT,
+        related_name="approved_audit_entries",
+        null=True,
+        blank=True,
+        verbose_name="Tasdiqlovchi bo`lim",
+    )
+    approval_comment = models.TextField("Tasdiq comment", blank=True)
+    approved_at = models.DateTimeField("Tasdiq sanasi/vaqti", null=True, blank=True)
+    approval_outcome = models.CharField(
+        "Tasdiq natijasi",
+        max_length=16,
+        blank=True,
+        help_text="Whether the decision approved the record or refused it.",
+    )
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        verbose_name = "Log yozuvi"
+        verbose_name_plural = "Log yozuvlari"
+        indexes = (models.Index(fields=["record_type", "record_id"]),)
+
+    def __str__(self) -> str:
+        return f"{self.get_action_display()}: {self.form_name} - {self.record_label}"
+
+    @property
+    def was_decided(self) -> bool:
+        """Whether somebody has approved or refused this record."""
+        return self.approved_at is not None

@@ -64,8 +64,17 @@ because a resend overwrites that column (DEC-024) and a contract sent twice
 would report only the time since its last send. An average covers only the
 contracts that recorded both of its ends: a stage nothing has completed prints
 a dash, not nought days.
-- **Drafted contracts, 1C integration and logs** are still the supplied
-  prototype pages with sample data.
+- **The log** (section 10): every create, edit and delete the application makes
+  through its own pages writes one entry naming the acting user, their
+  department at the time, the record, and when. An approval does not add a
+  row - it completes the one the creation left, with the approver, their
+  department, the comment and the time, which is the row section 10's columns
+  describe. Entries are kept indefinitely and the application builds no way to
+  edit or delete one (DEC-029); the Django admin registers the table for
+  reading only. Writes made through the admin, a shell or a migration are not
+  logged. The Logs page that reads this table is UZK-053.
+- **Drafted contracts and 1C integration** are still the supplied prototype
+  pages with sample data.
 
 ## Project structure
 

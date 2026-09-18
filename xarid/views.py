@@ -31,6 +31,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
 
 from xarid.attachments import attachment_response
+from xarid.audit import record_created, record_decision, record_deleted, record_edited
 from xarid.exports import ExportColumn, TableExport, export_response, lines_of, local_date
 from xarid.filters import (
     DateColumn,
@@ -309,7 +310,7 @@ class MasterDataPage:
         if not form.is_valid():
             return self._render_page(request, form)
 
-        form.save()
+        record_created(request.user, form.save())
         return redirect(f"xarid:{self.page_name}")
 
     def _update_record(self, request: HttpRequest, pk: int) -> HttpResponse:
@@ -319,11 +320,16 @@ class MasterDataPage:
         if not form.is_valid():
             return self._render_page(request, form, edited)
 
-        form.save()
+        record_edited(request.user, form.save())
         return redirect(f"xarid:{self.page_name}")
 
     def _delete_record(self, request: HttpRequest, pk: int) -> HttpResponse:
-        deactivate(self._active_record(pk))
+        deleted = self._active_record(pk)
+
+        # Logged before the deactivation, while the record still says what it
+        # said: the entry keeps its label, not a pointer to it.
+        record_deleted(request.user, deleted)
+        deactivate(deleted)
 
         return redirect(f"xarid:{self.page_name}")
 
@@ -474,7 +480,7 @@ def user_create(request: HttpRequest) -> HttpResponse:
     if not form.is_valid():
         return render_users_page(request, form)
 
-    form.save()
+    record_created(request.user, form.save())
     return redirect("xarid:users")
 
 
@@ -487,7 +493,7 @@ def user_update(request: HttpRequest, pk: int) -> HttpResponse:
     if not form.is_valid():
         return render_users_page(request, form, edited_user.pk)
 
-    form.save()
+    record_edited(request.user, form.save())
     return redirect("xarid:users")
 
 
@@ -499,6 +505,7 @@ def user_delete(request: HttpRequest, pk: int) -> HttpResponse:
     if deleted_user.pk == request.user.pk:
         return HttpResponseForbidden("O'z hisobingizni o'chira olmaysiz.")
 
+    record_deleted(request.user, deleted_user)
     deleted_user.is_active = False
     deleted_user.save(update_fields=["is_active"])
 
@@ -760,6 +767,7 @@ def application_create(request: HttpRequest) -> HttpResponse:
             status=ArizaStatus.with_code(ArizaStatus.Code.ACCEPTED),
         )
 
+    record_created(request.user, application)
     messages.success(request, f"{application.ariza_raqami} yaratildi.")
 
     return redirect("xarid:qabul-arizalar")
@@ -831,6 +839,7 @@ def accept_assigned_application(request: HttpRequest, pk: int) -> HttpResponse:
         return redirect("xarid:tayinlangan")
 
     if taken:
+        record_edited(request.user, application)
         messages.success(request, f"{application.ariza_raqami} qabul qilindi.")
     else:
         messages.info(request, f"{application.ariza_raqami} allaqachon qabul qilingan.")
@@ -866,6 +875,7 @@ def set_application_status(request: HttpRequest, pk: int) -> HttpResponse:
         return redirect("xarid:tayinlangan")
 
     if changed:
+        record_edited(request.user, application)
         messages.success(request, f"{application.ariza_raqami} holati: {status.name}.")
     else:
         messages.info(request, f"{application.ariza_raqami} allaqachon shu holatda.")
@@ -915,6 +925,7 @@ def accept_application(request: HttpRequest, pk: int) -> HttpResponse:
         return redirect("xarid:kelib-arizalar")
 
     if accepted:
+        record_decision(request.user, application, approved=True)
         messages.success(request, f"{application.ariza_raqami} qabul qilindi.")
     else:
         messages.info(request, f"{application.ariza_raqami} allaqachon qabul qilingan.")
@@ -944,6 +955,12 @@ def reject_application(request: HttpRequest, pk: int) -> HttpResponse:
         return redirect("xarid:kelib-arizalar")
 
     if rejected:
+        record_decision(
+            request.user,
+            application,
+            approved=False,
+            comment=application.inkor_izohi,
+        )
         messages.success(request, f"{application.ariza_raqami} inkor etildi.")
     else:
         messages.info(request, f"{application.ariza_raqami} allaqachon inkor etilgan.")
@@ -986,6 +1003,7 @@ def assign_application(request: HttpRequest, pk: int) -> HttpResponse:
         return redirect("xarid:qabul-arizalar")
 
     if assigned:
+        record_edited(request.user, application)
         name = specialist.get_full_name() or specialist.username
         messages.success(request, f"{application.ariza_raqami} {name}ga tayinlandi.")
     else:
@@ -1122,6 +1140,7 @@ def contract_create(request: HttpRequest) -> HttpResponse:
             izoh=form.cleaned_data["izoh"],
         )
 
+    record_created(request.user, contract)
     messages.success(
         request,
         f"{contract.shartnoma_raqami} yaratildi. "
@@ -1215,6 +1234,9 @@ def approve_purchase_application(request: HttpRequest, pk: int) -> HttpResponse:
         messages.info(request, f"{application.xarid_raqami} allaqachon hal qilingan.")
         return redirect("xarid:xarid-ariza")
 
+    if approved:
+        record_decision(request.user, application, approved=True)
+
     if approved and application.stage == PurchaseApplication.Stage.APPROVED:
         messages.success(
             request,
@@ -1250,6 +1272,12 @@ def reject_purchase_application(request: HttpRequest, pk: int) -> HttpResponse:
         return redirect("xarid:xarid-ariza")
 
     if rejected:
+        record_decision(
+            request.user,
+            application,
+            approved=False,
+            comment=application.inkor_izohi,
+        )
         messages.success(request, f"{application.xarid_raqami} inkor etildi.")
     else:
         messages.info(request, f"{application.xarid_raqami} allaqachon inkor etilgan.")
@@ -1386,6 +1414,7 @@ def purchase_application_create(request: HttpRequest) -> HttpResponse:
             status=ArizaStatus.with_code(ArizaStatus.Code.NEW),
         )
 
+    record_created(request.user, application)
     messages.success(request, f"{application.xarid_raqami} yaratildi.")
 
     return redirect("xarid:xarid-ariza")
@@ -1889,6 +1918,7 @@ def contract_set_status(request: HttpRequest, pk: int) -> HttpResponse:
         return back_to_contract_page(request)
 
     if moved:
+        record_edited(request.user, contract)
         messages.success(
             request,
             f"{contract.shartnoma_raqami} holati o`zgartirildi: {status.name}.",
@@ -1927,6 +1957,7 @@ def contract_send_for_approval(request: HttpRequest, pk: int) -> HttpResponse:
         return redirect("xarid:kelishinlingan")
 
     if sent:
+        record_edited(request.user, contract)
         messages.success(
             request,
             f"{contract.shartnoma_raqami} tasdiqlashga yuborildi va "
@@ -2020,6 +2051,7 @@ def contract_accept(request: HttpRequest, pk: int) -> HttpResponse:
         return redirect("xarid:tuzilgan")
 
     if approved:
+        record_decision(request.user, contract, approved=True)
         messages.success(request, f"{contract.shartnoma_raqami} tasdiqlandi.")
     else:
         messages.info(request, f"{contract.shartnoma_raqami} allaqachon tasdiqlangan.")
@@ -2044,6 +2076,12 @@ def contract_reject(request: HttpRequest, pk: int) -> HttpResponse:
         return redirect("xarid:tuzilgan")
 
     if rejected:
+        record_decision(
+            request.user,
+            contract,
+            approved=False,
+            comment=contract.inkor_izohi,
+        )
         messages.success(
             request,
             f"{contract.shartnoma_raqami} inkor qilindi va mutaxassisga qaytarildi.",
