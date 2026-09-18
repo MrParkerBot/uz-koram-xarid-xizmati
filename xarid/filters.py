@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import date
 from urllib.parse import urlencode
 
-from django.db.models import F, QuerySet
+from django.db.models import F, Q, QuerySet
 from django.db.models.expressions import OrderBy
 
 # The query string name of the ordering drop-down, which every page shares.
@@ -148,11 +148,11 @@ class DatePeriod:
 
     def __init__(self, column: DateColumn, chosen: Mapping[str, str]) -> None:
         self.column = column
-        requested_start = (chosen.get(column.start_parameter) or "").strip()
-        requested_end = (chosen.get(column.end_parameter) or "").strip()
-        self.start = self._as_date(requested_start)
-        self.end = self._as_date(requested_end)
-        self.refusal = self._refusal(requested_start, requested_end)
+        self.requested_start = (chosen.get(column.start_parameter) or "").strip()
+        self.requested_end = (chosen.get(column.end_parameter) or "").strip()
+        self.start = self._as_date(self.requested_start)
+        self.end = self._as_date(self.requested_end)
+        self.refusal = self._refusal()
 
     @staticmethod
     def _as_date(requested: str) -> date | None:
@@ -162,10 +162,10 @@ class DatePeriod:
         except ValueError:
             return None
 
-    def _refusal(self, requested_start: str, requested_end: str) -> str | None:
+    def _refusal(self) -> str | None:
         """Why this period was not applied, or None when it was."""
-        unreadable = (requested_start and self.start is None) or (
-            requested_end and self.end is None
+        unreadable = (self.requested_start and self.start is None) or (
+            self.requested_end and self.end is None
         )
         if unreadable:
             return (
@@ -185,6 +185,11 @@ class DatePeriod:
         return self.refusal is None and (self.start is not None or self.end is not None)
 
     @property
+    def was_requested(self) -> bool:
+        """Whether a bound was typed at all, including one that was refused."""
+        return bool(self.requested_start or self.requested_end)
+
+    @property
     def selections(self) -> dict[str, str]:
         """The usable bounds, by query parameter."""
         if not self.is_active:
@@ -197,17 +202,38 @@ class DatePeriod:
             bounds[self.column.end_parameter] = self.end.isoformat()
         return bounds
 
+    def as_condition(self, prefix: str = "") -> Q:
+        """The period as a condition, for a filter or a counted relation.
+
+        A report counts rows across a relation - "this employee's
+        applications inside the period" - where the period cannot be a
+        queryset filter, because filtering the employees is not what is
+        meant. The prefix is the ORM path from the model being counted to
+        the date, such as "assigned_applications__"; it is empty when the
+        rows themselves carry it.
+
+        Args:
+            prefix: the ORM path to prepend to the date lookup.
+
+        Returns:
+            The condition, or an empty Q when no usable period was chosen.
+        """
+        if not self.is_active:
+            return Q()
+
+        lookup = f"{prefix}{self.column.comparison_lookup}"
+        condition = Q()
+        if self.start is not None:
+            condition &= Q(**{f"{lookup}__gte": self.start})
+        if self.end is not None:
+            condition &= Q(**{f"{lookup}__lte": self.end})
+        return condition
+
     def apply(self, rows: QuerySet) -> QuerySet:
         """The rows dated inside the period, or every row when it is not usable."""
         if not self.is_active:
             return rows
-
-        narrowed = rows
-        if self.start is not None:
-            narrowed = narrowed.filter(**{f"{self.column.comparison_lookup}__gte": self.start})
-        if self.end is not None:
-            narrowed = narrowed.filter(**{f"{self.column.comparison_lookup}__lte": self.end})
-        return narrowed
+        return rows.filter(self.as_condition())
 
 
 class TableSort:
@@ -341,6 +367,20 @@ class TableFilter:
             any(field.is_active for field in self.fields)
             or (self.period is not None and self.period.is_active)
             or self.sort.is_active
+        )
+
+    @property
+    def can_be_cleared(self) -> bool:
+        """Whether the bar holds anything to clear, applied or refused.
+
+        A refused period is not applied, so it is not active - but it is still
+        sitting in the inputs, and somebody told it was refused needs the one
+        button that empties them.
+        """
+        return (
+            self.is_active
+            or bool(self.invalid)
+            or (self.period is not None and self.period.was_requested)
         )
 
     @property

@@ -51,6 +51,8 @@ supplied with the assignment, on SQLite, behind Django's own authentication.
 │   ├── admin.py              every model registered in the Django admin
 │   ├── permissions.py        who may open which page; contract editing
 │   ├── navigation.py         the sidebar
+│   ├── reports.py            the Hisobotlar counting: status columns, rows
+│   │                         and totals
 │   ├── attachments.py        PDF storage outside the web root; the QR stamp
 │   ├── jinja2.py             the template environment (url, static, date...)
 │   ├── migrations/           0001 schema, 0002 seeded master data
@@ -63,6 +65,7 @@ supplied with the assignment, on SQLite, behind Django's own authentication.
 └── tests/
     ├── support.py            fixtures shared by the test modules
     ├── test_models.py
+    ├── test_reports.py
     ├── test_views.py
     ├── test_urls.py
     └── test_auth.py
@@ -147,15 +150,68 @@ narrows by, and the two `dan` and `gacha` inputs bound it inclusively: a
 start alone means from that day onward, an end alone means up to and
 including that day, and neither leaves the rows unnarrowed by date. A date
 that cannot be read, and a start later than the end, are refused with a
-message and no period is applied. The `Tartib` drop-down orders the page by
-that same date, newest first by default, and choosing the other direction
-reverses the rows.
+message and no period is applied - the refused dates stay in the bar, and
+`Tozalash` empties it. The `Tartib` drop-down orders the page by that same
+date, newest first by default, and choosing the other direction reverses the
+rows.
 
 The Excel and PDF buttons beside the bar download the table as the page
 shows it, filtered or whole, in the order it shows it, one row per order
 line with the table's columns as headers (`xarid/exports.py`, routes `<page>/eksport/xlsx/` and
 `<page>/eksport/pdf/` under the page's own permission). An empty list still
 downloads a valid file with headers only.
+
+## Reports
+
+`Hisobotlar / Xodimlar Yuklamasi` counts what each specialist is carrying: a
+row per account that may be assigned purchase work - including one holding
+nothing, which is what the department head is reading the report for - their
+phone number, how many applications are assigned to them, and one counter per
+contract status, with a totals row that is the sum of each column.
+
+The status columns are generated from the active `Shartnoma Status` rows in
+their configured order, so adding a status adds a column and deactivating one
+removes it, with no code change (DEC-010). The five seeded statuses are
+examples, not a fixed set.
+
+An application is counted under **every** status it has a contract in, and
+once in its owner's assignment total. An application whose first contract was
+refused and whose replacement was signed therefore appears under both, and
+the counters may add up to more than the total: they say how much work stands
+in each state, which is the question the report answers. An application with
+no contract at all is counted in the total only.
+
+An assignment is counted from the moment it is made, whatever happens to the
+application afterwards: a specialist whose contract was signed did that work,
+and the counters exist to say so. Only active accounts have a row, so work
+held by somebody who has left the department stops being counted.
+
+The period bar narrows by the date the assignment was made and behaves
+exactly as it does on the list pages, refusals included. There is no default
+period: the report opens on all time. The counting lives in
+`xarid/reports.py` and is one query per report, not one per status.
+
+`Hisobotlar / Bo'limlar Xaridi` (Korhona xaridi | Bo`limlar) counts the same
+statuses per department instead of per employee: a row per active department,
+how many purchase applications it raised, and how many of them stand in each
+contract status, with the same totals row. The busiest department is first,
+because which department consumes the most purchasing effort is the question
+the page answers; a tie breaks by name. A department that raised nothing
+still has a row of zeros, and a deactivated department has none.
+
+A department's total counts every application it raised, including one
+refused at intake, which can never appear under a status column because it
+never reaches a contract. The gap between the total and the sum of the
+counters therefore holds both work not yet contracted and work refused.
+
+Both reports put the busiest row first, because both are read to find where
+the load is; a tie breaks by name.
+
+That report is narrowed by its `Bo'lim` drop-down and by a period over the
+date an application arrived, which is the only date every application has.
+The drop-down offers only departments the report has a row for.
+A department name links to the Mahsulotlar page carrying `?bolim=<id>`; that
+page is still the supplied prototype and ignores it until UZK-047.
 
 ## Attachments
 
