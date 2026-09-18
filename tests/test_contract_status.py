@@ -245,6 +245,35 @@ class ContractStatusPageTests(SignedInAdminTestCase):
         self.assertEqual(contract.status, None)
         self.assertContains(response, "sizning ishingizga tegishli emas")
 
+    def test_a_status_id_that_is_not_a_number_is_a_message_not_a_crash(self) -> None:
+        """The drop-down always posts a real id, so this is a hand-made request.
+
+        Every other refusal on this page is a message; before the fix an empty
+        value or a word raised out of the field conversion and answered 500.
+        """
+        contract = self.a_contract_on_the_page()
+
+        for value in ("", "abc", "1; drop table"):
+            with self.subTest(holat=value):
+                response = self.client.post(
+                    page("kelishinlingan-holat", contract.pk), {"holat": value}, follow=True
+                )
+
+                self.assertEqual(response.status_code, 200)
+                contract.refresh_from_db()
+                self.assertEqual(contract.status, self.first)
+
+    def test_an_unknown_status_id_is_refused_the_same_way(self) -> None:
+        contract = self.a_contract_on_the_page()
+
+        response = self.client.post(
+            page("kelishinlingan-holat", contract.pk), {"holat": "999999"}, follow=True
+        )
+
+        self.assertEqual(response.status_code, 200)
+        contract.refresh_from_db()
+        self.assertEqual(contract.status, self.first)
+
     def test_the_action_refuses_a_get(self) -> None:
         contract = self.a_contract_on_the_page()
 
