@@ -25,8 +25,14 @@ supplied with the assignment, on SQLite, behind Django's own authentication.
 - **Purchase applications**: a requester raises one against their own
   department, the department head approves, then the director approves - which
   stamps a QR code onto the PDF and raises the department's own application.
-- **Reports, drafted contracts, 1C integration and logs** are still the
-  supplied prototype pages with sample data.
+- **Dashboard**: the supplier count and the created and completed contract
+  percentages measured against it are counted from the database. Which
+  contract status means completed is marked on the Shartnoma Status page,
+  because the statuses are editable master data. The rest of the page - the
+  spendings card, the charts, the top suppliers list, the category table and
+  the activity list - is still the supplied prototype's sample data.
+- **Drafted contracts, 1C integration and logs** are still the supplied
+  prototype pages with sample data.
 
 ## Project structure
 
