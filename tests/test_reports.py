@@ -19,7 +19,7 @@ from tests.support import (
     page,
 )
 from xarid.filters import DateColumn, DatePeriod
-from xarid.models import ADMIN, KATTA_MUTAXASIS, MENEJER, ShartnomaStatus
+from xarid.models import ADMIN, KATTA_MUTAXASIS, MENEJER, Application, ShartnomaStatus
 from xarid.reports import staff_workload, status_columns
 
 ASSIGNMENT_PERIOD = DateColumn("Tayinlangan sana", "tayinlangan_sana")
@@ -164,6 +164,14 @@ class StaffWorkloadTests(TestCase):
 
         self.assertEqual(self.row_for("Alisher", report).total, 2)
 
+    def test_work_that_has_left_the_assigned_stage_is_still_counted(self) -> None:
+        application = an_assigned_application(self.head, self.busy)
+        Application.objects.filter(pk=application.pk).update(stage=Application.Stage.REJECTED)
+
+        report = staff_workload(None)
+
+        self.assertEqual(self.row_for("Alisher", report).total, 1)
+
     def test_the_query_count_does_not_grow_with_the_statuses(self) -> None:
         an_assigned_application(self.head, self.busy)
 
@@ -238,6 +246,12 @@ class StaffWorkloadPageTests(SignedInAdminTestCase):
 
         self.assertContains(response, 'name="dan"')
         self.assertContains(response, 'name="gacha"')
+
+    def test_the_bar_offers_no_column_filter_and_says_so(self) -> None:
+        response = self.client.get(page("xodimlar-yuklamasi"))
+
+        self.assertNotContains(response, "Filter:")
+        self.assertContains(response, "Sana:")
 
     def test_a_type_the_matrix_refuses_cannot_open_it(self) -> None:
         manager = make_user("report.manager", user_type=MENEJER)

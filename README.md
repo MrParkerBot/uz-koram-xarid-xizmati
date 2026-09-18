@@ -181,6 +181,11 @@ the counters may add up to more than the total: they say how much work stands
 in each state, which is the question the report answers. An application with
 no contract at all is counted in the total only.
 
+An assignment is counted from the moment it is made, whatever happens to the
+application afterwards: a specialist whose contract was signed did that work,
+and the counters exist to say so. Only active accounts have a row, so work
+held by somebody who has left the department stops being counted.
+
 The period bar narrows by the date the assignment was made and behaves
 exactly as it does on the list pages, refusals included. There is no default
 period: the report opens on all time. The counting lives in

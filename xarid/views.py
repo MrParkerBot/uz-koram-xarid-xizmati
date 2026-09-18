@@ -1422,6 +1422,17 @@ WORKLOAD_TEMPLATE = "xarid/pages/xodimlar-yuklamasi.html"
 WORKLOAD_PERIOD = DateColumn("Tayinlangan sana", "tayinlangan_sana")
 
 
+def assigned_work() -> QuerySet[Application]:
+    """Every application somebody holds, however far it has got.
+
+    Not the Tayinlangan list, which is the work still in hand: a specialist
+    whose contract was signed did that work, and the report's counters exist
+    to say so. The report counts this set, and the bar is built over the same
+    one so the page holds a single definition of an assignment.
+    """
+    return Application.objects.filter(assigned_to__isnull=False)
+
+
 def staff_workload_report(request: HttpRequest) -> HttpResponse:
     """Xodimlar yuklamasi: what each specialist is carrying (REQ-YUKLAMA-002).
 
@@ -1430,7 +1441,7 @@ def staff_workload_report(request: HttpRequest) -> HttpResponse:
     """
     table_filter = TableFilter(
         (),
-        all_assigned_applications(),
+        assigned_work(),
         request.GET,
         date_column=WORKLOAD_PERIOD,
     )
