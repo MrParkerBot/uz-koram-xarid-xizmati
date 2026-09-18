@@ -1,0 +1,91 @@
+{% extends "xarid/base.html" %}
+{# The Korhona Xaridi | Mahsulotlar report: still the supplied prototype with sample rows. #}
+{% block title %}Mahsulotlar{% endblock %}
+{% block breadcrumb %}Hisobotlar / Mahsulotlar{% endblock %}
+{% block page_heading %}Mahsulotlar{% endblock %}
+{% block content %}
+
+    <div class="page-header">
+      <div><h1 class="page-title">Korhona Xaridi | Mahsulotlar</h1><div class="muted">Enterprise Purchase — Products Detail</div></div>
+      <div class="page-actions"><span class="role-tag role-admin">Admin only</span></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:20px;">
+      <div class="panel-body" style="padding:16px 20px;">
+        <div style="font-size:11px;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;margin-bottom:10px;">Holat Tartibi:</div>
+        <div class="status-flow">
+          <div class="status-step">Kelib tushdi</div><div class="status-arrow"><i class="bi bi-arrow-right" aria-hidden="true"></i></div>
+          <div class="status-step">Qabul qilindi</div><div class="status-arrow"><i class="bi bi-arrow-right" aria-hidden="true"></i></div>
+          <div class="status-step">Tayinlandi</div><div class="status-arrow"><i class="bi bi-arrow-right" aria-hidden="true"></i></div>
+          <div class="status-step active">Shartnoma tuzilgan</div><div class="status-arrow"><i class="bi bi-arrow-right" aria-hidden="true"></i></div>
+          <div class="status-step">Birjaga qo'yilgan</div><div class="status-arrow"><i class="bi bi-arrow-right" aria-hidden="true"></i></div>
+          <div class="status-step">Yetkazib berilgan</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar"><div class="toolbar-group">
+        <select class="form-control" style="width:150px;">
+          <option value="">Bo'lim: barchasi</option>
+          <option>Texnik bo'lim</option>
+          <option>Ishlab chiqarish</option>
+          <option>Moliya bo'limi</option>
+        </select>
+        <select class="form-control" style="width:180px;">
+          <option value="">Mahsulot turi: barchasi</option>
+          <option>100042 — Metallurgiya</option>
+          <option>200031 — Kimyoviy</option>
+          <option>300015 — Elektr</option>
+        </select>
+        <select class="form-control" style="width:160px;" onchange="filterByStatus(this.value)">
+          <option value="">Holati: barchasi</option>
+          <option>Kelib tushdi</option>
+          <option>Qabul qilindi</option>
+          <option>Tayinlandi</option>
+          <option>Shartnoma tuzilgan</option>
+          <option>Birjaga qo'yilgan</option>
+          <option>Yetkazib berilgan</option>
+          <option>Bekor qilingan</option>
+        </select>
+        <input class="form-control" type="date" style="width:140px;"/>
+        <button class="btn btn-primary-custom btn-sm"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
+        </div><div class="toolbar-group">
+          <button class="btn btn-outline-custom btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
+          <button class="btn btn-outline-custom btn-sm"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table-app" id="mahsulot-table">
+          <thead><tr>
+            <th style="width:36px;">#</th>
+            <th>Ariza №</th>
+            <th>Bo'lim</th>
+            <th>Mahsulot Turi</th>
+            <th>Buyurtma nomi</th>
+            <th class="sortable">Soni<span class="sort-icon"></span></th>
+            <th>O'lchov</th>
+            <th>Izoh</th>
+            <th>PDF</th>
+            <th>Qabul sanasi</th>
+            <th>Holati</th>
+          </tr></thead>
+          <tbody id="mahsulot-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pagination-wrap">
+        <button class="btn btn-outline-custom btn-sm">‹ Oldingi</button>
+        <button class="btn btn-primary-custom btn-sm page-btn" data-page="1">1</button>
+        <button class="btn btn-outline-custom btn-sm page-btn" data-page="2">2</button>
+        <button class="btn btn-outline-custom btn-sm next-btn">Keyingi ›</button>
+        <div class="pagination-info">
+          <select class="form-control" style="width:70px;"><option>25</option><option>10</option><option>50</option></select>
+          <span>Jami: <span id="total-count">7</span> ta</span>
+        </div>
+      </div>
+    </div>
+
+{% endblock %}
+{% block scripts %}
+<script src="{{ static('xarid/js/pages/mahsulotlar.js') }}"></script>
+{% endblock %}

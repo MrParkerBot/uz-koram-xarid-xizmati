@@ -1,0 +1,68 @@
+{#
+The one document every page sits inside.
+
+Its markup is transcribed from the static pages supplied with the technical
+assignment, because the vendored style.css was written against these exact
+class names. A signed-in visitor gets the application chrome - sidebar, top
+header, page wrapper; an anonymous visitor (the login and logged-out pages)
+gets the bare document with a small link strip, since the supplied sign-in
+design has no sidebar.
+
+A page fills these blocks:
+
+  title         the part of <title> before the " - Uz-Koram" suffix
+  styles        stylesheets or head scripts only that page needs
+  body_class    a class attribute on <body>; the login page uses .login-body
+  breadcrumb    the small grey trail in the top header, e.g. "Umumiy / Dashboard"
+  page_heading  the bold line under the trail
+  content       the page itself
+  scripts       scripts that run after the shared ones
+#}
+{% macro page_messages(messages) -%}
+{% if messages %}
+<div class="page-messages" role="status" aria-live="polite">
+  {% for message in messages %}<div class="alert alert-{{ message.tags or 'info' }}">{{ message }}</div>{% endfor %}
+</div>
+{% endif %}
+{%- endmacro %}
+{% set active_page = request.resolver_match.url_name if request and request.resolver_match else none %}
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>{% block title %}Xarid Xizmati Bo'limi{% endblock %} - Uz-Koram</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="{{ static('xarid/css/bootstrap.min.css') }}" rel="stylesheet"/>
+<link href="{{ static('xarid/css/bootstrap-icons.css') }}" rel="stylesheet"/>
+<link rel="stylesheet" href="{{ static('xarid/css/style.css') }}"/>
+{% block styles %}{% endblock %}
+</head>
+<body{% block body_class %}{% endblock %}>
+{% if user.is_authenticated %}
+<div class="app-shell">
+<aside class="sidebar"><nav class="sidebar-nav">{% for group in navigation_groups(user) %}<div class="nav-section-label">{{ group.label }}</div>{% for entry in group.entries %}<a href="{{ url('xarid:' ~ entry.page_name) }}" class="nav-link{% if entry.page_name == active_page %} active{% endif %}"><i class="bi {{ entry.icon }}" aria-hidden="true"></i><span class="label-text">{{ entry.label }}</span></a>{% endfor %}{% endfor %}</nav><div class="sidebar-footer"><div class="sidebar-user"><div class="sidebar-avatar">{{ user_initials(user) }}</div><div class="sidebar-user-info"><div class="name">{{ display_name(user) }}</div><div class="role">{{ user_type_name(user) or user.get_username() }}</div></div></div></div></aside>
+<main class="main-shell">
+  <header class="top-header">
+    <div class="sidebar-brand"><div class="d-flex align-items-center gap-3"><div class="brand-mark">UK</div><div><div class="h6 mb-1">Uz-Koram</div><p class="mb-0 muted small">Xarid Xizmati Bo'limi</p></div></div></div>
+    <div><div class="small muted">{% block breadcrumb %}{% endblock %}</div><div class="fw-semibold">{% block page_heading %}{% endblock %}</div></div>
+    <div class="d-flex align-items-center gap-3"><div class="user-chip"><div class="av">{{ user_initials(user) }}</div><div><div class="uname">{{ display_name(user) }}</div><div class="urole">{{ user_type_name(user) or user.get_username() }}</div></div><span class="arrow"><i class="bi bi-chevron-down" aria-hidden="true"></i></span><div class="account-menu hidden"><a class="dropdown-item" href="{{ url('password_change') }}"><i class="bi bi-key" aria-hidden="true"></i> Parolni o'zgartirish</a>{% if user.is_staff %}<a class="dropdown-item" href="{{ url('admin:index') }}"><i class="bi bi-gear" aria-hidden="true"></i> Admin</a>{% endif %}<form method="post" action="{{ url('logout') }}">{{ csrf_input }}<button type="submit" class="dropdown-item"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> Chiqish</button></form></div></div></div>
+  </header>
+  <div class="page-wrap">
+{{ page_messages(messages) }}
+{% block content %}{% endblock %}
+  </div>
+</main>
+</div>
+{% else %}
+<nav class="anon-nav" aria-label="Kirish"><a href="{{ url('xarid:dashboard') }}"><i class="bi bi-house" aria-hidden="true"></i> Bosh sahifa</a><a href="{{ url('login') }}"><i class="bi bi-box-arrow-in-right" aria-hidden="true"></i> Kirish</a></nav>
+{{ page_messages(messages) }}
+{{ self.content() }}
+{% endif %}
+<script src="{{ static('xarid/js/bootstrap.bundle.min.js') }}"></script>
+<script src="{{ static('xarid/js/main.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

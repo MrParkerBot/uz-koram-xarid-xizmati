@@ -1,0 +1,66 @@
+{% extends "xarid/base.html" %}
+{% from "xarid/_forms.html" import text_input, delete_form, save_and_cancel with context %}
+{#
+The Bo`limlar master data page (DEC-018). Not a page the specification
+describes: departments are grouped by and auto-filled, so they need
+somewhere to be maintained. The bolimlar page is the report; this is the list.
+#}
+{% block title %}Bo'limlar{% endblock %}
+{% block breadcrumb %}Ma'lumotlar / Bo'limlar{% endblock %}
+{% block page_heading %}Bo'limlar{% endblock %}
+{% block content %}
+
+    <div class="page-header">
+      <div><h1 class="page-title">Bo'limlar</h1><div class="muted">Korhona bo'limlari — foydalanuvchi va arizalarga biriktiriladi</div></div>
+      <div class="page-actions"><span class="role-tag role-admin">Admin only</span></div>
+    </div>
+
+    <div class="split-layout">
+      <div class="split-table-side">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div style="font-size:14px;font-weight:700;">Bo'limlar Ro'yhati</div>
+          <a class="btn btn-primary-custom btn-sm" href="{{ url('xarid:bolim-royhati') }}">+ Yangi qo'shish</a>
+        </div>
+        <div class="search-box" style="margin-bottom:14px;"><i class="bi bi-search search-icon" aria-hidden="true"></i><input type="text" class="form-control" id="search-input" data-table-search="#bolim-table" placeholder="Qidirish…"/></div>
+        <div class="table-wrap">
+          <table class="table-app" id="bolim-table">
+            <thead><tr>
+              <th style="width:40px;">#</th>
+              <th class="sortable">Bo'lim Nomi<span class="sort-icon"></span></th>
+              <th style="width:120px;text-align:center;">Amallar</th>
+            </tr></thead>
+            <tbody id="bolim-tbody">
+            {% for department in departments %}
+              <tr data-id="{{ department.pk }}">
+                <td>{{ loop.index }}</td>
+                <td>{{ department.name }}</td>
+                <td style="text-align:center;white-space:nowrap;">
+                  <a class="btn btn-outline-custom btn-xs" href="{{ url('xarid:bolim-royhati') }}?edit={{ department.pk }}"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</a>
+                  {{ delete_form(url('xarid:bolim-royhati-delete', department.pk), department.name ~ " o'chirilsinmi?") }}
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="3" class="muted" style="text-align:center;">Hozircha yozuv yo'q.</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="split-form-side">
+        <form method="post" action="{% if edited_record %}{{ url('xarid:bolim-royhati-update', edited_record.pk) }}{% else %}{{ url('xarid:bolim-royhati-create') }}{% endif %}">
+          {{ csrf_input }}
+          <div class="split-form-title" id="form-title">
+            {% if edited_record %}<i class="bi bi-pencil" aria-hidden="true"></i> Bo'lim tahrirlash{% else %}<i class="bi bi-plus-lg" aria-hidden="true"></i> Yangi Bo'lim qo'shish{% endif %}
+          </div>
+          {{ text_input(form.name, "Bo'lim Nomi", placeholder="masalan: Texnik bo'lim", required=true) }}
+          {{ text_input(form.category_number, "Category Number", placeholder="100123", type="number", hint="6 xonali son. Majburiy emas.") }}
+          {{ save_and_cancel(url('xarid:bolim-royhati')) }}
+          <div class="alert alert-info" style="margin-top:20px;">
+            <span>ℹ</span><div>Bo'limlar <strong>Foydalanuvchilar</strong> sahifasida xodimga biriktiriladi va <strong>Xarid Arizasi (4.9)</strong> formasida avtomatik to'ldiriladi (DEC-018). O'chirilgan bo'lim ro'yhatdan chiqadi, lekin unga biriktirilgan xodimlar saqlanib qoladi.</div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+{% endblock %}

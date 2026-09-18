@@ -1,0 +1,70 @@
+{#
+Form field macros shared by every page that renders a Django form by hand.
+
+The vendored stylesheet styles .form-control, .form-label, .form-hint and
+.form-error, so the fields are written out rather than left to form.as_p.
+Import with context so the macros can read csrf_input.
+#}
+{% macro required_mark() -%}
+<span style="color:var(--color-danger)">*</span>
+{%- endmacro %}
+
+{% macro errors(field) -%}
+<div class="form-error">{{ field.errors|striptags }}</div>
+{%- endmacro %}
+
+{% macro text_input(field, label, placeholder="", required=false, type="text", extra_class="", readonly=false, hint="", maxlength=none) -%}
+<div class="form-group">
+  <label class="form-label" for="{{ field.id_for_label }}">{{ label }}{% if required %} {{ required_mark() }}{% endif %}</label>
+  <input type="{{ type }}" class="form-control{% if extra_class %} {{ extra_class }}{% endif %}" name="{{ field.html_name }}" id="{{ field.id_for_label }}" value="{{ field.value() if field.value() is not none else '' }}" placeholder="{{ placeholder }}"{% if required %} required{% endif %}{% if readonly %} readonly{% endif %}{% if maxlength %} maxlength="{{ maxlength }}"{% endif %}/>
+  {% if hint %}<div class="form-hint">{{ hint }}</div>{% endif %}
+  {{ errors(field) }}
+</div>
+{%- endmacro %}
+
+{% macro textarea(field, label, placeholder="", rows=3) -%}
+<div class="form-group">
+  <label class="form-label" for="{{ field.id_for_label }}">{{ label }}</label>
+  <textarea class="form-control" name="{{ field.html_name }}" id="{{ field.id_for_label }}" placeholder="{{ placeholder }}" rows="{{ rows }}" style="resize:vertical;">{{ field.value() or '' }}</textarea>
+  {{ errors(field) }}
+</div>
+{%- endmacro %}
+
+{% macro select(field, label, empty_label=none, hint="") -%}
+<div class="form-group">
+  <label class="form-label" for="{{ field.id_for_label }}">{{ label }}</label>
+  <select class="form-control" name="{{ field.html_name }}" id="{{ field.id_for_label }}">
+    {% if empty_label is not none %}<option value="">{{ empty_label }}</option>{% endif %}
+    {% for value, text in field.field.choices %}{% if value or empty_label is none %}<option value="{{ value }}"{% if (field.value()|string) == (value|string) %} selected{% endif %}>{{ text }}</option>{% endif %}{% endfor %}
+  </select>
+  {% if hint %}<div class="form-hint">{{ hint }}</div>{% endif %}
+  {{ errors(field) }}
+</div>
+{%- endmacro %}
+
+{% macro widget(field, label, required=false, hint="", compact=false) -%}
+<div class="form-group"{% if compact %} style="margin-bottom:0;"{% endif %}>
+  <label class="form-label" for="{{ field.id_for_label }}">{{ label }}{% if required %} {{ required_mark() }}{% endif %}</label>
+  {{ field }}
+  {% if hint %}<div class="form-hint">{{ hint }}</div>{% endif %}
+  {{ errors(field) }}
+</div>
+{%- endmacro %}
+
+{% macro delete_form(action, question, label="O'chirish") -%}
+<form method="post" action="{{ action }}" style="display:inline;" data-confirm="{{ question }}">
+  {{ csrf_input }}
+  <button type="submit" class="btn btn-outline-custom text-danger btn-xs" aria-label="{{ label }}"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+</form>
+{%- endmacro %}
+
+{% macro save_and_cancel(cancel_url) -%}
+<div style="display:flex;gap:10px;margin-top:24px;">
+  <button type="submit" class="btn btn-primary-custom" style="flex:1;"><i class="bi bi-save" aria-hidden="true"></i> Saqlash</button>
+  <a class="btn btn-outline-custom" style="flex:1;" href="{{ cancel_url }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</a>
+</div>
+{%- endmacro %}
+
+{% macro pdf_badge(download_url, filename) -%}
+<a class="pdf-badge" href="{{ download_url }}" title="{{ filename }}"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i></a>
+{%- endmacro %}

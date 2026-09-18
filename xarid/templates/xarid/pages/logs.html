@@ -1,0 +1,106 @@
+{% extends "xarid/base.html" %}
+{# The Logs page: still the supplied prototype with sample rows. #}
+{% block title %}Logs{% endblock %}
+{% block breadcrumb %}Tizim / Logs{% endblock %}
+{% block page_heading %}Logs{% endblock %}
+{% block content %}
+
+    <div class="page-header">
+      <div><h1 class="page-title">Tizim Loglari</h1><div class="muted">System Activity Logs — Audit Trail</div></div>
+      <div class="page-actions"><span class="role-tag role-admin">Admin only</span></div>
+    </div>
+
+    <div class="grid-4" style="margin-bottom:24px;">
+      <div class="panel stat-card">
+        <div class="stat-icon" style="background:rgba(223,88,48,.12);"><i class="bi bi-clipboard" aria-hidden="true"></i></div>
+        <div class="stat-label">Jami Loglar</div>
+        <div class="kpi-value">1,482</div>
+        <div class="stat-sub">Barcha vaqt uchun</div>
+      </div>
+      <div class="panel stat-card">
+        <div class="stat-icon" style="background:rgba(46,125,50,.12);"><i class="bi bi-check-circle" aria-hidden="true"></i></div>
+        <div class="stat-label">Muvaffaqiyatli</div>
+        <div class="kpi-value" style="color:var(--color-success);">1,398</div>
+        <div class="stat-sub">94.3%</div>
+      </div>
+      <div class="panel stat-card">
+        <div class="stat-icon" style="background:rgba(192,57,43,.12);"><i class="bi bi-x-circle" aria-hidden="true"></i></div>
+        <div class="stat-label">Xatolar</div>
+        <div class="kpi-value" style="color:var(--color-danger);">84</div>
+        <div class="stat-sub">5.7%</div>
+      </div>
+      <div class="panel stat-card">
+        <div class="stat-icon" style="background:rgba(75,85,99,.12);"><i class="bi bi-person" aria-hidden="true"></i></div>
+        <div class="stat-label">Faol Sessiyalar</div>
+        <div class="kpi-value" style="color:var(--color-info);">3</div>
+        <div class="stat-sub">Hozir onlayn</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar"><div class="toolbar-group">
+        <span class="toolbar-label">Filter:</span>
+        <div class="search-box" style="flex:1;max-width:260px;"><i class="bi bi-search search-icon" aria-hidden="true"></i>
+          <input type="text" class="form-control" id="log-search" data-table-search="#logs-table" placeholder="Qidirish…"/>
+        </div>
+        <select class="form-control" style="width:140px;">
+          <option value="">Foydalanuvchi: barchasi</option>
+          <option>Admin</option>
+          <option>Manager</option>
+          <option>Specialist</option>
+        </select>
+        <select class="form-control" style="width:130px;">
+          <option value="">Holati: barchasi</option>
+          <option value="200">200 OK</option>
+          <option value="201">201 Created</option>
+          <option value="400">400 Error</option>
+          <option value="500">500 Error</option>
+        </select>
+        <select class="form-control" style="width:120px;">
+          <option value="">Metod: barchasi</option>
+          <option value="GET">GET</option>
+          <option value="POST">POST</option>
+          <option value="PUT">PUT</option>
+          <option value="DELETE">DELETE</option>
+        </select>
+        <input class="form-control" type="date" style="width:140px;"/>
+        <button class="btn btn-primary-custom btn-sm"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
+        </div><div class="toolbar-group">
+          <button class="btn btn-outline-custom btn-sm" onclick="Toast.info('Loglar eksport qilindi')"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Export</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table-app" id="logs-table">
+          <thead><tr>
+            <th style="width:36px;">#</th>
+            <th>Vaqt</th>
+            <th>Foydalanuvchi</th>
+            <th>Metod</th>
+            <th>Endpoint</th>
+            <th style="text-align:center;width:70px;">Status</th>
+            <th>Amal</th>
+            <th style="text-align:center;width:80px;">Davomiylik</th>
+            <th>IP</th>
+          </tr></thead>
+          <tbody id="logs-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pagination-wrap">
+        <button class="btn btn-outline-custom btn-sm prev-btn">‹ Oldingi</button>
+        <button class="btn btn-primary-custom btn-sm page-btn" data-page="1">1</button>
+        <button class="btn btn-outline-custom btn-sm page-btn" data-page="2">2</button>
+        <button class="btn btn-outline-custom btn-sm page-btn" data-page="3">3</button>
+        <span style="color:var(--color-text-muted);font-size:12px;">…</span>
+        <button class="btn btn-outline-custom btn-sm page-btn" data-page="60">60</button>
+        <button class="btn btn-outline-custom btn-sm next-btn">Keyingi ›</button>
+        <div class="pagination-info">
+          <select class="form-control" style="width:70px;"><option>25</option><option>10</option><option>50</option></select>
+          <span>Jami: 1,482 ta</span>
+        </div>
+      </div>
+    </div>
+
+{% endblock %}
+{% block scripts %}
+<script src="{{ static('xarid/js/pages/logs.js') }}"></script>
+{% endblock %}

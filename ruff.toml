@@ -1,9 +1,7 @@
-# Lint configuration for the Uz-Koram Xarid Xizmati application.
-#
-# The rule set is listed explicitly rather than relying on ruff's defaults, so
-# that upgrading ruff cannot silently change what the pull request gate enforces.
+# Lint configuration. The rule set is listed explicitly rather than relying on
+# ruff's defaults, so that upgrading ruff cannot silently change what is enforced.
 
-line-length = 88
+line-length = 99
 target-version = "py312"
 
 exclude = [
@@ -32,4 +30,4 @@ select = [
 "config/settings.py" = ["E501"]
 
 [lint.isort]
-known-first-party = ["config"]
+known-first-party = ["config", "xarid", "tests"]

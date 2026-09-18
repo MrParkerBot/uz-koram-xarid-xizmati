@@ -1,0 +1,76 @@
+{% extends "xarid/base.html" %}
+{# The Xodimlar Yuklamasi report: still the supplied prototype with sample rows. #}
+{% block title %}Xodimlar Yuklamasi{% endblock %}
+{% block breadcrumb %}Hisobotlar / Xodimlar Yuklamasi{% endblock %}
+{% block page_heading %}Xodimlar Yuklamasi{% endblock %}
+{% block content %}
+
+    <div class="page-header">
+      <div><h1 class="page-title">Xodimlar Yuklamasi</h1><div class="muted">Employee Workload Report</div></div>
+      <div class="page-actions"><span class="role-tag role-admin">Admin only</span></div>
+    </div>
+
+    <div class="grid-4" style="margin-bottom:24px;">
+      <div class="panel stat-card">
+        <div class="stat-icon" style="background:rgba(223,88,48,.12);"><i class="bi bi-people" aria-hidden="true"></i></div>
+        <div class="stat-label">Jami Xodimlar</div>
+        <div class="kpi-value">4</div>
+        <div class="stat-sub">Faol mutaxassislar</div>
+      </div>
+      <div class="panel stat-card">
+        <div class="stat-icon" style="background:rgba(75,85,99,.12);"><i class="bi bi-clipboard" aria-hidden="true"></i></div>
+        <div class="stat-label">Jami Topshiriqlar</div>
+        <div class="kpi-value" style="color:var(--color-primary);">38</div>
+        <div class="stat-sub">Bu oy</div>
+      </div>
+      <div class="panel stat-card">
+        <div class="stat-icon" style="background:rgba(46,125,50,.12);"><i class="bi bi-check-circle" aria-hidden="true"></i></div>
+        <div class="stat-label">Yetkazib berilgan</div>
+        <div class="kpi-value" style="color:var(--color-success);">11</div>
+        <div class="stat-sub">29% bajarildi</div>
+      </div>
+      <div class="panel stat-card">
+        <div class="stat-icon" style="background:rgba(192,57,43,.12);"><i class="bi bi-x-circle" aria-hidden="true"></i></div>
+        <div class="stat-label">Bekor qilingan</div>
+        <div class="kpi-value" style="color:var(--color-danger);">3</div>
+        <div class="stat-sub">7.9% bekor</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar"><div class="toolbar-group">
+        <span class="toolbar-label">Sana:</span>
+        <input class="form-control" type="date" id="f-dan" style="width:140px;"/>
+        <input class="form-control" type="date" id="f-gacha" style="width:140px;"/>
+        <select class="form-control" style="width:180px;" id="f-sort">
+          <option value="desc">Tartib: kamayish</option>
+          <option value="asc">Tartib: o'sish</option>
+        </select>
+        <button class="btn btn-primary-custom btn-sm" onclick="applyFilter()"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
+        </div><div class="toolbar-group">
+          <button class="btn btn-outline-custom btn-sm" onclick="Toast.info('Excel yuklanmoqda…')"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
+          <button class="btn btn-outline-custom btn-sm" onclick="Toast.info('PDF yuklanmoqda…')"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table-app" id="yukl-table">
+          <thead><tr>
+            <th style="width:36px;">#</th>
+            <th>Xodim</th>
+            <th>Telefon</th>
+            <th class="sortable">Xarid topshiriqlari<span class="sort-icon"></span></th>
+            <th class="sortable">Boshlang'ich<span class="sort-icon"></span></th>
+            <th class="sortable">Birjaga qo'yilgan<span class="sort-icon"></span></th>
+            <th class="sortable">Shartnoma tuzilgan<span class="sort-icon"></span></th>
+            <th class="sortable">Yetkazib berilgan<span class="sort-icon"></span></th>
+            <th class="sortable">Bekor qilingan<span class="sort-icon"></span></th>
+          </tr></thead>
+          <tbody id="yukl-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+{% endblock %}
+{% block scripts %}
+<script src="{{ static('xarid/js/pages/xodimlar-yuklamasi.js') }}"></script>
+{% endblock %}

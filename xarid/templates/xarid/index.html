@@ -1,0 +1,170 @@
+{% extends "xarid/base.html" %}
+{#
+The dashboard, which answers at the site root. Still the supplied prototype:
+its figures are the sample values shipped with the technical assignment.
+#}
+{% block title %}Dashboard{% endblock %}
+{% block breadcrumb %}Umumiy / Dashboard{% endblock %}
+{% block page_heading %}Xarid faoliyati bo'yicha umumiy ko'rinish{% endblock %}
+{% block styles %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+{% endblock %}
+{% block content %}
+
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Asosiy Panel</h1>
+        <div class="muted">Yetkazib beruvchilar, shartnomalar va xarajatlar bo'yicha joriy holat.</div>
+      </div>
+      <div class="page-actions">
+        <button class="btn btn-outline-custom" data-generate-export><i class="bi bi-download" aria-hidden="true"></i> <span class="label-text">Hisobotni yuklash</span></button>
+        <a class="btn btn-primary-custom" href="{{ url('xarid:kelib-arizalar') }}"><i class="bi bi-inbox" aria-hidden="true"></i> <span class="label-text">Arizalarni ko'rish</span></a>
+      </div>
+    </div>
+
+    <!-- KPI ROW -->
+    <div class="grid-4 mb-4">
+      <div class="panel stat-card">
+        <div class="stat-icon"><i class="bi bi-buildings text-primary" aria-hidden="true"></i></div>
+        <div class="stat-label">Jami Yetkazib beruvchilar</div>
+        <div class="kpi-value">248</div>
+        <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:74%"></div></div>
+        <div class="stat-sub text-success"><i class="bi bi-arrow-up" aria-hidden="true"></i> 12 bu oy qo'shildi</div>
+      </div>
+      <div class="panel stat-card">
+        <div class="stat-icon"><i class="bi bi-file-earmark-text text-info" aria-hidden="true"></i></div>
+        <div class="stat-label">Tuzilgan Shartnomalar %</div>
+        <div class="kpi-value">74%</div>
+        <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:74%"></div></div>
+        <div class="stat-sub">183 / 248 jami</div>
+      </div>
+      <div class="panel stat-card">
+        <div class="stat-icon"><i class="bi bi-check2-circle text-success" aria-hidden="true"></i></div>
+        <div class="stat-label">Tugallangan %</div>
+        <div class="kpi-value">62%</div>
+        <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:62%"></div></div>
+        <div class="stat-sub">154 / 248 jami</div>
+      </div>
+      <div class="panel stat-card">
+        <div class="stat-icon"><i class="bi bi-cash-coin text-warning" aria-hidden="true"></i></div>
+        <div class="stat-label">Sariflangan (yil)</div>
+        <div class="kpi-value">1.24B</div>
+        <div class="stat-sub text-success">Tejaldi: 48M UZS</div>
+      </div>
+    </div>
+
+    <!-- CHARTS ROW -->
+    <div class="grid-2 mb-4">
+      <div class="panel chart-card">
+        <div class="panel-header">
+          <div class="panel-title">Xarajatlar (12 oy)</div>
+          <div class="d-flex gap-2">
+            <span class="badge badge-primary">Sarf</span>
+            <span class="badge badge-approved">Tejaldi</span>
+          </div>
+        </div>
+        <div class="panel-body"><canvas id="spending-chart"></canvas></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Top Yetkazib beruvchilar</div>
+          <div class="d-flex gap-2">
+            <button class="badge badge-primary" id="toggle-sum" data-top-mode="sum">Summa</button>
+            <button class="badge badge-soft" id="toggle-count" data-top-mode="count">Tur soni</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="top-suppliers">
+            <div class="d-flex justify-content-between align-items-center small mb-1"><span>Texnoprom LLC</span><span class="badge badge-primary">142M UZS</span></div>
+            <div class="progress-bar-wrap mb-3"><div class="progress-bar-fill" style="width:85%"></div></div>
+            <div class="d-flex justify-content-between align-items-center small mb-1"><span>MetalGrup JV</span><span class="badge badge-primary">98M UZS</span></div>
+            <div class="progress-bar-wrap mb-3"><div class="progress-bar-fill" style="width:60%"></div></div>
+            <div class="d-flex justify-content-between align-items-center small mb-1"><span>UzElektro</span><span class="badge badge-primary">76M UZS</span></div>
+            <div class="progress-bar-wrap mb-3"><div class="progress-bar-fill" style="width:46%"></div></div>
+            <div class="d-flex justify-content-between align-items-center small mb-1"><span>GazTrade</span><span class="badge badge-primary">54M UZS</span></div>
+            <div class="progress-bar-wrap mb-3"><div class="progress-bar-fill" style="width:33%"></div></div>
+            <div class="d-flex justify-content-between align-items-center small mb-1"><span>QurilishMat</span><span class="badge badge-primary">38M UZS</span></div>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:23%"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CATEGORY TABLE + BAR -->
+    <div class="grid-2 mb-4">
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">Supplier Category Taqsimoti</div></div>
+        <div class="table-wrap">
+          <table class="table-app">
+            <thead><tr>
+              <th>#</th><th>Kategoriya</th><th>Supplier soni</th><th>Ulush %</th>
+            </tr></thead>
+            <tbody>
+              <tr><td>1</td><td>Metallurgiya</td><td>48</td><td><span class="badge badge-primary">19.4%</span></td></tr>
+              <tr><td>2</td><td>Kimyoviy</td><td>36</td><td><span class="badge badge-info">14.5%</span></td></tr>
+              <tr><td>3</td><td>Elektr uskunalar</td><td>52</td><td><span class="badge badge-approved">21%</span></td></tr>
+              <tr><td>4</td><td>Qurilish materiallari</td><td>28</td><td><span class="badge badge-trial">11.3%</span></td></tr>
+              <tr><td>5</td><td>Yoqilg'i</td><td>22</td><td><span class="badge badge-soft">8.9%</span></td></tr>
+              <tr><td>6</td><td>Boshqa</td><td>62</td><td><span class="badge badge-soft">25%</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel chart-card">
+        <div class="panel-header"><div class="panel-title">Category Bar Chart</div></div>
+        <div class="panel-body"><canvas id="category-chart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- QUICK LINKS -->
+    <div class="panel mb-4">
+      <div class="panel-header"><div class="panel-title">Tezkor havolalar</div></div>
+      <div class="panel-body">
+        <div class="quick-grid">
+          <a href="{{ url('xarid:kelib-arizalar') }}" class="quick-tile"><div class="icon"><i class="bi bi-inbox" aria-hidden="true"></i></div><div class="fw-semibold small">Kelib Tushgan</div></a>
+          <a href="{{ url('xarid:qabul-arizalar') }}" class="quick-tile"><div class="icon"><i class="bi bi-check2-circle" aria-hidden="true"></i></div><div class="fw-semibold small">Qabul Qilingan</div></a>
+          <a href="{{ url('xarid:tuzilgan') }}" class="quick-tile"><div class="icon"><i class="bi bi-journal-text" aria-hidden="true"></i></div><div class="fw-semibold small">Tuzilgan</div></a>
+          <a href="{{ url('xarid:xodimlar-yuklamasi') }}" class="quick-tile"><div class="icon"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i></div><div class="fw-semibold small">Xodimlar Yuklamasi</div></a>
+          <a href="{{ url('xarid:bolimlar') }}" class="quick-tile"><div class="icon"><i class="bi bi-buildings" aria-hidden="true"></i></div><div class="fw-semibold small">Bo'limlar</div></a>
+          <a href="{{ url('xarid:logs') }}" class="quick-tile"><div class="icon"><i class="bi bi-journal-code" aria-hidden="true"></i></div><div class="fw-semibold small">Logs</div></a>
+        </div>
+      </div>
+    </div>
+
+    <!-- RECENT ACTIVITY -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">So'nggi Faollik</div>
+        <span class="badge badge-primary">Bugun</span>
+      </div>
+      <div class="panel-body">
+        <div class="mini-list">
+          <div class="mini-list-item">
+            <div><span class="fw-semibold">ARZ-2025-017</span> arizasi qabul qilindi — <span class="muted">A. Karimov tomonidan</span></div>
+            <div class="footer-note text-nowrap">Bugun, 10:42</div>
+          </div>
+          <div class="mini-list-item">
+            <div><span class="fw-semibold">SHT-2025-042</span> shartnomasi tuzildi — <span class="muted">Texnoprom LLC</span></div>
+            <div class="footer-note text-nowrap">Bugun, 09:15</div>
+          </div>
+          <div class="mini-list-item">
+            <div><span class="fw-semibold">ARZ-2025-016</span> D. Yusupovaga tayinlandi</div>
+            <div class="footer-note text-nowrap">Kecha, 17:30</div>
+          </div>
+          <div class="mini-list-item">
+            <div><span class="fw-semibold">ARZ-2025-015</span> inkor etildi — <span class="text-danger">Narx noto'g'ri</span></div>
+            <div class="footer-note text-nowrap">Kecha, 14:05</div>
+          </div>
+          <div class="mini-list-item">
+            <div><span class="fw-semibold">SHT-2025-041</span> admin tomonidan tasdiqlandi</div>
+            <div class="footer-note text-nowrap">2025-03-12, 11:00</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+{% endblock %}
+{% block scripts %}
+<script src="{{ static('xarid/js/pages/dashboard.js') }}"></script>
+{% endblock %}

@@ -1,5 +1,5 @@
 # Vendored front-end assets are stored and checked out byte-for-byte as they
-# were supplied with the technical assignment. Without this, a checkout on
-# Windows rewrites their line endings, so the bytes served would no longer match
-# the files the customer approved.
-static/** -text
+# were supplied with the technical assignment, so a checkout on Windows does
+# not rewrite their line endings.
+xarid/static/xarid/css/** -text
+xarid/static/xarid/js/bootstrap.bundle.min.js -text
