@@ -1,7 +1,17 @@
 {% extends "xarid/base.html" %}
+{% from "xarid/_filters.html" import filter_bar with context %}
 {#
-The dashboard, which answers at the site root. Still the supplied prototype:
-its figures are the sample values shipped with the technical assignment.
+The dashboard, which answers at the site root. The three contract indicators
+(REQ-DASH-001 to REQ-DASH-004, TASK-UZK-048) and the spendings card
+(REQ-DASH-008, REQ-DASH-010, TASK-UZK-049) are counted from the database.
+The period bar narrows the spend alone; the other three cards report where
+the department stands now, and say so.
+The processing-time panel is counted too (REQ-DASH-012, TASK-UZK-050); what
+each of its stages is measured between is this application's own definition,
+which is why the panel prints it beside every figure.
+The charts, the top suppliers list, the category table and the activity list
+are still the supplied prototype's own sample data, and belong to UZK-051,
+UZK-057 and UZK-052.
 #}
 {% block title %}Dashboard{% endblock %}
 {% block breadcrumb %}Umumiy / Dashboard{% endblock %}
@@ -22,34 +32,73 @@ its figures are the sample values shipped with the technical assignment.
       </div>
     </div>
 
+    {# Narrows the Sariflangan card only; the yearly figure and the three
+       contract cards do not follow it. #}
+    <div class="toolbar mb-4">
+      {{ filter_bar(table_filter, url('xarid:dashboard')) }}
+    </div>
+
     <!-- KPI ROW -->
     <div class="grid-4 mb-4">
       <div class="panel stat-card">
         <div class="stat-icon"><i class="bi bi-buildings text-primary" aria-hidden="true"></i></div>
         <div class="stat-label">Jami Yetkazib beruvchilar</div>
-        <div class="kpi-value">248</div>
-        <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:74%"></div></div>
-        <div class="stat-sub text-success"><i class="bi bi-arrow-up" aria-hidden="true"></i> 12 bu oy qo'shildi</div>
+        <div class="kpi-value">{{ indicators.supplier_count }}</div>
+        <div class="stat-sub muted">Ro'yhatdagi faol firmalar</div>
       </div>
       <div class="panel stat-card">
         <div class="stat-icon"><i class="bi bi-file-earmark-text text-info" aria-hidden="true"></i></div>
         <div class="stat-label">Tuzilgan Shartnomalar %</div>
-        <div class="kpi-value">74%</div>
-        <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:74%"></div></div>
-        <div class="stat-sub">183 / 248 jami</div>
+        <div class="kpi-value">{{ indicators.created.percentage }}%</div>
+        <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:{{ indicators.created.bar_width }}%"></div></div>
+        <div class="stat-sub">{{ indicators.created.count }} / {{ indicators.created.measured_against }} jami</div>
       </div>
       <div class="panel stat-card">
         <div class="stat-icon"><i class="bi bi-check2-circle text-success" aria-hidden="true"></i></div>
         <div class="stat-label">Tugallangan %</div>
-        <div class="kpi-value">62%</div>
-        <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:62%"></div></div>
-        <div class="stat-sub">154 / 248 jami</div>
+        <div class="kpi-value">{{ indicators.completed.percentage }}%</div>
+        <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:{{ indicators.completed.bar_width }}%"></div></div>
+        <div class="stat-sub">{{ indicators.completed.count }} / {{ indicators.completed.measured_against }} jami</div>
       </div>
       <div class="panel stat-card">
         <div class="stat-icon"><i class="bi bi-cash-coin text-warning" aria-hidden="true"></i></div>
-        <div class="stat-label">Sariflangan (yil)</div>
-        <div class="kpi-value">1.24B</div>
-        <div class="stat-sub text-success">Tejaldi: 48M UZS</div>
+        <div class="stat-label">Sariflangan{% if table_filter.period.is_active %} (tanlangan davr){% else %} (jami){% endif %}</div>
+        <div class="kpi-value" style="font-size:20px;" title="{{ spendings.period.display }} UZS">{{ spendings.period.whole_display }} UZS</div>
+        <div class="stat-sub">{{ spendings.year_number }}-yilda kelishilgan: {{ spendings.year.whole_display }} UZS</div>
+        <div class="stat-sub">Tejaldi: formulasi kutilmoqda (DEC-025)</div>
+      </div>
+    </div>
+
+    <!-- PROCESSING TIME -->
+    <div class="panel mb-4">
+      <div class="panel-header">
+        <div class="panel-title">O'rtacha ma'lumotni qayta ishlash</div>
+        <span class="badge badge-soft">kunlar kesimida</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table-app">
+          <thead><tr>
+            <th style="width:200px;">Bosqich</th>
+            <th style="width:120px;text-align:center;">O'rtacha (kun)</th>
+            <th style="width:140px;text-align:center;">Nechta shartnoma</th>
+            <th>Nimadan nimagacha</th>
+          </tr></thead>
+          <tbody>
+          {% for stage in stages %}
+            <tr>
+              <td style="font-weight:600;">{{ stage.label }}</td>
+              <td style="text-align:center;">
+                {% if stage.was_measured %}<span class="badge badge-primary">{{ stage.days }}</span>{% else %}<span class="muted">&mdash;</span>{% endif %}
+              </td>
+              <td style="text-align:center;">{{ stage.measured_from }}</td>
+              <td class="muted">{{ stage.span }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-body footer-note">
+        Bosqich chegaralari texnik topshiriqda ko'rsatilmagan; joriy ta'riflar shu yerda keltirilgan (DEC-025 faqat Invoice manbasini belgilaydi).
       </div>
     </div>
 

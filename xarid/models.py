@@ -477,11 +477,52 @@ class ShartnomaStatus(OrderedStatus):
     """
 
     name = models.CharField("Status Nomi", max_length=MASTER_DATA_NAME_LENGTH, unique=True)
+    is_completed = models.BooleanField(
+        "Tugallangan holat",
+        default=False,
+        help_text=(
+            "A contract in this status is finished, and the dashboard counts "
+            "it as completed. The statuses are editable (DEC-010), so which "
+            "one means completed is marked here rather than named in the "
+            "code. Only one status may hold the marker."
+        ),
+    )
 
     class Meta:
         ordering = ("position", "name")
         verbose_name = "Shartnoma Status"
         verbose_name_plural = "Shartnoma Statuslari"
+
+    def save(self, *args, **kwargs) -> None:
+        """Save, keeping the completed marker on at most one status.
+
+        Marking this row completed takes the marker off whichever row held it,
+        so the dashboard's completed figure always has one definition however
+        the page is used.
+        """
+        super().save(*args, **kwargs)
+        if self.is_completed:
+            type(self).objects.exclude(pk=self.pk).filter(is_completed=True).update(
+                is_completed=False
+            )
+
+    @classmethod
+    def completed_status(cls) -> ShartnomaStatus | None:
+        """The status marked as the completed state, or None when none is.
+
+        None rather than an error: master data may be edited into a state
+        where nothing is marked, and the dashboard then reports no completed
+        contracts instead of failing to render.
+
+        A deleted status still answers. Deleting deactivates (DEC-009), and a
+        contract that reached the finished state stayed finished when the row
+        naming that state left the lists; dropping it from the count would
+        make the dashboard fall the moment somebody tidied the status list.
+        The marker is what is being read here, not the list of statuses still
+        on offer, which is why this does not use active() the way
+        status_columns() does.
+        """
+        return cls.objects.filter(is_completed=True).first()
 
 
 class MahsulotTuri(MasterDataRecord):
@@ -1264,6 +1305,16 @@ class Contract(models.Model):
         help_text="The date on the contract itself.",
     )
     tolash_muddati = models.DateField("To`lash muddati", null=True, blank=True)
+    invoice_sanasi = models.DateField(
+        "Invoice sanasi",
+        null=True,
+        blank=True,
+        help_text=(
+            "The date on the supplier's invoice. Added by DEC-025 so that the "
+            "Invoice stage of the dashboard's processing time has a source; "
+            "the document names the stage but models no invoice anywhere."
+        ),
+    )
     muddat_talabi = models.DateField("Muddat talabi", null=True, blank=True)
     izoh = models.TextField("Izoh", blank=True)
     yaratilingan_sana = models.DateTimeField("Yaratilingan sana", auto_now_add=True)

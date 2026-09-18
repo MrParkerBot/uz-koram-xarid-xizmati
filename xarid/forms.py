@@ -173,14 +173,14 @@ class ArizaStatusForm(MasterDataForm):
 
 
 class ShartnomaStatusForm(MasterDataForm):
-    """Capture one contract status."""
+    """Capture one contract status, including which one means completed."""
 
     position = position_form_field()
     category_number = category_number_field()
 
     class Meta:
         model = ShartnomaStatus
-        fields = ("name", "badge_colour", "position", "category_number")
+        fields = ("name", "badge_colour", "position", "category_number", "is_completed")
 
 
 class MahsulotTuriForm(MasterDataForm):
@@ -606,6 +606,7 @@ class ContractForm(forms.ModelForm):
             "shartnoma_sanasi",
             "tolash_muddati",
             "muddat_talabi",
+            "invoice_sanasi",
             "izoh",
         )
         field_classes = {"application": ApplicationChoiceField}
@@ -617,6 +618,7 @@ class ContractForm(forms.ModelForm):
             "shartnoma_sanasi": "Shartnoma sanasi",
             "tolash_muddati": "To`lash muddati",
             "muddat_talabi": "Muddat talabi",
+            "invoice_sanasi": "Invoice sanasi",
             "izoh": "Izoh",
         }
         widgets = {
@@ -627,6 +629,7 @@ class ContractForm(forms.ModelForm):
             "shartnoma_sanasi": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "tolash_muddati": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "muddat_talabi": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "invoice_sanasi": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "izoh": forms.Textarea(
                 attrs={"class": "form-control", "rows": 2, "placeholder": "Qo`shimcha izoh"}
             ),

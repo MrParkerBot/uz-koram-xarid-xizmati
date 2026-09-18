@@ -25,8 +25,39 @@ supplied with the assignment, on SQLite, behind Django's own authentication.
 - **Purchase applications**: a requester raises one against their own
   department, the department head approves, then the director approves - which
   stamps a QR code onto the PDF and raises the department's own application.
-- **Reports, drafted contracts, 1C integration and logs** are still the
-  supplied prototype pages with sample data.
+- **Dashboard**: the supplier count and the created and completed contract
+  percentages measured against it are counted from the database. Which
+  contract status means completed is marked on the Shartnoma Status page,
+  because the statuses are editable master data. The spendings card adds up
+  contract values: the total inside the period chosen in the bar, with the
+  calendar year's agreed total under it, both in UZS. The period narrows that
+  card alone - the other three report where the department stands now - and a
+  contract is accounted under its own contract date, or the day it was raised
+  when it has none. Savings has no formula yet (DEC-025) and says so. A panel
+  gives the average processing time of the four stages the assignment names,
+  in days. The charts, the top suppliers list, the category table and the
+  activity list are still the supplied prototype's sample data.
+
+### What the processing-time stages are measured between
+
+The assignment names four stages and no events, and DEC-025 decides only where
+Invoice comes from. These definitions are this application's own; the panel
+prints each one beside its figure so it can be argued with.
+
+| Stage | From | To |
+| --- | --- | --- |
+| Buyurtma kiritish | the application arriving | the contract raised against it |
+| Tasdiqlash | the contract being raised | it being approved |
+| Yetkazib berish | approval | the first move into the status marked completed |
+| Invoice | that same move | the invoice date on the contract |
+
+Approval is measured from the raising rather than from `yuborilgan_sana`,
+because a resend overwrites that column (DEC-024) and a contract sent twice
+would report only the time since its last send. An average covers only the
+contracts that recorded both of its ends: a stage nothing has completed prints
+a dash, not nought days.
+- **Drafted contracts, 1C integration and logs** are still the supplied
+  prototype pages with sample data.
 
 ## Project structure
 
