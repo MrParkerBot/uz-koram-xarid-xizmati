@@ -157,4 +157,31 @@ urlpatterns = [
     prototype_route("mahsulotlar/", "mahsulotlar"),
     prototype_route("integration/", "integration"),
     prototype_route("logs/", "logs"),
+    # Yuklab olish: each list page's table as Excel or PDF, under the page's
+    # own permission and with the page's own filters (REQ-ARIZA-002).
+    path(
+        "kelib-arizalar/eksport/<str:file_format>/",
+        incoming(views.incoming_export),
+        name="kelib-arizalar-eksport",
+    ),
+    path(
+        "qabul-arizalar/eksport/<str:file_format>/",
+        accepted(views.accepted_export),
+        name="qabul-arizalar-eksport",
+    ),
+    path(
+        "tayinlangan/eksport/<str:file_format>/",
+        assigned(views.assigned_export),
+        name="tayinlangan-eksport",
+    ),
+    path(
+        "kelishinlingan/eksport/<str:file_format>/",
+        contracts(views.contracts_export),
+        name="kelishinlingan-eksport",
+    ),
+    path(
+        "xarid-ariza/eksport/<str:file_format>/",
+        purchases(views.purchase_export),
+        name="xarid-ariza-eksport",
+    ),
 ]

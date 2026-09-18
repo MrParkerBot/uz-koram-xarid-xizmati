@@ -30,6 +30,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
 
 from xarid.attachments import attachment_response
+from xarid.exports import ExportColumn, TableExport, export_response, lines_of, local_date
 from xarid.filters import FilterColumn, TableFilter, report_invalid_filters
 from xarid.forms import (
     SUGGESTED_UNITS,
@@ -50,6 +51,7 @@ from xarid.forms import (
     UserSpecialtyForm,
     UserTypeForm,
 )
+from xarid.jinja2 import display_name
 from xarid.models import (
     BOLIM_BOSHLIGI,
     DIREKTOR,
@@ -1201,3 +1203,130 @@ def purchase_application_original_pdf(request: HttpRequest, pk: int) -> FileResp
     application = get_object_or_404(PurchaseApplication, pk=pk)
 
     return attachment_response(application.asl_pdf, f"{application.xarid_raqami}-asl.pdf")
+
+
+# ---------------------------------------------------------------------------
+# Yuklab olish: each list page's table as Excel or PDF (REQ-ARIZA-002)
+# ---------------------------------------------------------------------------
+
+# The columns mirror the tables, one row per order line, so the file holds
+# what the page shows. Each value_of reads (record, line).
+
+
+def category_label(line) -> str:
+    return f"{line.mahsulot_turi.category_number} - {line.mahsulot_turi.name}"
+
+
+def holder_name(application: Application) -> str:
+    return display_name(application.assigned_to) if application.assigned_to else ""
+
+
+ORDER_LINE_EXPORT_COLUMNS = (
+    ExportColumn("Mahsulot turi", lambda record, line: category_label(line)),
+    ExportColumn("Buyurtma nomi", lambda record, line: line.buyurtma_nomi),
+    ExportColumn("Soni", lambda record, line: line.soni_display),
+    ExportColumn("O'lchov", lambda record, line: line.olchov_birligi),
+)
+
+INCOMING_EXPORT_COLUMNS = (
+    ExportColumn("Ariza raqami", lambda ariza, line: ariza.ariza_raqami),
+    ExportColumn("Bo'lim", lambda ariza, line: ariza.department.name),
+    *ORDER_LINE_EXPORT_COLUMNS,
+    ExportColumn("Izoh", lambda ariza, line: ariza.izoh),
+    ExportColumn("Kelib tushgan", lambda ariza, line: local_date(ariza.kelib_tushgan_sana)),
+)
+
+ACCEPTED_EXPORT_COLUMNS = (
+    ExportColumn("Ariza raqami", lambda ariza, line: ariza.ariza_raqami),
+    ExportColumn("Bo'lim", lambda ariza, line: ariza.department.name),
+    *ORDER_LINE_EXPORT_COLUMNS,
+    ExportColumn("Qabul qilingan sana", lambda ariza, line: local_date(ariza.qabul_qilingan_sana)),
+    ExportColumn("Tayinlangan xodim", lambda ariza, line: holder_name(ariza)),
+)
+
+ASSIGNED_EXPORT_COLUMNS = (
+    ExportColumn("Ariza raqami", lambda ariza, line: ariza.ariza_raqami),
+    ExportColumn("Bo'lim", lambda ariza, line: ariza.department.name),
+    *ORDER_LINE_EXPORT_COLUMNS,
+    ExportColumn("Izoh", lambda ariza, line: ariza.izoh),
+    ExportColumn("Qabul qilingan sana", lambda ariza, line: local_date(ariza.qabul_qilingan_sana)),
+)
+ASSIGNED_HOLDER_COLUMN = ExportColumn("Tayinlangan xodim", lambda ariza, line: holder_name(ariza))
+ASSIGNED_PROGRESS_COLUMNS = (
+    ExportColumn(
+        "Xodim qabul qilgan sana", lambda ariza, line: local_date(ariza.xodim_qabul_qilgan_sana)
+    ),
+    ExportColumn("Holat", lambda ariza, line: ariza.status.name if ariza.status else ""),
+)
+
+CONTRACT_EXPORT_COLUMNS = (
+    ExportColumn("Shartnoma raqami", lambda shartnoma, line: shartnoma.shartnoma_raqami),
+    ExportColumn("Ariza raqami", lambda shartnoma, line: shartnoma.application.ariza_raqami),
+    ExportColumn("Buyurtma nomi", lambda shartnoma, line: line.buyurtma_nomi),
+    ExportColumn("Part Number", lambda shartnoma, line: line.part_number),
+    ExportColumn("Miqdori", lambda shartnoma, line: line.soni_display),
+    ExportColumn("Birligi", lambda shartnoma, line: line.olchov_birligi),
+    ExportColumn("Narxi", lambda shartnoma, line: line.narxi),
+    ExportColumn("Umumiy narx", lambda shartnoma, line: line.umumiy_narx),
+    ExportColumn("Bo'lim", lambda shartnoma, line: shartnoma.application.department.name),
+    ExportColumn("Firma", lambda shartnoma, line: shartnoma.supplier.name),
+    ExportColumn("Kim tuzdi", lambda shartnoma, line: display_name(shartnoma.created_by)),
+    ExportColumn("Yaratilgan", lambda shartnoma, line: local_date(shartnoma.yaratilingan_sana)),
+    ExportColumn("Shartnoma qiymati", lambda shartnoma, line: shartnoma.qiymati),
+    ExportColumn("Izoh", lambda shartnoma, line: shartnoma.inkor_izohi),
+)
+
+PURCHASE_EXPORT_COLUMNS = (
+    ExportColumn("Ariza raqami", lambda ariza, line: ariza.xarid_raqami),
+    ExportColumn("Shartnoma nomi", lambda ariza, line: ariza.shartnoma_nomi),
+    ExportColumn("Bo'lim", lambda ariza, line: ariza.department.name),
+    ExportColumn("Buyurtma nomi", lambda ariza, line: line.buyurtma_nomi),
+    ExportColumn("Soni", lambda ariza, line: line.soni_display),
+    ExportColumn("O'lchov", lambda ariza, line: line.olchov_birligi),
+    ExportColumn("Holati", lambda ariza, line: ariza.status.name if ariza.status else ""),
+    ExportColumn("Mahsulot turi", lambda ariza, line: category_label(line)),
+    ExportColumn("Izoh", lambda ariza, line: ariza.izoh),
+    ExportColumn("Yaratilgan", lambda ariza, line: local_date(ariza.yaratilingan_sana)),
+)
+
+
+def incoming_export(request: HttpRequest, file_format: str) -> HttpResponse:
+    """Download the Kelib tushgan table, filtered as the page is."""
+    table_filter = TableFilter(INCOMING_FILTERS, incoming_applications(), request.GET)
+    export = TableExport("kelib-arizalar", INCOMING_EXPORT_COLUMNS, lines_of(table_filter.apply()))
+    return export_response(export, file_format)
+
+
+def accepted_export(request: HttpRequest, file_format: str) -> HttpResponse:
+    """Download the Qabul qilingan table, filtered as the page is."""
+    table_filter = TableFilter(ACCEPTED_FILTERS, accepted_applications(), request.GET)
+    export = TableExport("qabul-arizalar", ACCEPTED_EXPORT_COLUMNS, lines_of(table_filter.apply()))
+    return export_response(export, file_format)
+
+
+def assigned_export(request: HttpRequest, file_format: str) -> HttpResponse:
+    """Download the Tayinlangan table as this person sees it."""
+    own_work_only = acts_on_own_work_only(request.user)
+    visible = assigned_applications(request.user) if own_work_only else all_assigned_applications()
+    table_filter = TableFilter(ASSIGNED_FILTERS, visible, request.GET)
+    columns = (
+        *ASSIGNED_EXPORT_COLUMNS,
+        *(() if own_work_only else (ASSIGNED_HOLDER_COLUMN,)),
+        *ASSIGNED_PROGRESS_COLUMNS,
+    )
+    export = TableExport("tayinlangan", columns, lines_of(table_filter.apply()))
+    return export_response(export, file_format)
+
+
+def contracts_export(request: HttpRequest, file_format: str) -> HttpResponse:
+    """Download the Kelishinlingan table, filtered as the page is."""
+    table_filter = TableFilter(CONTRACT_FILTERS, agreed_contracts(), request.GET)
+    export = TableExport("kelishinlingan", CONTRACT_EXPORT_COLUMNS, lines_of(table_filter.apply()))
+    return export_response(export, file_format)
+
+
+def purchase_export(request: HttpRequest, file_format: str) -> HttpResponse:
+    """Download the Xarid Arizasi table, filtered as the page is."""
+    table_filter = TableFilter(PURCHASE_FILTERS, purchase_applications(), request.GET)
+    export = TableExport("xarid-ariza", PURCHASE_EXPORT_COLUMNS, lines_of(table_filter.apply()))
+    return export_response(export, file_format)

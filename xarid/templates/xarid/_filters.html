@@ -21,3 +21,13 @@ passed in through a call block and rendered before the button.
   {% if table_filter.is_active %}<a class="btn btn-outline-custom btn-sm" href="{{ action_url }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Tozalash</a>{% endif %}
 </form>
 {%- endmacro %}
+
+{#
+The Excel and PDF links of a list page. They carry the bar's active filters,
+so the file holds the rows the page shows (REQ-ARIZA-002).
+#}
+{% macro export_links(page_name, table_filter) -%}
+{% set query = ("?" ~ table_filter.query_string) if table_filter.is_active else "" %}
+<a class="btn btn-outline-custom btn-sm" href="{{ url('xarid:' ~ page_name ~ '-eksport', 'xlsx') }}{{ query }}"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</a>
+<a class="btn btn-outline-custom btn-sm" href="{{ url('xarid:' ~ page_name ~ '-eksport', 'pdf') }}{{ query }}"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</a>
+{%- endmacro %}
