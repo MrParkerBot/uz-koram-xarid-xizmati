@@ -67,9 +67,7 @@ own account (DEC-018), never typed.
     {% endif %}
 
     <div class="panel">
-      <div class="toolbar">{% call filter_bar(table_filter, url('xarid:xarid-ariza')) %}
-        <input class="form-control" type="date" style="width:140px;" disabled title="Sana bo'yicha filtrlash keyingi bosqichda"/>
-        {% endcall %}<div class="toolbar-group">
+      <div class="toolbar">{{ filter_bar(table_filter, url('xarid:xarid-ariza')) }}<div class="toolbar-group">
           <button class="btn btn-primary-custom btn-sm" type="button" data-open-modal="xa-modal"><i class="bi bi-plus-lg" aria-hidden="true"></i> Ariza Yaratish</button>
           {{ export_links('xarid-ariza', table_filter) }}
         </div>

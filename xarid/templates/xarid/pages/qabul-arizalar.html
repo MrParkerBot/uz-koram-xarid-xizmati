@@ -23,9 +23,7 @@ per order line, with the application's own cells spanning its lines.
     <div class="panel" style="margin-bottom:24px;">
       <div class="toolbar"><div class="toolbar-group">
         <button class="btn btn-primary-custom btn-sm" type="button" data-open-modal="create-modal"><i class="bi bi-plus-lg" aria-hidden="true"></i> Ariza Yaratish</button>
-        {% call filter_bar(table_filter, url('xarid:qabul-arizalar')) %}
-        <input class="form-control" type="date" id="f-sana" style="width:140px;" disabled title="Sana bo'yicha filtrlash keyingi bosqichda"/>
-        {% endcall %}
+        {{ filter_bar(table_filter, url('xarid:qabul-arizalar')) }}
         </div><div class="toolbar-group">
           {{ export_links('qabul-arizalar', table_filter) }}
         </div>

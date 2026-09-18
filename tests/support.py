@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+from datetime import date, datetime, time
 from io import BytesIO
 
 from django.contrib.auth import get_user_model
@@ -17,6 +18,7 @@ from django.contrib.auth.models import AbstractBaseUser
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.crypto import get_random_string
 from pypdf import PdfWriter
 
@@ -130,6 +132,19 @@ def an_application(
         buyurtmachi_ismi="Bobur Toshmatov",
         **fields,
     )
+
+
+def arrived_on(day: date, hour: int = 12) -> Application:
+    """An application whose arrival is a chosen local day, not the test run.
+
+    The arrival timestamp is written on insert, so it is rewritten in the
+    database rather than passed to the builder.
+    """
+    application = an_application()
+    moment = timezone.make_aware(datetime.combine(day, time(hour, 0)))
+    Application.objects.filter(pk=application.pk).update(kelib_tushgan_sana=moment)
+    application.refresh_from_db()
+    return application
 
 
 def an_accepted_application(accepted_by: AbstractBaseUser, **fields) -> Application:

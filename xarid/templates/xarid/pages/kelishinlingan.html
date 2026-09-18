@@ -21,9 +21,7 @@ option. Ko'rish and Yuborish are still waiting for later work.
     </div>
 
     <div class="panel">
-      <div class="toolbar">{% call filter_bar(table_filter, url('xarid:kelishinlingan')) %}
-        <input class="form-control" type="date" style="width:140px;" disabled title="Sana bo'yicha filtrlash keyingi bosqichda"/>
-        {% endcall %}<div class="toolbar-group">
+      <div class="toolbar">{{ filter_bar(table_filter, url('xarid:kelishinlingan')) }}<div class="toolbar-group">
           <button class="btn btn-primary-custom btn-sm" type="button" data-open-modal="sht-modal"><i class="bi bi-plus-lg" aria-hidden="true"></i> Shartnoma Kiritish</button>
           {{ export_links('kelishinlingan', table_filter) }}
         </div>

@@ -140,11 +140,20 @@ already shows, so a specialist who sees only their own work is offered only
 the departments and statuses of that work. The bar is a GET form, so the
 chosen values travel in the query string and survive a re-render. A value that
 is not among the options is refused with a message rather than dropped
-silently. Date-range filtering is a later task.
+silently.
+
+The same bar carries a period and an ordering. A page declares the date it
+narrows by, and the two `dan` and `gacha` inputs bound it inclusively: a
+start alone means from that day onward, an end alone means up to and
+including that day, and neither leaves the rows unnarrowed by date. A date
+that cannot be read, and a start later than the end, are refused with a
+message and no period is applied. The `Tartib` drop-down orders the page by
+that same date, newest first by default, and choosing the other direction
+reverses the rows.
 
 The Excel and PDF buttons beside the bar download the table as the page
-shows it, filtered or whole, one row per order line with the table's
-columns as headers (`xarid/exports.py`, routes `<page>/eksport/xlsx/` and
+shows it, filtered or whole, in the order it shows it, one row per order
+line with the table's columns as headers (`xarid/exports.py`, routes `<page>/eksport/xlsx/` and
 `<page>/eksport/pdf/` under the page's own permission). An empty list still
 downloads a valid file with headers only.
 

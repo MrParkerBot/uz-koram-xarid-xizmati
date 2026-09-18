@@ -21,10 +21,7 @@ filter bar is inert until filtering is built for every table at once.
     </div>
 
     <div class="panel">
-      <div class="toolbar">{% call filter_bar(table_filter, url('xarid:kelib-arizalar')) %}
-        <input class="form-control" type="date" id="f-dan" style="width:140px;" disabled title="Sana bo'yicha filtrlash keyingi bosqichda"/>
-        <input class="form-control" type="date" id="f-gacha" style="width:140px;" disabled title="Sana bo'yicha filtrlash keyingi bosqichda"/>
-        {% endcall %}<div class="toolbar-group">
+      <div class="toolbar">{{ filter_bar(table_filter, url('xarid:kelib-arizalar')) }}<div class="toolbar-group">
           {{ export_links('kelib-arizalar', table_filter) }}
         </div>
       </div>

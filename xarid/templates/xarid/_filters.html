@@ -2,10 +2,9 @@
 The filter bar every list page renders from a TableFilter.
 
 A GET form, so the chosen values travel in the query string and survive a
-re-render or a bookmark. One select per column with a "barchasi" option, the
-Qidirish button, and a Tozalash link back to the unfiltered page while a
-filter is active. Controls that belong to a later task (the date range) are
-passed in through a call block and rendered before the button.
+re-render or a bookmark. One select per column with a "barchasi" option, then
+the period and the ordering the page offers, the Qidirish button, and a
+Tozalash link back to the unfiltered page while anything is chosen.
 #}
 {% macro filter_bar(table_filter, action_url) -%}
 <form method="get" action="{{ action_url }}" class="toolbar-group" data-filter-bar>
@@ -16,7 +15,20 @@ passed in through a call block and rendered before the button.
     {% for option in field.options %}<option value="{{ option.value }}"{% if option.value == field.selected %} selected{% endif %}>{{ option.label }}</option>{% endfor %}
   </select>
   {% endfor %}
-  {% if caller is defined %}{{ caller() }}{% endif %}
+  {% if table_filter.period %}
+  <span class="toolbar-label">Sana:</span>
+  <input class="form-control" type="date" style="width:140px;" name="{{ table_filter.period.column.start_parameter }}" id="f-dan"
+         value="{{ table_filter.period.start.isoformat() if table_filter.period.start else '' }}"
+         aria-label="{{ table_filter.period.column.label }}: davr boshi"/>
+  <input class="form-control" type="date" style="width:140px;" name="{{ table_filter.period.column.end_parameter }}" id="f-gacha"
+         value="{{ table_filter.period.end.isoformat() if table_filter.period.end else '' }}"
+         aria-label="{{ table_filter.period.column.label }}: davr oxiri"/>
+  {% endif %}
+  {% if table_filter.sort.is_offered %}
+  <select class="form-control" style="width:180px;" name="{{ table_filter.sort.parameter }}" id="f-sort" aria-label="Tartib">
+    {% for choice in table_filter.sort.choices %}<option value="{{ choice.value }}"{% if choice.value == table_filter.sort.selected %} selected{% endif %}>{{ choice.label }}</option>{% endfor %}
+  </select>
+  {% endif %}
   <button type="submit" class="btn btn-primary-custom btn-sm"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
   {% if table_filter.is_active %}<a class="btn btn-outline-custom btn-sm" href="{{ action_url }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Tozalash</a>{% endif %}
 </form>
@@ -24,7 +36,8 @@ passed in through a call block and rendered before the button.
 
 {#
 The Excel and PDF links of a list page. They carry the bar's active filters,
-so the file holds the rows the page shows (REQ-ARIZA-002).
+the period and the ordering, so the file holds the rows the page shows, in the
+order it shows them (REQ-ARIZA-002).
 #}
 {% macro export_links(page_name, table_filter) -%}
 {% set query = ("?" ~ table_filter.query_string) if table_filter.is_active else "" %}
