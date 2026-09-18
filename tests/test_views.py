@@ -765,7 +765,6 @@ class PrototypePageTests(SignedInAdminTestCase):
         for script in (
             "dashboard",
             "integration",
-            "logs",
         ):
             with self.subTest(script=script):
                 self.assertIsNotNone(finders.find(f"xarid/js/pages/{script}.js"))

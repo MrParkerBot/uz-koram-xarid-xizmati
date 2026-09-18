@@ -76,6 +76,9 @@ SIDEBAR_NAVIGATION: tuple[NavigationGroup, ...] = (
             NavigationEntry("Bo'limlar", "bi-buildings", "bolimlar"),
             NavigationEntry("Mahsulot Turi", "bi-box-seam", "mahsulot-tur"),
             NavigationEntry("Mahsulotlar", "bi-search", "mahsulotlar"),
+            # Not in the supplied sidebar: REQ-DASH-005 asks for Top suppliers
+            # as a page of its own, and the dashboard panel links to it.
+            NavigationEntry("Top Yetkazib beruvchilar", "bi-trophy", "top-suppliers"),
             NavigationEntry("Xarid Arizasi", "bi-cart3", "xarid-ariza"),
         ),
     ),

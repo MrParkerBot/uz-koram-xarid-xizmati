@@ -9,9 +9,13 @@ the department stands now, and say so.
 The processing-time panel is counted too (REQ-DASH-012, TASK-UZK-050); what
 each of its stages is measured between is this application's own definition,
 which is why the panel prints it beside every figure.
-The charts, the top suppliers list, the category table and the activity list
-are still the supplied prototype's own sample data, and belong to UZK-051,
-UZK-057 and UZK-052.
+The Top suppliers panel is counted too (REQ-DASH-005, TASK-UZK-051) and is
+the head of the page it links to, and so is the supplier category block
+(REQ-DASH-007, REQ-DASH-009, TASK-UZK-057), whose table and bar chart draw
+the same rows.
+The 12-month spendings chart and the activity list are still the supplied
+prototype's own sample data; the activity list is the log TASK-UZK-052
+writes, which has a page of its own.
 #}
 {% block title %}Dashboard{% endblock %}
 {% block breadcrumb %}Umumiy / Dashboard{% endblock %}
@@ -118,23 +122,19 @@ UZK-057 and UZK-052.
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title">Top Yetkazib beruvchilar</div>
-          <div class="d-flex gap-2">
-            <button class="badge badge-primary" id="toggle-sum" data-top-mode="sum">Summa</button>
-            <button class="badge badge-soft" id="toggle-count" data-top-mode="count">Tur soni</button>
-          </div>
+          <a class="badge badge-primary" href="{{ url('xarid:top-suppliers') }}">Barchasi</a>
         </div>
         <div class="panel-body">
           <div id="top-suppliers">
-            <div class="d-flex justify-content-between align-items-center small mb-1"><span>Texnoprom LLC</span><span class="badge badge-primary">142M UZS</span></div>
-            <div class="progress-bar-wrap mb-3"><div class="progress-bar-fill" style="width:85%"></div></div>
-            <div class="d-flex justify-content-between align-items-center small mb-1"><span>MetalGrup JV</span><span class="badge badge-primary">98M UZS</span></div>
-            <div class="progress-bar-wrap mb-3"><div class="progress-bar-fill" style="width:60%"></div></div>
-            <div class="d-flex justify-content-between align-items-center small mb-1"><span>UzElektro</span><span class="badge badge-primary">76M UZS</span></div>
-            <div class="progress-bar-wrap mb-3"><div class="progress-bar-fill" style="width:46%"></div></div>
-            <div class="d-flex justify-content-between align-items-center small mb-1"><span>GazTrade</span><span class="badge badge-primary">54M UZS</span></div>
-            <div class="progress-bar-wrap mb-3"><div class="progress-bar-fill" style="width:33%"></div></div>
-            <div class="d-flex justify-content-between align-items-center small mb-1"><span>QurilishMat</span><span class="badge badge-primary">38M UZS</span></div>
-            <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:23%"></div></div>
+          {% for row in top_suppliers %}
+            <div class="d-flex justify-content-between align-items-center small mb-1">
+              <span>{{ row.supplier.name }}</span>
+              <span class="badge badge-primary">{{ row.total.whole_display }} UZS</span>
+            </div>
+            <div class="progress-bar-wrap{% if not loop.last %} mb-3{% endif %}"><div class="progress-bar-fill" style="width:{{ row.share_of_leader }}%"></div></div>
+          {% else %}
+            <div class="muted small">Tanlangan davrda shartnomasi bo'lgan firma topilmadi.</div>
+          {% endfor %}
           </div>
         </div>
       </div>
@@ -143,26 +143,38 @@ UZK-057 and UZK-052.
     <!-- CATEGORY TABLE + BAR -->
     <div class="grid-2 mb-4">
       <div class="panel">
-        <div class="panel-header"><div class="panel-title">Supplier Category Taqsimoti</div></div>
+        <div class="panel-header">
+          <div class="panel-title">Supplier Category Taqsimoti</div>
+          <span class="badge badge-soft" title="Tugallangan holatga yetgan mahsulot turlari">Yetkazib berilgan turlar: {{ categories.delivered_types }}</span>
+        </div>
         <div class="table-wrap">
           <table class="table-app">
             <thead><tr>
-              <th>#</th><th>Kategoriya</th><th>Supplier soni</th><th>Ulush %</th>
+              <th style="width:40px;">#</th><th>Kategoriya</th><th style="width:120px;text-align:center;">Supplier soni</th><th style="width:110px;text-align:center;">Ulush %</th>
             </tr></thead>
             <tbody>
-              <tr><td>1</td><td>Metallurgiya</td><td>48</td><td><span class="badge badge-primary">19.4%</span></td></tr>
-              <tr><td>2</td><td>Kimyoviy</td><td>36</td><td><span class="badge badge-info">14.5%</span></td></tr>
-              <tr><td>3</td><td>Elektr uskunalar</td><td>52</td><td><span class="badge badge-approved">21%</span></td></tr>
-              <tr><td>4</td><td>Qurilish materiallari</td><td>28</td><td><span class="badge badge-trial">11.3%</span></td></tr>
-              <tr><td>5</td><td>Yoqilg'i</td><td>22</td><td><span class="badge badge-soft">8.9%</span></td></tr>
-              <tr><td>6</td><td>Boshqa</td><td>62</td><td><span class="badge badge-soft">25%</span></td></tr>
+            {% for row in categories.rows %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ row.category.name }}</td>
+                <td style="text-align:center;">{{ row.firms }}</td>
+                <td style="text-align:center;"><span class="badge {% if row.firms %}badge-primary{% else %}badge-soft{% endif %}">{{ row.share }}%</span></td>
+              </tr>
+            {% else %}
+              <tr><td colspan="4" class="muted" style="text-align:center;">Mahsulot turlari kiritilmagan.</td></tr>
+            {% endfor %}
             </tbody>
           </table>
+        </div>
+        <div class="panel-body footer-note">
+          Ulush har bir turdagi firmalar sonining jadval yig'indisiga ({{ categories.placements }}) nisbati. Ikki tur bo'yicha ishlaydigan firma har ikkalasida ham sanaladi.
         </div>
       </div>
       <div class="panel chart-card">
         <div class="panel-header"><div class="panel-title">Category Bar Chart</div></div>
         <div class="panel-body"><canvas id="category-chart"></canvas></div>
+        {# The same rows the table shows, so the two cannot drift apart. #}
+        <script type="application/json" id="category-chart-data">{{ category_chart|tojson }}</script>
       </div>
     </div>
 

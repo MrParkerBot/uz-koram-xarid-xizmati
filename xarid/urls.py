@@ -58,8 +58,18 @@ purchases = require_page_permission("xarid-ariza")
 urlpatterns = [
     # Where signing in lands: the first page the user's type may open.
     path("kirish/", views.landing_page, name="landing"),
+    # Everybody's own notifications (DEC-012). Closed by login_required
+    # alone: the DEC-015 matrix answers which pages a user type may open,
+    # and this is not one of those - it is the signed-in person's own.
+    path("bildirishnomalar/", views.notifications_page, name="notifications"),
     # The dashboard answers at the site root.
     path("", require_page_permission("dashboard")(views.dashboard), name="dashboard"),
+    # Top suppliers, which REQ-DASH-005 asks for as a page of its own.
+    path(
+        "top-suppliers/",
+        require_page_permission("top-suppliers")(views.top_suppliers_page),
+        name="top-suppliers",
+    ),
     # The Users page and everything it does answer to the page's permission.
     path("users/", users(views.user_list), name="users"),
     path("users/add/", users(views.user_create), name="user-create"),
@@ -216,7 +226,7 @@ urlpatterns = [
         name="tuzilgan-inkor",
     ),
     prototype_route("integration/", "integration"),
-    prototype_route("logs/", "logs"),
+    path("logs/", require_page_permission("logs")(views.logs_page), name="logs"),
     # Yuklab olish: each list page's table as Excel or PDF, under the page's
     # own permission and with the page's own filters (REQ-ARIZA-002).
     path(
