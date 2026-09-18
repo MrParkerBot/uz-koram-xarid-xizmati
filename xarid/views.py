@@ -88,6 +88,7 @@ from xarid.models import (
     department_of,
     has_user_type,
 )
+from xarid.notifications import tell_sender_of_acceptance, tell_sender_of_refusal
 from xarid.permissions import (
     acts_on_own_work_only,
     contract_editor,
@@ -283,6 +284,35 @@ def logs_page(request: HttpRequest) -> HttpResponse:
             "table_filter": table_filter,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Notifications (REQ-ARIZA-004, REQ-ARIZA-005, DEC-012)
+# ---------------------------------------------------------------------------
+
+NOTIFICATIONS_TEMPLATE = "xarid/pages/bildirishnomalar.html"
+
+
+@login_required
+def notifications_page(request: HttpRequest) -> HttpResponse:
+    """Everything this person has been told, newest first.
+
+    Not in the DEC-015 matrix on purpose: it is not a page a user type may
+    open, it is everybody's own, and the matrix answers the first question
+    rather than the second. login_required alone is the whole rule.
+
+    Showing a notification is what marks it read, so the bell stops counting
+    what the reader has just been shown. The page says so.
+    """
+    mine = Notification.objects.filter(recipient=request.user).select_related(
+        "application", "purchase_application"
+    )
+    shown = list(mine)
+    Notification.objects.filter(
+        pk__in=[notification.pk for notification in shown], read_at__isnull=True
+    ).update(read_at=timezone.now())
+
+    return render(request, NOTIFICATIONS_TEMPLATE, {"notifications": shown})
 
 
 @login_required
@@ -1003,6 +1033,7 @@ def accept_application(request: HttpRequest, pk: int) -> HttpResponse:
 
     if accepted:
         record_decision(request.user, application, approved=True)
+        tell_sender_of_acceptance(application)
         messages.success(request, f"{application.ariza_raqami} qabul qilindi.")
     else:
         messages.info(request, f"{application.ariza_raqami} allaqachon qabul qilingan.")
@@ -1038,6 +1069,7 @@ def reject_application(request: HttpRequest, pk: int) -> HttpResponse:
             approved=False,
             comment=application.inkor_izohi,
         )
+        tell_sender_of_refusal(application)
         messages.success(request, f"{application.ariza_raqami} inkor etildi.")
     else:
         messages.info(request, f"{application.ariza_raqami} allaqachon inkor etilgan.")

@@ -77,6 +77,13 @@ a dash, not nought days.
   rather than having the first approver overwritten, because the columns
   hold one approver. Writes made through the admin, a shell or a migration
   are not logged.
+- **Notifications**: accepting an application tells its sender; refusing tells
+  them the reason. Delivery is in-app and nothing else - an entry on the
+  Bildirishnomalar page and a number on the bell in the header - with no email
+  and no SMS (DEC-012). Opening the page marks what it showed as read. An
+  application entered on the Qabul qilingan page has no sender behind it
+  (DEC-031), so it tells nobody. The page is closed by `login_required` alone:
+  it is not a page a user type may open, it is everybody's own.
 - **The Logs page** (`Tizim / Logs`) lists those entries newest first with the
   nine columns section 10 names and a drop-down per column - user, department,
   form, action - beside the period. An entry nobody has decided leaves its
