@@ -131,6 +131,17 @@ currently on.
 New accounts are created on the Users page (or in the admin). A user made with
 `createsuperuser` has no User Type but, being a superuser, may open every page.
 
+## Filtering
+
+Every list page carries the per-column filter bar the specification asks
+for, built once in `xarid/filters.py`. A page declares which columns it
+filters by; each drop-down's options are derived from the rows that page
+already shows, so a specialist who sees only their own work is offered only
+the departments and statuses of that work. The bar is a GET form, so the
+chosen values travel in the query string and survive a re-render. A value that
+is not among the options is refused with a message rather than dropped
+silently. Date-range filtering and exports are later tasks.
+
 ## Attachments
 
 Application PDFs live under `ATTACHMENT_ROOT` (`attachments/`, gitignored),

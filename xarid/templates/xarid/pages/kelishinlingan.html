@@ -1,4 +1,5 @@
 {% extends "xarid/base.html" %}
+{% from "xarid/_filters.html" import filter_bar with context %}
 {% from "xarid/_forms.html" import widget, required_mark with context %}
 {#
 The Kelishinlingan Shartnoma page (section 4.6) with the Shartnoma Kiritish
@@ -20,14 +21,9 @@ option. Ko'rish and Yuborish are still waiting for later work.
     </div>
 
     <div class="panel">
-      <div class="toolbar"><div class="toolbar-group">
-        <span class="toolbar-label">Filter:</span>
-        <select class="form-control" style="width:160px;" disabled>
-          <option value="">Firma: barchasi</option>
-        </select>
-        <input class="form-control" type="date" style="width:140px;" disabled/>
-        <button class="btn btn-primary-custom btn-sm" disabled title="Filtrlash keyingi bosqichda"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
-        </div><div class="toolbar-group">
+      <div class="toolbar">{% call filter_bar(table_filter, url('xarid:kelishinlingan')) %}
+        <input class="form-control" type="date" style="width:140px;" disabled title="Sana bo'yicha filtrlash keyingi bosqichda"/>
+        {% endcall %}<div class="toolbar-group">
           <button class="btn btn-primary-custom btn-sm" type="button" data-open-modal="sht-modal"><i class="bi bi-plus-lg" aria-hidden="true"></i> Shartnoma Kiritish</button>
           <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
           <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>

@@ -8,7 +8,7 @@ person may touch is decided per view where the page alone cannot say.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -30,6 +30,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
 
 from xarid.attachments import attachment_response
+from xarid.filters import FilterColumn, TableFilter, report_invalid_filters
 from xarid.forms import (
     SUGGESTED_UNITS,
     ApplicationForm,
@@ -445,6 +446,33 @@ ORDER_LINE_FIELDS = ("mahsulot_turi", "buyurtma_nomi", "buyurtma_soni", "olchov_
 
 CONTRACT_LINE_FIELDS = ("buyurtma_nomi", "part_number", "buyurtma_soni", "olchov_birligi", "narxi")
 
+# The columns each list page filters by (REQ-ARIZA-001). Options are derived
+# from the rows the page already shows, so nothing outside a user's view is
+# offered.
+BY_DEPARTMENT = FilterColumn("bolim", "Bo'lim", "department_id", ("department__name",))
+BY_ORDERED_CATEGORY = FilterColumn(
+    "mahsulot",
+    "Mahsulot turi",
+    "items__mahsulot_turi_id",
+    ("items__mahsulot_turi__name",),
+    multi_valued=True,
+)
+BY_SPECIALIST = FilterColumn(
+    "xodim",
+    "Tayinlangan xodim",
+    "assigned_to_id",
+    ("assigned_to__first_name", "assigned_to__last_name"),
+    label_fallback_lookup="assigned_to__username",
+)
+BY_STATUS = FilterColumn("holat", "Holati", "status_id", ("status__name",))
+BY_SUPPLIER = FilterColumn("firma", "Firma", "supplier_id", ("supplier__name",))
+
+INCOMING_FILTERS = (BY_DEPARTMENT, BY_ORDERED_CATEGORY)
+ACCEPTED_FILTERS = (BY_DEPARTMENT, BY_SPECIALIST)
+ASSIGNED_FILTERS = (BY_DEPARTMENT, BY_STATUS)
+CONTRACT_FILTERS = (BY_SUPPLIER,)
+PURCHASE_FILTERS = (BY_ORDERED_CATEGORY,)
+
 
 def filled_in_rows(formset, fields: tuple[str, ...]) -> list[dict[str, object]]:
     """The rows somebody actually filled in, in the order they gave.
@@ -516,21 +544,32 @@ def all_assigned_applications() -> QuerySet[Application]:
 
 def incoming_list(request: HttpRequest) -> HttpResponse:
     """The table of applications that have arrived and not been decided."""
-    return render(request, INCOMING_TEMPLATE, {"applications": incoming_applications()})
+    table_filter = TableFilter(INCOMING_FILTERS, incoming_applications(), request.GET)
+    report_invalid_filters(request, table_filter)
+
+    return render(
+        request,
+        INCOMING_TEMPLATE,
+        {"applications": table_filter.apply(), "table_filter": table_filter},
+    )
 
 
 def accepted_page(
+    chosen_filters: Mapping[str, str] | None = None,
     form: ApplicationForm | None = None,
     items: ApplicationItemFormSet | None = None,
 ) -> dict[str, object]:
     """Everything the Qabul qilingan page renders.
 
     Args:
+        chosen_filters: the request's query parameters, for the filter bar.
         form: a bound application form to re-render with its errors.
         items: the bound order lines, likewise.
     """
+    table_filter = TableFilter(ACCEPTED_FILTERS, accepted_applications(), chosen_filters)
     return {
-        "applications": accepted_applications(),
+        "applications": table_filter.apply(),
+        "table_filter": table_filter,
         "form": form if form is not None else ApplicationForm(),
         "item_formset": (
             items
@@ -544,7 +583,10 @@ def accepted_page(
 
 def accepted_list(request: HttpRequest) -> HttpResponse:
     """The Qabul qilingan Arizalar table and the creation form (REQ-ARIZA-006)."""
-    return render(request, ACCEPTED_TEMPLATE, accepted_page())
+    page_context = accepted_page(request.GET)
+    report_invalid_filters(request, page_context["table_filter"])
+
+    return render(request, ACCEPTED_TEMPLATE, page_context)
 
 
 @require_POST
@@ -586,16 +628,16 @@ def assigned_list(request: HttpRequest) -> HttpResponse:
     else's; everybody else DEC-015 lets in hands work out and sees all of it.
     """
     own_work_only = acts_on_own_work_only(request.user)
+    visible = assigned_applications(request.user) if own_work_only else all_assigned_applications()
+    table_filter = TableFilter(ASSIGNED_FILTERS, visible, request.GET)
+    report_invalid_filters(request, table_filter)
 
     return render(
         request,
         ASSIGNED_TEMPLATE,
         {
-            "applications": (
-                assigned_applications(request.user)
-                if own_work_only
-                else all_assigned_applications()
-            ),
+            "applications": table_filter.apply(),
+            "table_filter": table_filter,
             "shows_the_holder": not own_work_only,
             "statuses": ArizaStatus.objects.active(),
         },
@@ -842,12 +884,15 @@ def contractable_applications(user: AbstractBaseUser) -> QuerySet[Application]:
 
 def contract_page(
     user: AbstractBaseUser,
+    chosen_filters: Mapping[str, str] | None = None,
     form: ContractForm | None = None,
     items: ContractItemFormSet | None = None,
 ) -> dict[str, object]:
     """Everything the Kelishinlingan Shartnoma page renders."""
+    table_filter = TableFilter(CONTRACT_FILTERS, agreed_contracts(), chosen_filters)
     return {
-        "contracts": agreed_contracts(),
+        "contracts": table_filter.apply(),
+        "table_filter": table_filter,
         "form": (
             form
             if form is not None
@@ -865,7 +910,10 @@ def contract_page(
 
 def agreed_contracts_list(request: HttpRequest) -> HttpResponse:
     """The Kelishinlingan Shartnoma table and the form that adds to it."""
-    return render(request, AGREED_CONTRACTS_TEMPLATE, contract_page(request.user))
+    page_context = contract_page(request.user, request.GET)
+    report_invalid_filters(request, page_context["table_filter"])
+
+    return render(request, AGREED_CONTRACTS_TEMPLATE, page_context)
 
 
 @require_POST
@@ -1030,12 +1078,15 @@ def reject_purchase_application(request: HttpRequest, pk: int) -> HttpResponse:
 def purchase_page(
     signed_in_department: Department | None = None,
     approvals: QuerySet[PurchaseApplication] | None = None,
+    chosen_filters: Mapping[str, str] | None = None,
     form: PurchaseApplicationForm | None = None,
     items: PurchaseApplicationItemFormSet | None = None,
 ) -> dict[str, object]:
     """Everything the Xarid Arizasi page renders."""
+    table_filter = TableFilter(PURCHASE_FILTERS, purchase_applications(), chosen_filters)
     return {
-        "applications": purchase_applications(),
+        "applications": table_filter.apply(),
+        "table_filter": table_filter,
         "signed_in_department": signed_in_department,
         "approvals": approvals,
         "form": form if form is not None else PurchaseApplicationForm(),
@@ -1051,14 +1102,14 @@ def purchase_page(
 
 def purchase_application_list(request: HttpRequest) -> HttpResponse:
     """The Xarid Arizasi table, the approval queue and the creation form."""
-    return render(
-        request,
-        PURCHASE_TEMPLATE,
-        purchase_page(
-            signed_in_department=department_of(request.user),
-            approvals=approvals_for(request.user),
-        ),
+    page_context = purchase_page(
+        signed_in_department=department_of(request.user),
+        approvals=approvals_for(request.user),
+        chosen_filters=request.GET,
     )
+    report_invalid_filters(request, page_context["table_filter"])
+
+    return render(request, PURCHASE_TEMPLATE, page_context)
 
 
 def why_no_department(user: AbstractBaseUser) -> str:

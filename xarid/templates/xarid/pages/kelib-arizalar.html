@@ -1,4 +1,5 @@
 {% extends "xarid/base.html" %}
+{% from "xarid/_filters.html" import filter_bar with context %}
 {% from "xarid/_forms.html" import pdf_badge with context %}
 {#
 The Kelib tushgan Arizalar page (section 4.1): what has arrived and not been
@@ -20,18 +21,10 @@ filter bar is inert until filtering is built for every table at once.
     </div>
 
     <div class="panel">
-      <div class="toolbar"><div class="toolbar-group">
-        <span class="toolbar-label">Filter:</span>
-        <select class="form-control" id="f-bolim" style="width:150px;" disabled>
-          <option value="">Bo'lim: barchasi</option>
-        </select>
-        <select class="form-control" id="f-mahsulot" style="width:160px;" disabled>
-          <option value="">Mahsulot turi: barchasi</option>
-        </select>
-        <input class="form-control" type="date" id="f-dan" style="width:140px;" disabled/>
-        <input class="form-control" type="date" id="f-gacha" style="width:140px;" disabled/>
-        <button class="btn btn-primary-custom btn-sm" disabled title="Filtrlash keyingi bosqichda"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
-        </div><div class="toolbar-group">
+      <div class="toolbar">{% call filter_bar(table_filter, url('xarid:kelib-arizalar')) %}
+        <input class="form-control" type="date" id="f-dan" style="width:140px;" disabled title="Sana bo'yicha filtrlash keyingi bosqichda"/>
+        <input class="form-control" type="date" id="f-gacha" style="width:140px;" disabled title="Sana bo'yicha filtrlash keyingi bosqichda"/>
+        {% endcall %}<div class="toolbar-group">
           <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
           <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>
         </div>

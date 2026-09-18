@@ -1,0 +1,23 @@
+{#
+The filter bar every list page renders from a TableFilter.
+
+A GET form, so the chosen values travel in the query string and survive a
+re-render or a bookmark. One select per column with a "barchasi" option, the
+Qidirish button, and a Tozalash link back to the unfiltered page while a
+filter is active. Controls that belong to a later task (the date range) are
+passed in through a call block and rendered before the button.
+#}
+{% macro filter_bar(table_filter, action_url) -%}
+<form method="get" action="{{ action_url }}" class="toolbar-group" data-filter-bar>
+  <span class="toolbar-label">Filter:</span>
+  {% for field in table_filter.fields %}
+  <select class="form-control" name="{{ field.column.parameter }}" id="f-{{ field.column.parameter }}" aria-label="{{ field.column.label }}">
+    <option value="">{{ field.column.label }}: barchasi</option>
+    {% for option in field.options %}<option value="{{ option.value }}"{% if option.value == field.selected %} selected{% endif %}>{{ option.label }}</option>{% endfor %}
+  </select>
+  {% endfor %}
+  {% if caller is defined %}{{ caller() }}{% endif %}
+  <button type="submit" class="btn btn-primary-custom btn-sm"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
+  {% if table_filter.is_active %}<a class="btn btn-outline-custom btn-sm" href="{{ action_url }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Tozalash</a>{% endif %}
+</form>
+{%- endmacro %}
