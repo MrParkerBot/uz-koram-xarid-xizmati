@@ -25,6 +25,7 @@ from django.http import (
     HttpResponseForbidden,
 )
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
@@ -87,11 +88,12 @@ from xarid.models import (
 from xarid.permissions import (
     acts_on_own_work_only,
     contract_editor,
-    contract_mover,
+    decides_on_contracts,
     first_page_for,
     grant_contract_editing,
     held_contract,
     may_open,
+    own_contract_test,
     revoke_contract_editing,
 )
 from xarid.reports import (
@@ -113,7 +115,6 @@ PURCHASE_TEMPLATE = "xarid/pages/xarid-ariza.html"
 # behind it yet, served under its own permission. The dashboard is index.html.
 PROTOTYPE_PAGE_TEMPLATES: dict[str, str] = {
     "dashboard": "xarid/index.html",
-    "tuzilgan": "xarid/pages/tuzilgan.html",
     "integration": "xarid/pages/integration.html",
     "logs": "xarid/pages/logs.html",
 }
@@ -982,7 +983,7 @@ def contract_page(
         "contracts": table_filter.apply(),
         "table_filter": table_filter,
         "shartnoma_statuslari": ShartnomaStatus.objects.active(),
-        "may_move_status": contract_mover(user),
+        "is_own_contract": own_contract_test(user),
         "form": (
             form
             if form is not None
@@ -1752,14 +1753,14 @@ def contract_set_status(request: HttpRequest, pk: int) -> HttpResponse:
             f"{contract.shartnoma_raqami} holatini o`zgartirib bo`lmaydi: "
             "bu shartnoma sizning ishingizga tegishli emas.",
         )
-        return redirect("xarid:kelishinlingan")
+        return back_to_contract_page(request)
 
     status = chosen_status(request.POST.get("holat"))
     try:
         moved = contract.set_status(status, by=request.user)
     except ValueError as refusal:
         messages.error(request, str(refusal))
-        return redirect("xarid:kelishinlingan")
+        return back_to_contract_page(request)
 
     if moved:
         messages.success(
@@ -1772,4 +1773,156 @@ def contract_set_status(request: HttpRequest, pk: int) -> HttpResponse:
             f"{contract.shartnoma_raqami} allaqachon {status.name} holatida.",
         )
 
+    return back_to_contract_page(request)
+
+
+@require_POST
+def contract_send_for_approval(request: HttpRequest, pk: int) -> HttpResponse:
+    """Send one contract to the department head (REQ-SHARTNOMA-005).
+
+    The message names where the contract went, not only that it went. Sending
+    takes it off this page, and a row disappearing with no explanation is how
+    somebody concludes they deleted something.
+    """
+    contract = get_object_or_404(Contract, pk=pk)
+
+    if not held_contract(request.user, contract):
+        messages.error(
+            request,
+            f"{contract.shartnoma_raqami} yuborilmadi: bu shartnoma sizning "
+            "ishingizga tegishli emas.",
+        )
+        return redirect("xarid:kelishinlingan")
+
+    try:
+        sent = contract.send_for_approval(by=request.user)
+    except ValueError as refusal:
+        messages.error(request, str(refusal))
+        return redirect("xarid:kelishinlingan")
+
+    if sent:
+        messages.success(
+            request,
+            f"{contract.shartnoma_raqami} tasdiqlashga yuborildi va "
+            "Tuzilgan Shartnomalar sahifasiga o`tdi.",
+        )
+    else:
+        messages.info(
+            request,
+            f"{contract.shartnoma_raqami} allaqachon tasdiqlashga yuborilgan.",
+        )
+
     return redirect("xarid:kelishinlingan")
+
+
+# ---------------------------------------------------------------------------
+# Tuzilgan Shartnomalar: the department head decides
+# ---------------------------------------------------------------------------
+SIGNED_CONTRACTS_TEMPLATE = "xarid/pages/tuzilgan.html"
+
+# The stages this page shows: waiting for a decision, and decided. A rejected
+# contract is not here - it went back to its specialist, which is what a
+# rejection means (REQ-SHARTNOMA-004).
+DECIDED_STAGES = (Contract.Stage.SENT, Contract.Stage.SIGNED)
+
+
+def back_to_contract_page(request: HttpRequest) -> HttpResponse:
+    """Return to whichever contract page the action was used from.
+
+    The status control is on two pages since this task, so a redirect to a
+    named one would move somebody off the page they were working on.
+    """
+    referer = request.META.get("HTTP_REFERER") or ""
+    if reverse("xarid:tuzilgan") in referer:
+        return redirect("xarid:tuzilgan")
+
+    return redirect("xarid:kelishinlingan")
+
+
+def signed_contracts() -> QuerySet[Contract]:
+    """The contracts the department head has to decide on, or has decided."""
+    return (
+        Contract.objects.filter(stage__in=DECIDED_STAGES)
+        .select_related(
+            "application", "application__department", "supplier", "status", "created_by"
+        )
+        .prefetch_related(
+            Prefetch("items", queryset=ContractItem.objects.all()),
+            Prefetch(
+                "status_changes",
+                queryset=ContractStatusChange.objects.select_related(
+                    "to_status", "from_status", "changed_by"
+                ),
+            ),
+        )
+        .order_by(F("yuborilgan_sana").desc(nulls_last=True), "-id")
+    )
+
+
+def signed_contracts_list(request: HttpRequest) -> HttpResponse:
+    """Tuzilgan Shartnomalar (REQ-SHARTNOMA-001, REQ-SHARTNOMA-002)."""
+    return render(
+        request,
+        SIGNED_CONTRACTS_TEMPLATE,
+        {
+            "contracts": signed_contracts(),
+            "may_decide": decides_on_contracts(request.user),
+            # The status control asks the same question here as on
+            # Kelishinlingan: a specialist may open this page, and offering
+            # them a control for somebody else's contract only produces a
+            # refusal they could have been spared.
+            "is_own_contract": own_contract_test(request.user),
+            "shartnoma_statuslari": ShartnomaStatus.objects.active(),
+        },
+    )
+
+
+@require_POST
+def contract_accept(request: HttpRequest, pk: int) -> HttpResponse:
+    """Approve one contract (REQ-SHARTNOMA-002)."""
+    contract = get_object_or_404(Contract, pk=pk)
+
+    if not decides_on_contracts(request.user):
+        raise PermissionDenied(
+            f"{request.user} may not decide on {contract.shartnoma_raqami}."
+        )
+
+    try:
+        approved = contract.accept(by=request.user)
+    except ValueError as refusal:
+        messages.error(request, str(refusal))
+        return redirect("xarid:tuzilgan")
+
+    if approved:
+        messages.success(request, f"{contract.shartnoma_raqami} tasdiqlandi.")
+    else:
+        messages.info(request, f"{contract.shartnoma_raqami} allaqachon tasdiqlangan.")
+
+    return redirect("xarid:tuzilgan")
+
+
+@require_POST
+def contract_reject(request: HttpRequest, pk: int) -> HttpResponse:
+    """Send one contract back to its specialist (REQ-SHARTNOMA-004)."""
+    contract = get_object_or_404(Contract, pk=pk)
+
+    if not decides_on_contracts(request.user):
+        raise PermissionDenied(
+            f"{request.user} may not decide on {contract.shartnoma_raqami}."
+        )
+
+    try:
+        rejected = contract.reject(by=request.user, comment=request.POST.get("izoh", ""))
+    except ValueError as refusal:
+        messages.error(request, str(refusal))
+        return redirect("xarid:tuzilgan")
+
+    if rejected:
+        messages.success(
+            request,
+            f"{contract.shartnoma_raqami} inkor qilindi va mutaxassisga qaytarildi.",
+        )
+    else:
+        messages.info(request, f"{contract.shartnoma_raqami} allaqachon hal qilingan.")
+
+    return redirect("xarid:tuzilgan")
