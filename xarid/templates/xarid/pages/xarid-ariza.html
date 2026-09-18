@@ -1,4 +1,5 @@
 {% extends "xarid/base.html" %}
+{% from "xarid/_filters.html" import filter_bar with context %}
 {% from "xarid/_forms.html" import widget, pdf_badge, required_mark with context %}
 {#
 The Xarid Arizasi page (section 4.9): the other way into the department. The
@@ -66,14 +67,9 @@ own account (DEC-018), never typed.
     {% endif %}
 
     <div class="panel">
-      <div class="toolbar"><div class="toolbar-group">
-        <span class="toolbar-label">Filter:</span>
-        <select class="form-control" style="width:180px;" disabled>
-          <option value="">Mahsulot turi: barchasi</option>
-        </select>
-        <input class="form-control" type="date" style="width:140px;" disabled/>
-        <button class="btn btn-primary-custom btn-sm" disabled title="Filtrlash keyingi bosqichda"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
-        </div><div class="toolbar-group">
+      <div class="toolbar">{% call filter_bar(table_filter, url('xarid:xarid-ariza')) %}
+        <input class="form-control" type="date" style="width:140px;" disabled title="Sana bo'yicha filtrlash keyingi bosqichda"/>
+        {% endcall %}<div class="toolbar-group">
           <button class="btn btn-primary-custom btn-sm" type="button" data-open-modal="xa-modal"><i class="bi bi-plus-lg" aria-hidden="true"></i> Ariza Yaratish</button>
           <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
           <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>

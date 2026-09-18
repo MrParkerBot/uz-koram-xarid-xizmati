@@ -216,7 +216,7 @@ class TemplateHygieneTests(SimpleTestCase):
 
     def test_every_page_template_extends_the_shared_base(self) -> None:
         for template in self.all_templates():
-            if template.name in ("base.html", "_forms.html"):
+            if template.name == "base.html" or template.name.startswith("_"):
                 continue
             with self.subTest(template=template.name):
                 self.assertIn(
