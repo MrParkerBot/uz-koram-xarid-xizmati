@@ -9,7 +9,7 @@ including a period that was refused and therefore never applied.
 #}
 {% macro filter_bar(table_filter, action_url) -%}
 <form method="get" action="{{ action_url }}" class="toolbar-group" data-filter-bar>
-  <span class="toolbar-label">Filter:</span>
+  {% if table_filter.fields %}<span class="toolbar-label">Filter:</span>{% endif %}
   {% for field in table_filter.fields %}
   <select class="form-control" name="{{ field.column.parameter }}" id="f-{{ field.column.parameter }}" aria-label="{{ field.column.label }}">
     <option value="">{{ field.column.label }}: barchasi</option>
