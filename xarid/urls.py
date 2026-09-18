@@ -58,6 +58,10 @@ purchases = require_page_permission("xarid-ariza")
 urlpatterns = [
     # Where signing in lands: the first page the user's type may open.
     path("kirish/", views.landing_page, name="landing"),
+    # Everybody's own notifications (DEC-012). Closed by login_required
+    # alone: the DEC-015 matrix answers which pages a user type may open,
+    # and this is not one of those - it is the signed-in person's own.
+    path("bildirishnomalar/", views.notifications_page, name="notifications"),
     # The dashboard answers at the site root.
     path("", require_page_permission("dashboard")(views.dashboard), name="dashboard"),
     # Top suppliers, which REQ-DASH-005 asks for as a page of its own.

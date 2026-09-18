@@ -1,0 +1,50 @@
+{% extends "xarid/base.html" %}
+{#
+The notifications panel (DEC-012). Everybody's own page rather than one a
+user type may open, so it is closed by login_required alone.
+
+Showing a notification is what marks it read, which is why the bell is empty
+after this page has been opened. The note under the list says so.
+#}
+{% block title %}Bildirishnomalar{% endblock %}
+{% block breadcrumb %}Umumiy / Bildirishnomalar{% endblock %}
+{% block page_heading %}Bildirishnomalar{% endblock %}
+{% block content %}
+
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Bildirishnomalar</h1>
+        <div class="muted">Sizga tegishli xabarlar.</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-body">
+        <div class="mini-list">
+        {% for notification in notifications %}
+          <div class="mini-list-item">
+            <div>
+              <span class="fw-semibold">{{ notification.get_kind_display() }}</span>
+              {% if notification.application %}
+                — <span class="mono">{{ notification.application.ariza_raqami }}</span>
+              {% elif notification.purchase_application %}
+                — <span class="mono">{{ notification.purchase_application.xarid_raqami }}</span>
+              {% endif %}
+              {% if notification.izoh %}<div class="muted small">{{ notification.izoh }}</div>{% endif %}
+            </div>
+            <div class="footer-note text-nowrap">
+              {% if not notification.read_at %}<span class="badge badge-primary">Yangi</span> {% endif %}
+              {{ notification.created_at|date("Y-m-d H:i") }}
+            </div>
+          </div>
+        {% else %}
+          <div class="muted" style="text-align:center;">Bildirishnomalar yo'q.</div>
+        {% endfor %}
+        </div>
+      </div>
+      <div class="panel-body footer-note">
+        Ochilgan bildirishnomalar o'qilgan deb belgilanadi. Xabarlar faqat tizim ichida yetkaziladi (DEC-012).
+      </div>
+    </div>
+
+{% endblock %}
