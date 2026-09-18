@@ -23,6 +23,7 @@ from datetime import date
 from urllib.parse import urlencode
 
 from django.db.models import F, QuerySet
+from django.db.models.expressions import OrderBy
 
 # The query string name of the ordering drop-down, which every page shares.
 SORT_PARAMETER = "tartib"
@@ -86,12 +87,13 @@ class SortChoice:
     Attributes:
         value: the query string value, such as "osish".
         label: what the drop-down calls it, such as "Tartib: o'sish".
-        order_by: the terms handed to the queryset, as strings or expressions.
+        order_by: the terms handed to the queryset, each a field name or an
+            ordering expression.
     """
 
     value: str
     label: str
-    order_by: tuple[object, ...]
+    order_by: tuple[str | OrderBy, ...]
 
 
 @dataclass(frozen=True)
@@ -290,7 +292,9 @@ class TableFilter:
         self.fields: tuple[FilterField, ...] = tuple(
             self._field(column, (chosen.get(column.parameter) or "").strip()) for column in columns
         )
-        self.period = DatePeriod(date_column, chosen) if date_column is not None else None
+        self.period: DatePeriod | None = (
+            DatePeriod(date_column, chosen) if date_column is not None else None
+        )
         self.sort = TableSort(sort_choices, (chosen.get(SORT_PARAMETER) or "").strip())
         if self.sort.refused:
             self._invalid_labels.append("Tartib")
