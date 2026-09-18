@@ -146,7 +146,9 @@ class IndicatorTests(TestCase):
 
         created = dashboard_indicators().created
 
-        self.assertEqual((created.count, created.measured_against, created.percentage), (3, 1, 300))
+        self.assertEqual(
+            (created.count, created.measured_against, created.percentage), (3, 1, 300)
+        )
         self.assertEqual(created.bar_width, 100)
 
 
