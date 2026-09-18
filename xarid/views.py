@@ -1720,6 +1720,21 @@ def category_purchasing_export(request: HttpRequest, file_format: str) -> HttpRe
     return export_response(export, file_format)
 
 
+def chosen_status(requested: str | None) -> ShartnomaStatus | None:
+    """The status a request asked for, or None when it asked for nothing usable.
+
+    Anything that is not a plain number is treated as no choice rather than
+    handed to the ORM, which raises on it: the drop-down always posts a real
+    id, so a value that is not one came from a hand-made request, and this
+    page answers every other refusal with a message. set_status has the
+    message for choosing nothing.
+    """
+    if not requested or not requested.isdigit():
+        return None
+
+    return ShartnomaStatus.objects.filter(pk=requested).first()
+
+
 @require_POST
 def contract_set_status(request: HttpRequest, pk: int) -> HttpResponse:
     """Move one contract to a status (REQ-SHTSTATUS-001).
@@ -1739,7 +1754,7 @@ def contract_set_status(request: HttpRequest, pk: int) -> HttpResponse:
         )
         return redirect("xarid:kelishinlingan")
 
-    status = ShartnomaStatus.objects.filter(pk=request.POST.get("holat")).first()
+    status = chosen_status(request.POST.get("holat"))
     try:
         moved = contract.set_status(status, by=request.user)
     except ValueError as refusal:
