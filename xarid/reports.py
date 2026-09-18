@@ -19,11 +19,13 @@ report is read for, and they may sum to more than the total.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from django.contrib.auth.models import AbstractBaseUser
 from django.db.models import Count, Q
 
+from xarid.exports import ExportColumn, TableExport
 from xarid.filters import DatePeriod
 from xarid.models import Department, ShartnomaStatus, assignable_specialists
 
@@ -31,6 +33,9 @@ from xarid.models import Department, ShartnomaStatus, assignable_specialists
 # from there to the status of a contract raised against it.
 ASSIGNED_APPLICATIONS = "assigned_applications"
 ASSIGNED_CONTRACT_STATUS = "assigned_applications__contracts__status"
+
+# What the totals row is called, on the page and in a download alike.
+TOTALS_LABEL = "Jami:"
 
 # The same two paths read from a department, which owns the applications it
 # raised rather than the ones it was given.
@@ -118,6 +123,27 @@ class Report:
     def subject_count(self) -> int:
         """How many subjects the report covers, for the page's first figure."""
         return len(self.rows)
+
+    @property
+    def export_rows(self) -> tuple[ReportRow, ...]:
+        """The rows a download holds: the report's, then the totals as one more.
+
+        The totals are the last row of the page too, and giving them the same
+        shape as any other row is what stops a file's totals drifting from its
+        columns - there is one way to read a counter, not two.
+        """
+        if not self.rows:
+            return ()
+
+        return (
+            *self.rows,
+            ReportRow(
+                subject_label=TOTALS_LABEL,
+                detail="",
+                total=self.totals.total,
+                counters=self.totals.counters,
+            ),
+        )
 
 
 def status_columns() -> tuple[StatusColumn, ...]:
@@ -275,3 +301,64 @@ def department_purchasing(period: DatePeriod | None, chosen_department: str = ""
         for department in counted
     )
     return Report(columns=columns, rows=rows, totals=totals_of(columns, rows))
+
+
+def report_export(
+    report: Report,
+    filename_stem: str,
+    subject_label: str,
+    total_label: str,
+    detail_label: str | None = None,
+) -> TableExport:
+    """One report as a downloadable table (REQ-YUKLAMA-001, REQ-XARID-001).
+
+    The columns are built per request rather than declared once, because a
+    report's counter columns are the active contract statuses and anybody may
+    add one (DEC-010). The leading columns differ per report - the workload
+    report names a phone number where the departments report has nothing - so
+    each page says what to call its own.
+
+    Each export row is a pair of the report row and its ordinal, which is what
+    the # column prints; a list page puts an order line in that second slot
+    instead. The totals row carries a blank ordinal, as the page gives it a
+    colspan rather than a number.
+
+    Args:
+        report: the report as the page renders it, already narrowed.
+        filename_stem: what the downloaded file is called, before the date.
+        subject_label: the header of the first named column, such as "Xodim".
+        total_label: the header of the count column, such as
+            "Xarid topshiriqlari".
+        detail_label: the header of the column between them, when the report
+            has one; None leaves that column out entirely.
+
+    Returns:
+        The table, ready for excel_response or pdf_response.
+    """
+    columns = [
+        ExportColumn("#", lambda _row, ordinal: ordinal),
+        ExportColumn(subject_label, lambda row, _ordinal: row.subject_label),
+    ]
+    if detail_label is not None:
+        columns.append(ExportColumn(detail_label, lambda row, _ordinal: row.detail))
+    columns.append(ExportColumn(total_label, lambda row, _ordinal: row.total))
+    columns.extend(
+        ExportColumn(column.label, _counter_at(index))
+        for index, column in enumerate(report.columns)
+    )
+
+    rows = [
+        (row, "" if row.subject_label == TOTALS_LABEL else ordinal)
+        for ordinal, row in enumerate(report.export_rows, start=1)
+    ]
+    return TableExport(filename_stem, tuple(columns), rows)
+
+
+def _counter_at(index: int) -> Callable[[ReportRow, object], int]:
+    """Reads one generated column's counter, by its place in the columns.
+
+    The export columns and the row counters come from the same
+    status_columns() call inside one request, so the index means the same
+    thing on both sides.
+    """
+    return lambda row, _ordinal: row.counters[index]

@@ -91,7 +91,7 @@ from xarid.permissions import (
     may_open,
     revoke_contract_editing,
 )
-from xarid.reports import department_purchasing, staff_workload
+from xarid.reports import department_purchasing, report_export, staff_workload
 
 USERS_TEMPLATE = "xarid/pages/users.html"
 INCOMING_TEMPLATE = "xarid/pages/kelib-arizalar.html"
@@ -1432,18 +1432,20 @@ def assigned_work() -> QuerySet[Application]:
     return Application.objects.filter(assigned_to__isnull=False)
 
 
-def staff_workload_report(request: HttpRequest) -> HttpResponse:
-    """Xodimlar yuklamasi: what each specialist is carrying (REQ-YUKLAMA-002).
+def workload_filter(chosen: Mapping[str, str]) -> TableFilter:
+    """The Xodimlar yuklamasi bar, built once for the page and its download.
 
     The bar offers the period and nothing else: there is one row per
-    specialist already, so there is no column to narrow by.
+    specialist already, so there is no column to narrow by. The page and the
+    download build it here rather than each in their own place, so a file
+    cannot come to hold something other than the screen.
     """
-    table_filter = TableFilter(
-        (),
-        assigned_work(),
-        request.GET,
-        date_column=WORKLOAD_PERIOD,
-    )
+    return TableFilter((), assigned_work(), chosen, date_column=WORKLOAD_PERIOD)
+
+
+def staff_workload_report(request: HttpRequest) -> HttpResponse:
+    """Xodimlar yuklamasi: what each specialist is carrying (REQ-YUKLAMA-002)."""
+    table_filter = workload_filter(request.GET)
     report_invalid_filters(request, table_filter)
 
     return render(
@@ -1451,6 +1453,19 @@ def staff_workload_report(request: HttpRequest) -> HttpResponse:
         WORKLOAD_TEMPLATE,
         {"report": staff_workload(table_filter.period), "table_filter": table_filter},
     )
+
+
+def staff_workload_export(request: HttpRequest, file_format: str) -> HttpResponse:
+    """Download Xodimlar yuklamasi, narrowed as the page is (REQ-YUKLAMA-001)."""
+    report = staff_workload(workload_filter(request.GET).period)
+    export = report_export(
+        report,
+        "xodimlar-yuklamasi",
+        "Xodim",
+        "Xarid topshiriqlari",
+        detail_label="Telefon",
+    )
+    return export_response(export, file_format)
 
 
 DEPARTMENTS_REPORT_TEMPLATE = "xarid/pages/bolimlar.html"
@@ -1470,28 +1485,41 @@ def reported_applications() -> QuerySet[Application]:
     return Application.objects.filter(department__is_active=True)
 
 
-def department_purchasing_report(request: HttpRequest) -> HttpResponse:
-    """Korhona xaridi | Bo`limlar: what each department is buying.
+def department_report_filter(chosen: Mapping[str, str]) -> TableFilter:
+    """The Bo`limlar bar, built once for the page and its download.
 
-    The bar offers the department drop-down the prototype promised and the
-    period. Its options come from the applications of departments the report
-    has a row for, so it cannot offer a department that would empty the
-    table: a deactivated department keeps its history but is not reported on.
+    Its options come from the applications of departments the report has a
+    row for, so it cannot offer a department that would empty the table: a
+    deactivated department keeps its history but is not reported on.
     """
-    table_filter = TableFilter(
+    return TableFilter(
         (BY_DEPARTMENT,),
         reported_applications(),
-        request.GET,
+        chosen,
         date_column=DEPARTMENT_REPORT_PERIOD,
     )
+
+
+def department_purchasing_report(request: HttpRequest) -> HttpResponse:
+    """Korhona xaridi | Bo`limlar: what each department is buying."""
+    table_filter = department_report_filter(request.GET)
     report_invalid_filters(request, table_filter)
-    chosen_department = table_filter.fields[0].selected
 
     return render(
         request,
         DEPARTMENTS_REPORT_TEMPLATE,
         {
-            "report": department_purchasing(table_filter.period, chosen_department),
+            "report": department_purchasing(
+                table_filter.period, table_filter.fields[0].selected
+            ),
             "table_filter": table_filter,
         },
     )
+
+
+def department_purchasing_export(request: HttpRequest, file_format: str) -> HttpResponse:
+    """Download Bo`limlar xaridi, narrowed as the page is (REQ-XARID-001)."""
+    table_filter = department_report_filter(request.GET)
+    report = department_purchasing(table_filter.period, table_filter.fields[0].selected)
+    export = report_export(report, "bolimlar", "Bo`lim Nomi", "Xarid topshiriqlari")
+    return export_response(export, file_format)

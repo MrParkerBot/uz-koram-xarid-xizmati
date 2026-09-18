@@ -207,6 +207,14 @@ counters therefore holds both work not yet contracted and work refused.
 Both reports put the busiest row first, because both are read to find where
 the load is; a tie breaks by name.
 
+Both reports download as Excel or PDF from the same buttons the list pages
+carry, holding the rows the page holds, narrowed by the same period and the
+same department choice, with the totals as the last row of the file. The
+status columns are generated into the file too, so adding a status adds a
+column to the download. A report with no rows still downloads a valid file
+with headers. Each download is open to exactly the types that may open its
+page.
+
 That report is narrowed by its `Bo'lim` drop-down and by a period over the
 date an application arrived, which is the only date every application has.
 The drop-down offers only departments the report has a row for.
