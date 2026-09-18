@@ -122,6 +122,11 @@ urlpatterns = [
     # Contracts.
     path("kelishinlingan/", contracts(views.agreed_contracts_list), name="kelishinlingan"),
     path(
+        "kelishinlingan/<int:pk>/holat/",
+        contracts(views.contract_set_status),
+        name="kelishinlingan-holat",
+    ),
+    path(
         "kelishinlingan/yaratish/",
         contracts(views.contract_create),
         name="shartnoma-yaratish",

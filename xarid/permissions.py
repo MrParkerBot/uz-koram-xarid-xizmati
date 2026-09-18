@@ -154,6 +154,51 @@ def acts_on_own_work_only(user: AbstractBaseUser | AnonymousUser | None) -> bool
     return has_user_type(user, (KATTA_MUTAXASIS,))
 
 
+def contract_mover(user) -> Callable[[object], bool]:
+    """A test of whether this person may move a contract, asked once.
+
+    acts_on_own_work_only reads the person's user type, which is a query. A
+    page of contracts asking it per row pays that per row, so the page asks
+    here once and then only compares ids - the same defect the review of the
+    products page found in a property.
+
+    Args:
+        user: the person asking.
+
+    Returns:
+        A predicate over one contract.
+    """
+    if not acts_on_own_work_only(user):
+        return lambda contract: True
+
+    holder = getattr(user, "pk", None)
+
+    return lambda contract: contract.application.assigned_to_id == holder
+
+
+def held_contract(user, contract) -> bool:
+    """Whether this person may move this contract's status.
+
+    Four user types may open the Kelishinlingan page, so page permission is
+    not the whole answer: without a row-level rule a specialist could move a
+    contract raised for somebody else's work, while the application half of
+    the workflow refuses exactly that.
+
+    Asked through the application's assignment rather than through who
+    created the contract: DEC-024 lets an Admin re-assign at any time, and the
+    contract goes with the work. Everybody the matrix lets onto the page who
+    is not restricted to their own work may move any of them.
+
+    Args:
+        user: the person asking.
+        contract: the contract they want to move.
+
+    Returns:
+        Whether the move is theirs to make.
+    """
+    return contract_mover(user)(contract)
+
+
 # ---------------------------------------------------------------------------
 # Contract editing: an exclusive lock that starts closed (DEC-021).
 # ---------------------------------------------------------------------------

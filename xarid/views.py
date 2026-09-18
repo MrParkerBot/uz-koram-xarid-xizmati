@@ -66,6 +66,7 @@ from xarid.models import (
     ArizaStatus,
     Contract,
     ContractItem,
+    ContractStatusChange,
     Department,
     MahsulotTuri,
     MasterDataRecord,
@@ -86,8 +87,10 @@ from xarid.models import (
 from xarid.permissions import (
     acts_on_own_work_only,
     contract_editor,
+    contract_mover,
     first_page_for,
     grant_contract_editing,
+    held_contract,
     may_open,
     revoke_contract_editing,
 )
@@ -920,11 +923,26 @@ def agreed_contracts() -> QuerySet[Contract]:
     this is the page carrying its rejection comment as a column.
     """
     return (
-        Contract.objects.filter(stage__in=(Contract.Stage.AGREED, Contract.Stage.REJECTED))
+        # EDITABLE_STAGES rather than the two values written out: the page
+        # shows exactly the contracts whose status is still their specialist's
+        # to change, and one name for that rule is what stops the page and the
+        # model disagreeing about which those are.
+        Contract.objects.filter(stage__in=Contract.EDITABLE_STAGES)
         .select_related(
             "application", "application__department", "supplier", "status", "created_by"
         )
-        .prefetch_related(Prefetch("items", queryset=ContractItem.objects.all()))
+        .prefetch_related(
+            Prefetch("items", queryset=ContractItem.objects.all()),
+            # The Holati column prints the last move under the current status,
+            # and last_status_change reads this list - without it the page
+            # would cost a query per contract.
+            Prefetch(
+                "status_changes",
+                queryset=ContractStatusChange.objects.select_related(
+                    "to_status", "from_status", "changed_by"
+                ),
+            ),
+        )
     )
 
 
@@ -963,6 +981,8 @@ def contract_page(
     return {
         "contracts": table_filter.apply(),
         "table_filter": table_filter,
+        "shartnoma_statuslari": ShartnomaStatus.objects.active(),
+        "may_move_status": contract_mover(user),
         "form": (
             form
             if form is not None
@@ -1698,3 +1718,43 @@ def category_purchasing_export(request: HttpRequest, file_format: str) -> HttpRe
         detail_label="Kodi",
     )
     return export_response(export, file_format)
+
+
+@require_POST
+def contract_set_status(request: HttpRequest, pk: int) -> HttpResponse:
+    """Move one contract to a status (REQ-SHTSTATUS-001).
+
+    Every refusal answers with a message rather than a 404. The case that
+    actually happens is a race - somebody sending the contract while this
+    page was open - and a person told their change was not saved needs to
+    know why; a 404 does not say.
+    """
+    contract = get_object_or_404(Contract, pk=pk)
+
+    if not held_contract(request.user, contract):
+        messages.error(
+            request,
+            f"{contract.shartnoma_raqami} holatini o`zgartirib bo`lmaydi: "
+            "bu shartnoma sizning ishingizga tegishli emas.",
+        )
+        return redirect("xarid:kelishinlingan")
+
+    status = ShartnomaStatus.objects.filter(pk=request.POST.get("holat")).first()
+    try:
+        moved = contract.set_status(status, by=request.user)
+    except ValueError as refusal:
+        messages.error(request, str(refusal))
+        return redirect("xarid:kelishinlingan")
+
+    if moved:
+        messages.success(
+            request,
+            f"{contract.shartnoma_raqami} holati o`zgartirildi: {status.name}.",
+        )
+    else:
+        messages.info(
+            request,
+            f"{contract.shartnoma_raqami} allaqachon {status.name} holatida.",
+        )
+
+    return redirect("xarid:kelishinlingan")

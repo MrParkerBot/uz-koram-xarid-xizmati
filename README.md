@@ -247,6 +247,42 @@ The PDF cell follows DEC-019: a link appears only where one would work. An
 application that has no attachment, or that was rejected and so is on no
 page, shows a dash instead of a link that would answer 403.
 
+## Contract statuses
+
+A contract's status is moved from the `Kelishinlingan` page, by the specialist
+whose application it was raised against. What is enforced is narrower than
+"permitted transitions" sounds, and the narrowness is deliberate: DEC-010
+makes the statuses rows an administrator invents and extends, and
+`ShartnomaStatus` carries no code column, so nothing in the code may name a
+particular status or draw a graph between two of them. A transition table over
+names would be a table the `Shartnoma Status` page could invalidate.
+
+So what `Contract.set_status()` enforces is what the data can say:
+
+- the status must be one that is in use;
+- the contract must still be in `Contract.EDITABLE_STAGES` - agreed or
+  rejected, the two the page shows - so one awaiting approval is not moved
+  underneath whoever is approving it;
+- moving to the status it already has is not a move, and writes nothing.
+
+**No order between two statuses in use is enforced.** The order the department
+works to is not in the specification, and inventing one here would make an
+open question look answered.
+
+Every move writes a `ContractStatusChange` in the same transaction: the
+previous status, the new one, who moved it and when. It is the first history
+table in the application - everything else keeps current state only, because
+DEC-024 puts history in the section 10 log - and it exists because "keeps
+changing" is a sequence: a contract at `Yetkazib berilgan` with no record of
+when it passed `Shartnoma tuzilgan` cannot answer what the department asks.
+The update is conditional on the status being moved from, so two clicks
+arriving together produce one move and one history row.
+
+A specialist may move only a contract whose application is assigned to them,
+asked through the assignment rather than through who created the contract:
+DEC-024 lets an Admin re-assign at any time, and the contract goes with the
+work. Everybody else the matrix lets onto the page may move any of them.
+
 ## Attachments
 
 Application PDFs live under `ATTACHMENT_ROOT` (`attachments/`, gitignored),
