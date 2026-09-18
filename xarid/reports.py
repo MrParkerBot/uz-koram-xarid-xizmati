@@ -539,6 +539,9 @@ SPENDINGS_PERIOD = DateColumn("Shartnoma sanasi", ACCOUNTING_DATE, carries_time=
 
 NOTHING = Decimal("0")
 
+# What money_display() puts between the soums and the tiyin.
+DECIMAL_SEPARATOR = ","
+
 
 def dated_contracts() -> QuerySet:
     """Every contract, carrying the date its money is accounted under."""
@@ -572,11 +575,16 @@ class Money:
     def whole_display(self) -> str:
         """The amount to the soum, for a headline with no room for tiyin.
 
-        The same rendering as `display` with the tiyin dropped, rather than a
-        second way of grouping an amount.
+        The same grouping as `display`, with the tiyin removed - and removed
+        by taking what money_display() put before its decimal separator, or
+        the whole of it when there is none. A card whose only figure silently
+        rendered as an empty string would be the one failure nobody reports.
         """
         whole = self.amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-        return money_display(whole).rpartition(",")[0]
+        grouped = money_display(whole)
+        soums, separator, _tiyin = grouped.rpartition(DECIMAL_SEPARATOR)
+
+        return soums if separator else grouped
 
 
 @dataclass(frozen=True)

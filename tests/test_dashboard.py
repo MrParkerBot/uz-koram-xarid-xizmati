@@ -31,7 +31,6 @@ from xarid.models import (
     ShartnomaStatus,
     Supplier,
     deactivate,
-    money_display,
 )
 from xarid.reports import (
     SPENDINGS_PERIOD,
@@ -42,6 +41,10 @@ from xarid.reports import (
 
 DELIVERED = "Yetkazib berilgan"
 DRAWN_UP = "Shartnoma tuzilgan"
+
+# What money_display() groups thousands with: a non-breaking space, so that a
+# browser cannot wrap an amount across two lines.
+GROUP_SEPARATOR = " "
 
 
 class CompletedStatusTests(TestCase):
@@ -237,7 +240,11 @@ class SpendingTests(TestCase):
         cls.manager = make_user("spend.manager", user_type=MENEJER)
         cls.specialist = make_user("spend.specialist", user_type=KATTA_MUTAXASIS)
         cls.department = a_department()
-        cls.today = timezone.localdate()
+
+    @property
+    def today(self) -> date:
+        """Read per test: a class attribute would go stale across midnight."""
+        return timezone.localdate()
 
     def a_contract_worth(self, amount: str, on: date | None = None) -> Contract:
         """One contract of a known value, dated on a known day.
@@ -326,10 +333,16 @@ class SpendingTests(TestCase):
 
     def test_an_amount_prints_grouped_and_without_tiyin_on_the_card(self) -> None:
         money = Money(Decimal("1240000000.00"))
+        billion = GROUP_SEPARATOR.join(("1", "240", "000", "000"))
 
-        self.assertEqual(money.display, money_display(Decimal("1240000000.00")))
-        self.assertTrue(money.display.endswith(",00"))
-        self.assertFalse(money.whole_display.endswith(",00"))
+        self.assertEqual(money.display, f"{billion},00")
+        self.assertEqual(money.whole_display, billion)
+
+    def test_a_whole_soum_amount_never_renders_as_nothing(self) -> None:
+        """The headline drops the tiyin; it must not drop the amount with it."""
+        for amount in ("0", "1", "999", "1000000"):
+            with self.subTest(amount=amount):
+                self.assertTrue(Money(Decimal(amount)).whole_display.strip())
 
 
 class SpendingPageTests(SignedInAdminTestCase):
@@ -351,7 +364,10 @@ class SpendingPageTests(SignedInAdminTestCase):
         response = self.client.get(page("dashboard"), {"dan": today.isoformat()})
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, f"{money_display(Decimal('1500')).rpartition(',')[0]} UZS")
+        # The figure itself, grouped as the department reads it, rather than
+        # whatever money_display() happens to return today.
+        self.assertContains(response, f"1{GROUP_SEPARATOR}500 UZS")
+        self.assertContains(response, f"1{GROUP_SEPARATOR}500,00 UZS")
         self.assertContains(response, "tanlangan davr")
 
     def test_the_page_offers_the_period_bar(self) -> None:

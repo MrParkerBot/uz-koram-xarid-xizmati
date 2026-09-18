@@ -143,6 +143,9 @@ def dashboard(request: HttpRequest) -> HttpResponse:
     activity list are still the supplied prototype's own numbers, and are
     UZK-051, UZK-057 and UZK-052.
     """
+    # The bar offers no column filters and no ordering, so it is built for
+    # its period and its rendering alone; spending_indicators() applies that
+    # period to its own query, and nothing calls table_filter.apply().
     table_filter = TableFilter((), dated_contracts(), request.GET, date_column=SPENDINGS_PERIOD)
     report_invalid_filters(request, table_filter)
 
