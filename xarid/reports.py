@@ -667,13 +667,21 @@ APPROVAL = "Tasdiqlash"
 DELIVERY = "Yetkazib berish"
 INVOICE = "Invoice"
 
-# What each stage spans, in the words the panel prints under its name.
+# What each stage spans, in the words the panel prints under its name. Kept
+# beside the labels so that a stage is one entry rather than a name here and
+# a sentence somewhere else, and read through span_of() so a stage that was
+# never given one says which stage it is.
 STAGE_SPANS: dict[str, str] = {
     ORDER_ENTRY: "Ariza kelib tushgandan shartnoma kiritilgunga qadar",
     APPROVAL: "Shartnoma kiritilgandan tasdiqlangunga qadar",
     DELIVERY: "Tasdiqlangandan tugallangan holatga o`tgunga qadar",
     INVOICE: "Tugallangan holatdan invoice sanasigacha",
 }
+
+
+def span_of(label: str) -> str:
+    """What a stage is measured between, or a stated gap when it has no entry."""
+    return STAGE_SPANS.get(label, f"{label}: bosqich chegaralari ko`rsatilmagan")
 
 
 @dataclass(frozen=True)
@@ -736,18 +744,23 @@ def averaged(label: str, gaps: Iterable[int | None]) -> StageAverage:
 
     return StageAverage(
         label=label,
-        span=STAGE_SPANS[label],
+        span=span_of(label),
         days=mean,
         measured_from=len(measured),
     )
 
 
-def completed_at_of(contracts: QuerySet) -> dict[int, datetime]:
+def completed_at() -> dict[int, datetime]:
     """When each contract first entered the status marked completed.
 
     The first arrival, not the last: a contract moved out of the completed
     status and back again was delivered once, on the day it first got there.
     Contracts that never arrived are absent from the mapping.
+
+    Every move is read in one query, rather than the contracts being handed
+    back to the database as a list of ids - one bound variable each, which
+    SQLite refuses past its own limit, on a page that would then not render
+    at all.
     """
     completed = ShartnomaStatus.completed_status()
     if completed is None:
@@ -755,7 +768,7 @@ def completed_at_of(contracts: QuerySet) -> dict[int, datetime]:
 
     arrivals: dict[int, datetime] = {}
     moves = (
-        ContractStatusChange.objects.filter(contract__in=contracts, to_status=completed)
+        ContractStatusChange.objects.filter(to_status=completed)
         .order_by("changed_at")
         .values_list("contract_id", "changed_at")
     )
@@ -772,6 +785,14 @@ def processing_times() -> tuple[StageAverage, ...]:
     contract still awaiting approval is not an approval taking zero days, and
     a stage nothing has completed has no average at all.
 
+    One consequence is worth knowing: Invoice runs from the move into the
+    completed status, so an invoice recorded against a contract nobody has
+    moved there has no start and is not counted. Invoices arriving before
+    the status is updated would therefore leave that stage reading a dash
+    while the dates pile up. It is the stage the department asked for
+    (DEC-025); if it stays empty, the status is not being kept, and that is
+    worth knowing too.
+
     Returns:
         Buyurtma kiritish, Tasdiqlash, Yetkazib berish and Invoice.
     """
@@ -783,7 +804,7 @@ def processing_times() -> tuple[StageAverage, ...]:
         "invoice_sanasi",
     )
     rows = list(contracts)
-    delivered_at = completed_at_of(Contract.objects.filter(id__in=[row[0] for row in rows]))
+    delivered_at = completed_at()
 
     entry, approval, delivery, invoice = [], [], [], []
     for contract_id, arrived, raised, approved, invoiced in rows:

@@ -43,8 +43,10 @@ from xarid.reports import (
     STAGE_SPANS,
     Money,
     StageAverage,
+    completed_at,
     dashboard_indicators,
     processing_times,
+    span_of,
     spending_indicators,
 )
 
@@ -558,6 +560,27 @@ class ProcessingTimeTests(TestCase):
                 self.assertIsNone(stage.days)
                 self.assertEqual(stage.measured_from, 0)
 
+    def test_the_deliveries_are_read_without_listing_every_contract(self) -> None:
+        """Two queries whatever the table holds, not one variable per contract.
+
+        One to find the status marked completed and one for every move into
+        it. SQLite refuses an IN list past its own parameter limit, so a
+        department with enough contracts would have got a dashboard that did
+        not render rather than a slow one.
+        """
+        for _ in range(3):
+            self.a_contract_processed(
+                arrived=AT_NOON, raised=AT_NOON, approved=AT_NOON, delivered=AT_NOON
+            )
+
+        with self.assertNumQueries(2):
+            arrivals = completed_at()
+
+        self.assertEqual(len(arrivals), 3)
+
+    def test_a_stage_with_no_span_recorded_still_says_which_stage_it_is(self) -> None:
+        self.assertIn("Tekshiruv", span_of("Tekshiruv"))
+
 
 class ProcessingTimePageTests(SignedInAdminTestCase):
     """The panel as the page renders it."""
@@ -572,9 +595,15 @@ class ProcessingTimePageTests(SignedInAdminTestCase):
                 self.assertContains(response, STAGE_SPANS[label])
 
     def test_an_unmeasured_stage_prints_a_dash_rather_than_zero(self) -> None:
+        """The stage's own cell, rather than every em dash on the page."""
         response = self.client.get(page("dashboard"))
+        rendered = response.content.decode()
 
-        self.assertContains(response, "&mdash;", count=4)
+        for label in (ORDER_ENTRY, APPROVAL, DELIVERY, INVOICE):
+            with self.subTest(stage=label):
+                row = rendered.split(label, 1)[1].split("</tr>", 1)[0]
+                self.assertIn("&mdash;", row)
+                self.assertNotIn("badge-primary", row)
 
     def test_the_contract_form_offers_the_invoice_date(self) -> None:
         response = self.client.get(page("kelishinlingan"))
