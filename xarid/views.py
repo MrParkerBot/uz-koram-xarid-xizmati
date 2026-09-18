@@ -1867,6 +1867,11 @@ def signed_contracts_list(request: HttpRequest) -> HttpResponse:
         {
             "contracts": signed_contracts(),
             "may_decide": decides_on_contracts(request.user),
+            # The status control asks the same question here as on
+            # Kelishinlingan: a specialist may open this page, and offering
+            # them a control for somebody else's contract only produces a
+            # refusal they could have been spared.
+            "is_own_contract": own_contract_test(request.user),
             "shartnoma_statuslari": ShartnomaStatus.objects.active(),
         },
     )
