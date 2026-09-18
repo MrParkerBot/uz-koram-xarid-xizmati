@@ -60,6 +60,12 @@ urlpatterns = [
     path("kirish/", views.landing_page, name="landing"),
     # The dashboard answers at the site root.
     path("", require_page_permission("dashboard")(views.dashboard), name="dashboard"),
+    # Top suppliers, which REQ-DASH-005 asks for as a page of its own.
+    path(
+        "top-suppliers/",
+        require_page_permission("top-suppliers")(views.top_suppliers_page),
+        name="top-suppliers",
+    ),
     # The Users page and everything it does answer to the page's permission.
     path("users/", users(views.user_list), name="users"),
     path("users/add/", users(views.user_create), name="user-create"),

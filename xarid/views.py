@@ -98,8 +98,11 @@ from xarid.permissions import (
     revoke_contract_editing,
 )
 from xarid.reports import (
+    BY_DARAJA,
+    DASHBOARD_TOP_SUPPLIERS,
     SPENDINGS_PERIOD,
     category_purchasing,
+    daraja_options,
     dashboard_indicators,
     dated_contracts,
     department_purchasing,
@@ -107,6 +110,7 @@ from xarid.reports import (
     report_export,
     spending_indicators,
     staff_workload,
+    top_suppliers,
 )
 
 USERS_TEMPLATE = "xarid/pages/users.html"
@@ -124,6 +128,7 @@ PROTOTYPE_PAGE_TEMPLATES: dict[str, str] = {
 }
 
 DASHBOARD_TEMPLATE = "xarid/index.html"
+TOP_SUPPLIERS_TEMPLATE = "xarid/pages/top-suppliers.html"
 
 
 def prototype_page(page_name: str) -> Callable[..., HttpResponse]:
@@ -135,16 +140,17 @@ def dashboard(request: HttpRequest) -> HttpResponse:
     """Asosiy Panel: the department's position at a glance (section 2).
 
     Counted here: the three contract indicators (REQ-DASH-001 to REQ-DASH-004),
-    the spendings (REQ-DASH-008, REQ-DASH-010) and the four processing-time
-    averages (REQ-DASH-012). The period bar narrows the spend and nothing else
+    the spendings (REQ-DASH-008, REQ-DASH-010), the four processing-time
+    averages (REQ-DASH-012) and the head of the supplier ranking
+    (REQ-DASH-005). The period bar narrows the spend and the ranking, which
+    are both about money inside a period, and nothing else
     - the contract indicators are the department's position now, not its
     position during a week, and an average of how long a stage takes is not a
     figure a fortnight has an answer for - which is why the cards and the
     panel say what each figure covers.
 
-    The top suppliers list, the category breakdown, the charts and the
-    activity list are still the supplied prototype's own numbers, and are
-    UZK-051, UZK-057 and UZK-052.
+    The category breakdown, the charts and the activity list are still the
+    supplied prototype's own numbers, and are UZK-057 and UZK-052.
     """
     # The bar offers no column filters and no ordering, so it is built for
     # its period and its rendering alone; spending_indicators() applies that
@@ -159,6 +165,43 @@ def dashboard(request: HttpRequest) -> HttpResponse:
             "indicators": dashboard_indicators(),
             "spendings": spending_indicators(table_filter.period),
             "stages": processing_times(),
+            "top_suppliers": top_suppliers(table_filter.period, limit=DASHBOARD_TOP_SUPPLIERS),
+            "table_filter": table_filter,
+        },
+    )
+
+
+def top_suppliers_filter(chosen: Mapping[str, str]) -> TableFilter:
+    """The Top suppliers bar: a Daraja drop-down and the contract period.
+
+    Its options come from the suppliers that have a Daraja recorded, so the
+    drop-down cannot offer a blank level beside its own "barchasi". Only the
+    bar's choices are used: top_suppliers() ranks contracts, not the supplier
+    rows this filter would narrow.
+    """
+    return TableFilter(
+        (BY_DARAJA,),
+        daraja_options(),
+        chosen,
+        date_column=SPENDINGS_PERIOD,
+    )
+
+
+def top_suppliers_page(request: HttpRequest) -> HttpResponse:
+    """Top Yetkazib beruvchilar: the firms ranked by what they were paid.
+
+    The page REQ-DASH-005 asks for beside the dashboard panel, ranked by
+    total contract value in the period (DEC-025) and narrowed by the firm's
+    level (REQ-DASH-006).
+    """
+    table_filter = top_suppliers_filter(request.GET)
+    report_invalid_filters(request, table_filter)
+
+    return render(
+        request,
+        TOP_SUPPLIERS_TEMPLATE,
+        {
+            "ranking": top_suppliers(table_filter.period, table_filter.fields[0].selected),
             "table_filter": table_filter,
         },
     )

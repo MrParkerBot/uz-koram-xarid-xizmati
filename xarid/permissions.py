@@ -44,6 +44,11 @@ _SECTION_11_DEPARTMENT_HEAD = frozenset(
 # Section 11's list for Katta Mutaxasis (REQ-RUHSAT-003).
 _SECTION_11_SENIOR_SPECIALIST = frozenset({"tayinlangan", "kelishinlingan", "xarid-ariza"})
 
+# Top suppliers is not in DEC-015: the supplied sidebar had no such page and
+# the matrix was written from it. It is granted to the types that may open the
+# dashboard, because REQ-DASH-005 makes it the page the dashboard's own Top
+# suppliers panel links to - the same figures, with room for all of them.
+
 # The three "Korhona xaridi" reports, which DEC-015 names as a group.
 _ENTERPRISE_PURCHASE_REPORTS = frozenset({"bolimlar", "mahsulot-tur", "mahsulotlar"})
 
@@ -55,6 +60,7 @@ PAGES_BY_USER_TYPE: dict[str, frozenset[str]] = {
     MENEJER: frozenset(
         {
             "dashboard",
+            "top-suppliers",
             "kelib-arizalar",
             "qabul-arizalar",
             "tayinlangan",
@@ -64,7 +70,9 @@ PAGES_BY_USER_TYPE: dict[str, frozenset[str]] = {
             "logs",
         }
     ),
-    DIREKTOR: frozenset({"dashboard", "kelib-arizalar", "tuzilgan", "xarid-ariza", "logs"}),
+    DIREKTOR: frozenset(
+        {"dashboard", "top-suppliers", "kelib-arizalar", "tuzilgan", "xarid-ariza", "logs"}
+    ),
     USERS: frozenset({"xarid-ariza"}),
 }
 

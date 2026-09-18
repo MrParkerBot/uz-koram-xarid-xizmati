@@ -36,7 +36,15 @@ supplied with the assignment, on SQLite, behind Django's own authentication.
   when it has none. Savings has no formula yet (DEC-025) and says so. A panel
   gives the average processing time of the four stages the assignment names,
   in days. The charts, the top suppliers list, the category table and the
-  activity list are still the supplied prototype's sample data.
+  activity list are still the supplied prototype's sample data. Its Top
+  suppliers panel shows the first five of the Top suppliers page and links to
+  it.
+- **Top suppliers** (`Hisobotlar / Top Yetkazib beruvchilar`): every firm
+  ranked by what its contracts come to inside the chosen period (DEC-025),
+  narrowed by the firm's Daraja. A firm with no contracts in the period is not
+  ranked, and the page says so rather than padding the list with zeros. The
+  page is not in the DEC-015 matrix, because the supplied sidebar had no such
+  page; it is open to the types that may open the dashboard.
 
 ### What the processing-time stages are measured between
 

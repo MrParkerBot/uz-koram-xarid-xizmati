@@ -30,7 +30,7 @@ from django.db.models.functions import Coalesce, TruncDate
 from django.utils import timezone
 
 from xarid.exports import ExportColumn, TableExport
-from xarid.filters import DateColumn, DatePeriod
+from xarid.filters import DateColumn, DatePeriod, FilterColumn
 from xarid.models import (
     Contract,
     ContractStatusChange,
@@ -819,4 +819,110 @@ def processing_times() -> tuple[StageAverage, ...]:
         averaged(APPROVAL, approval),
         averaged(DELIVERY, delivery),
         averaged(INVOICE, invoice),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Top suppliers (section 2 and its own page, REQ-DASH-005, REQ-DASH-006)
+# ---------------------------------------------------------------------------
+
+# How many rows the dashboard's panel shows. The page itself shows them all.
+DASHBOARD_TOP_SUPPLIERS = 5
+
+# The Daraja filter both the page and its bar use. Free text on the supplier
+# record (DEC-025), so the options are whatever levels have been recorded.
+BY_DARAJA = FilterColumn(
+    parameter="daraja",
+    label="Daraja",
+    value_lookup="daraja",
+    label_lookups=("daraja",),
+)
+
+
+@dataclass(frozen=True)
+class SupplierRank:
+    """One firm's place in the ranking.
+
+    Attributes:
+        place: its position in the list, counting from one.
+        supplier: the firm.
+        contracts: how many of its contracts fall inside the period.
+        total: what those contracts come to, in UZS.
+        share_of_leader: the total as a percentage of the first row's, for the
+            panel's bar. One hundred for the leader; zero when nothing is
+            ranked.
+    """
+
+    place: int
+    supplier: Supplier
+    contracts: int
+    total: Money
+    share_of_leader: int
+
+
+def daraja_options() -> QuerySet:
+    """The suppliers a Daraja drop-down draws its options from.
+
+    Only those with a level recorded: a blank Daraja would otherwise become an
+    option whose value is the empty string, which the bar already spends on
+    "barchasi".
+    """
+    return Supplier.objects.active().exclude(daraja="")
+
+
+def top_suppliers(
+    period: DatePeriod | None,
+    daraja: str = "",
+    limit: int | None = None,
+) -> tuple[SupplierRank, ...]:
+    """The firms ranked by what their contracts come to (DEC-025).
+
+    Ranked by total contract value inside the period, highest first, with the
+    firm's name breaking a tie so that two equal totals do not swap places
+    between one render and the next.
+
+    A firm with no contracts in the period is not ranked. A ranking of what
+    the department spent has nothing to say about a firm it spent nothing
+    with, and padding the list with zeros would push the firms the page is
+    read for further down it.
+
+    Args:
+        period: the period chosen in the bar, applied to the contract's
+            accounting date exactly as the dashboard's spend is. None, or a
+            refused period, means every contract on file.
+        daraja: the level chosen in the bar; empty means every level.
+        limit: how many rows to return, for the dashboard's panel. None means
+            the whole ranking.
+
+    Returns:
+        The ranking, in order, each row carrying its place and its share of
+        the leader's total.
+    """
+    contracts = dated_contracts()
+    if period:
+        contracts = period.apply(contracts)
+    if daraja:
+        contracts = contracts.filter(supplier__daraja=daraja)
+
+    totalled = (
+        contracts.values("supplier")
+        .annotate(qiymat=Sum("qiymati"), soni=Count("pk"))
+        .order_by("-qiymat", "supplier__name")
+    )
+    if limit is not None:
+        totalled = totalled[:limit]
+
+    rows = list(totalled)
+    suppliers = Supplier.objects.in_bulk([row["supplier"] for row in rows])
+    leader = rows[0]["qiymat"] if rows else NOTHING
+
+    return tuple(
+        SupplierRank(
+            place=place,
+            supplier=suppliers[row["supplier"]],
+            contracts=row["soni"],
+            total=Money(row["qiymat"]),
+            share_of_leader=round(row["qiymat"] * 100 / leader) if leader else 0,
+        )
+        for place, row in enumerate(rows, start=1)
     )

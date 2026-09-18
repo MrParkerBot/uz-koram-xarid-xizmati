@@ -9,9 +9,10 @@ the department stands now, and say so.
 The processing-time panel is counted too (REQ-DASH-012, TASK-UZK-050); what
 each of its stages is measured between is this application's own definition,
 which is why the panel prints it beside every figure.
-The charts, the top suppliers list, the category table and the activity list
-are still the supplied prototype's own sample data, and belong to UZK-051,
-UZK-057 and UZK-052.
+The Top suppliers panel is counted too (REQ-DASH-005, TASK-UZK-051) and is
+the head of the page it links to.
+The charts, the category table and the activity list are still the supplied
+prototype's own sample data, and belong to UZK-057 and UZK-052.
 #}
 {% block title %}Dashboard{% endblock %}
 {% block breadcrumb %}Umumiy / Dashboard{% endblock %}
@@ -118,23 +119,19 @@ UZK-057 and UZK-052.
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title">Top Yetkazib beruvchilar</div>
-          <div class="d-flex gap-2">
-            <button class="badge badge-primary" id="toggle-sum" data-top-mode="sum">Summa</button>
-            <button class="badge badge-soft" id="toggle-count" data-top-mode="count">Tur soni</button>
-          </div>
+          <a class="badge badge-primary" href="{{ url('xarid:top-suppliers') }}">Barchasi</a>
         </div>
         <div class="panel-body">
           <div id="top-suppliers">
-            <div class="d-flex justify-content-between align-items-center small mb-1"><span>Texnoprom LLC</span><span class="badge badge-primary">142M UZS</span></div>
-            <div class="progress-bar-wrap mb-3"><div class="progress-bar-fill" style="width:85%"></div></div>
-            <div class="d-flex justify-content-between align-items-center small mb-1"><span>MetalGrup JV</span><span class="badge badge-primary">98M UZS</span></div>
-            <div class="progress-bar-wrap mb-3"><div class="progress-bar-fill" style="width:60%"></div></div>
-            <div class="d-flex justify-content-between align-items-center small mb-1"><span>UzElektro</span><span class="badge badge-primary">76M UZS</span></div>
-            <div class="progress-bar-wrap mb-3"><div class="progress-bar-fill" style="width:46%"></div></div>
-            <div class="d-flex justify-content-between align-items-center small mb-1"><span>GazTrade</span><span class="badge badge-primary">54M UZS</span></div>
-            <div class="progress-bar-wrap mb-3"><div class="progress-bar-fill" style="width:33%"></div></div>
-            <div class="d-flex justify-content-between align-items-center small mb-1"><span>QurilishMat</span><span class="badge badge-primary">38M UZS</span></div>
-            <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:23%"></div></div>
+          {% for row in top_suppliers %}
+            <div class="d-flex justify-content-between align-items-center small mb-1">
+              <span>{{ row.supplier.name }}</span>
+              <span class="badge badge-primary">{{ row.total.whole_display }} UZS</span>
+            </div>
+            <div class="progress-bar-wrap{% if not loop.last %} mb-3{% endif %}"><div class="progress-bar-fill" style="width:{{ row.share_of_leader }}%"></div></div>
+          {% else %}
+            <div class="muted small">Tanlangan davrda shartnomasi bo'lgan firma topilmadi.</div>
+          {% endfor %}
           </div>
         </div>
       </div>
