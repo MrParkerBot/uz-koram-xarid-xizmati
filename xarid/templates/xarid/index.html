@@ -39,14 +39,14 @@ UZK-052.
         <div class="stat-label">Tuzilgan Shartnomalar %</div>
         <div class="kpi-value" data-created-percentage>{{ indicators.created.percentage }}%</div>
         <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:{{ indicators.created.bar_width }}%"></div></div>
-        <div class="stat-sub">{{ indicators.created.count }} / {{ indicators.created.of }} jami</div>
+        <div class="stat-sub">{{ indicators.created.count }} / {{ indicators.created.measured_against }} jami</div>
       </div>
       <div class="panel stat-card">
         <div class="stat-icon"><i class="bi bi-check2-circle text-success" aria-hidden="true"></i></div>
         <div class="stat-label">Tugallangan %</div>
         <div class="kpi-value" data-completed-percentage>{{ indicators.completed.percentage }}%</div>
         <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:{{ indicators.completed.bar_width }}%"></div></div>
-        <div class="stat-sub">{{ indicators.completed.count }} / {{ indicators.completed.of }} jami</div>
+        <div class="stat-sub">{{ indicators.completed.count }} / {{ indicators.completed.measured_against }} jami</div>
       </div>
       <div class="panel stat-card">
         <div class="stat-icon"><i class="bi bi-cash-coin text-warning" aria-hidden="true"></i></div>

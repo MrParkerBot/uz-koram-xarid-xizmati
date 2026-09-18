@@ -95,7 +95,7 @@ class IndicatorTests(TestCase):
         created = dashboard_indicators().created
 
         # Five suppliers: the four above and the one a_contract() raises with.
-        self.assertEqual((created.count, created.of, created.percentage), (1, 5, 20))
+        self.assertEqual((created.count, created.measured_against, created.percentage), (1, 5, 20))
 
     def test_completed_counts_only_the_status_marked_completed(self) -> None:
         self.a_contract_in(self.delivered)
@@ -146,7 +146,7 @@ class IndicatorTests(TestCase):
 
         created = dashboard_indicators().created
 
-        self.assertEqual((created.count, created.of, created.percentage), (3, 1, 300))
+        self.assertEqual((created.count, created.measured_against, created.percentage), (3, 1, 300))
         self.assertEqual(created.bar_width, 100)
 
 

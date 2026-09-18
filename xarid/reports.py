@@ -444,13 +444,14 @@ class Indicator:
 
     Attributes:
         count: how many contracts were counted.
-        of: what they were measured against - the supplier count.
-        percentage: count as a percentage of `of`, to the nearest whole
-            percent, and zero when there is nothing to measure against.
+        measured_against: what they were measured against - the supplier
+            count.
+        percentage: count as a percentage of measured_against, to the nearest
+            whole percent, and zero when there is nothing to measure against.
     """
 
     count: int
-    of: int
+    measured_against: int
     percentage: int
 
     @property
@@ -468,7 +469,7 @@ class DashboardIndicators:
     completed: Indicator
 
 
-def against(count: int, supplier_count: int) -> Indicator:
+def as_percentage_of(count: int, supplier_count: int) -> Indicator:
     """One indicator: a count, and what it is as a percentage of the suppliers.
 
     A department with no suppliers on file is not an error - it is a database
@@ -476,7 +477,7 @@ def against(count: int, supplier_count: int) -> Indicator:
     division.
     """
     percentage = round(count * 100 / supplier_count) if supplier_count else 0
-    return Indicator(count=count, of=supplier_count, percentage=percentage)
+    return Indicator(count=count, measured_against=supplier_count, percentage=percentage)
 
 
 def dashboard_indicators() -> DashboardIndicators:
@@ -503,6 +504,6 @@ def dashboard_indicators() -> DashboardIndicators:
 
     return DashboardIndicators(
         supplier_count=supplier_count,
-        created=against(contracts.count(), supplier_count),
-        completed=against(completed_count, supplier_count),
+        created=as_percentage_of(contracts.count(), supplier_count),
+        completed=as_percentage_of(completed_count, supplier_count),
     )
