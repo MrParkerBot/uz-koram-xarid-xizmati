@@ -1,5 +1,5 @@
 {% extends "xarid/base.html" %}
-{% from "xarid/_filters.html" import filter_bar with context %}
+{% from "xarid/_filters.html" import filter_bar, export_links with context %}
 {% from "xarid/_forms.html" import pdf_badge with context %}
 {#
 The Kelib tushgan Arizalar page (section 4.1): what has arrived and not been
@@ -25,8 +25,7 @@ filter bar is inert until filtering is built for every table at once.
         <input class="form-control" type="date" id="f-dan" style="width:140px;" disabled title="Sana bo'yicha filtrlash keyingi bosqichda"/>
         <input class="form-control" type="date" id="f-gacha" style="width:140px;" disabled title="Sana bo'yicha filtrlash keyingi bosqichda"/>
         {% endcall %}<div class="toolbar-group">
-          <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
-          <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>
+          {{ export_links('kelib-arizalar', table_filter) }}
         </div>
       </div>
 

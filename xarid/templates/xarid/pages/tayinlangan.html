@@ -1,5 +1,5 @@
 {% extends "xarid/base.html" %}
-{% from "xarid/_filters.html" import filter_bar with context %}
+{% from "xarid/_filters.html" import filter_bar, export_links with context %}
 {% from "xarid/_forms.html" import pdf_badge with context %}
 {#
 The Tayinlangan Arizalar page (REQ-ARIZA-012). A Katta Mutaxasis sees what was
@@ -22,8 +22,7 @@ keyboard users are not reloaded on every arrow key.
 
     <div class="panel">
       <div class="toolbar">{{ filter_bar(table_filter, url('xarid:tayinlangan')) }}<div class="toolbar-group">
-          <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
-          <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>
+          {{ export_links('tayinlangan', table_filter) }}
         </div>
       </div>
 

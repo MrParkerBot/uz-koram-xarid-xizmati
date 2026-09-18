@@ -10,3 +10,8 @@ Jinja2==3.1.6
 qrcode==8.2
 Pillow==10.4.0
 pypdf==6.6.0
+
+# Yuklab olish (REQ-ARIZA-002): openpyxl writes the Excel workbook and
+# reportlab lays the same table out as a PDF.
+openpyxl==3.1.5
+reportlab==5.0.1

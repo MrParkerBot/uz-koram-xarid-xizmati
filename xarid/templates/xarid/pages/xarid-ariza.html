@@ -1,5 +1,5 @@
 {% extends "xarid/base.html" %}
-{% from "xarid/_filters.html" import filter_bar with context %}
+{% from "xarid/_filters.html" import filter_bar, export_links with context %}
 {% from "xarid/_forms.html" import widget, pdf_badge, required_mark with context %}
 {#
 The Xarid Arizasi page (section 4.9): the other way into the department. The
@@ -71,8 +71,7 @@ own account (DEC-018), never typed.
         <input class="form-control" type="date" style="width:140px;" disabled title="Sana bo'yicha filtrlash keyingi bosqichda"/>
         {% endcall %}<div class="toolbar-group">
           <button class="btn btn-primary-custom btn-sm" type="button" data-open-modal="xa-modal"><i class="bi bi-plus-lg" aria-hidden="true"></i> Ariza Yaratish</button>
-          <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
-          <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>
+          {{ export_links('xarid-ariza', table_filter) }}
         </div>
       </div>
 

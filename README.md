@@ -140,7 +140,13 @@ already shows, so a specialist who sees only their own work is offered only
 the departments and statuses of that work. The bar is a GET form, so the
 chosen values travel in the query string and survive a re-render. A value that
 is not among the options is refused with a message rather than dropped
-silently. Date-range filtering and exports are later tasks.
+silently. Date-range filtering is a later task.
+
+The Excel and PDF buttons beside the bar download the table as the page
+shows it, filtered or whole, one row per order line with the table's
+columns as headers (`xarid/exports.py`, routes `<page>/eksport/xlsx/` and
+`<page>/eksport/pdf/` under the page's own permission). An empty list still
+downloads a valid file with headers only.
 
 ## Attachments
 
