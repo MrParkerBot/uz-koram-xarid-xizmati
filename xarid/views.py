@@ -1460,16 +1460,27 @@ DEPARTMENTS_REPORT_TEMPLATE = "xarid/pages/bolimlar.html"
 DEPARTMENT_REPORT_PERIOD = DateColumn("Kelib tushgan sana", "kelib_tushgan_sana")
 
 
+def reported_applications() -> QuerySet[Application]:
+    """The applications the departments report counts.
+
+    Active departments only, because those are the rows the report has. The
+    bar's options are derived from this, so the drop-down and the table agree
+    on which departments exist.
+    """
+    return Application.objects.filter(department__is_active=True)
+
+
 def department_purchasing_report(request: HttpRequest) -> HttpResponse:
     """Korhona xaridi | Bo`limlar: what each department is buying.
 
     The bar offers the department drop-down the prototype promised and the
-    period; the chosen department comes from the bar itself, so its options
-    are the departments the applications actually name.
+    period. Its options come from the applications of departments the report
+    has a row for, so it cannot offer a department that would empty the
+    table: a deactivated department keeps its history but is not reported on.
     """
     table_filter = TableFilter(
         (BY_DEPARTMENT,),
-        Application.objects.all(),
+        reported_applications(),
         request.GET,
         date_column=DEPARTMENT_REPORT_PERIOD,
     )

@@ -186,6 +186,16 @@ class StaffWorkloadTests(TestCase):
 
         self.assertEqual(self.row_for("Alisher", report).total, 1)
 
+    def test_the_busiest_specialist_is_first(self) -> None:
+        an_assigned_application(self.head, self.idle)
+        an_assigned_application(self.head, self.busy)
+        an_assigned_application(self.head, self.busy)
+
+        report = staff_workload(None)
+
+        self.assertEqual(report.rows[0].subject_label, "Alisher")
+        self.assertEqual(report.rows[0].total, 2)
+
     def test_the_query_count_does_not_grow_with_the_statuses(self) -> None:
         an_assigned_application(self.head, self.busy)
 
@@ -473,6 +483,16 @@ class DepartmentPurchasingPageTests(SignedInAdminTestCase):
 
         self.assertContains(response, REFUSED_INVERTED_PERIOD)
         self.assertContains(response, 'data-jami="1"')
+
+    def test_the_drop_down_does_not_offer_a_department_without_a_row(self) -> None:
+        retired = a_department("Eski bo" + chr(96) + "lim")
+        an_application(department=retired)
+        retired.is_active = False
+        retired.save(update_fields=["is_active"])
+
+        response = self.client.get(page("bolimlar"))
+
+        self.assertNotContains(response, f'value="{retired.pk}"')
 
     def test_a_type_the_matrix_refuses_cannot_open_it(self) -> None:
         manager = make_user("departments.manager", user_type=MENEJER)

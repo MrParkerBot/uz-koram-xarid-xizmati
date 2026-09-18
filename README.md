@@ -199,8 +199,17 @@ because which department consumes the most purchasing effort is the question
 the page answers; a tie breaks by name. A department that raised nothing
 still has a row of zeros, and a deactivated department has none.
 
+A department's total counts every application it raised, including one
+refused at intake, which can never appear under a status column because it
+never reaches a contract. The gap between the total and the sum of the
+counters therefore holds both work not yet contracted and work refused.
+
+Both reports put the busiest row first, because both are read to find where
+the load is; a tie breaks by name.
+
 That report is narrowed by its `Bo'lim` drop-down and by a period over the
 date an application arrived, which is the only date every application has.
+The drop-down offers only departments the report has a row for.
 A department name links to the Mahsulotlar page carrying `?bolim=<id>`; that
 page is still the supplied prototype and ignores it until UZK-047.
 
