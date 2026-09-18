@@ -27,7 +27,12 @@ from django.db.models import Count, Q
 
 from xarid.exports import ExportColumn, TableExport
 from xarid.filters import DatePeriod
-from xarid.models import Department, ShartnomaStatus, assignable_specialists
+from xarid.models import (
+    Department,
+    MahsulotTuri,
+    ShartnomaStatus,
+    assignable_specialists,
+)
 
 # The ORM path from a specialist to one of their assigned applications, and
 # from there to the status of a contract raised against it.
@@ -41,6 +46,12 @@ TOTALS_LABEL = "Jami:"
 # raised rather than the ones it was given.
 DEPARTMENT_APPLICATIONS = "applications"
 DEPARTMENT_CONTRACT_STATUS = "applications__contracts__status"
+
+# And from a product type, which is reached through the order lines that name
+# it. Counting the applications rather than the lines is what makes an
+# application ordering two things of one type count once.
+CATEGORY_APPLICATIONS = "application_items__application"
+CATEGORY_CONTRACT_STATUS = "application_items__application__contracts__status"
 
 
 @dataclass(frozen=True)
@@ -362,3 +373,51 @@ def _counter_at(index: int) -> Callable[[ReportRow, object], int]:
     thing on both sides.
     """
     return lambda row, _ordinal: row.counters[index]
+
+def category_purchasing(period: DatePeriod | None, chosen_category: str = "") -> Report:
+    """The Korhona xaridi | Mahsulot Turi report (REQ-XARID-002).
+
+    A row per active product type: how many purchase applications ordered
+    something of that type, and how many of those stand in each contract
+    status. A type nothing has ordered still has a row of zeros, for the same
+    reason a quiet department does - the page is read to compare types.
+
+    A type is reached through the order lines that name it, so the counts are
+    distinct: an application ordering two things of one type counts once for
+    that type, and an application ordering two different types counts once
+    under each.
+
+    Args:
+        period: the period chosen in the filter bar, which narrows by the
+            date an application arrived. None, or a refused period, means all
+            time.
+        chosen_category: the type chosen in the bar, as its primary key;
+            empty means every type.
+
+    Returns:
+        The generated columns, a row per type and the totals row.
+    """
+    inside_period = period.as_condition(f"{CATEGORY_APPLICATIONS}__") if period else Q()
+    columns = status_columns()
+    categories = MahsulotTuri.objects.active()
+    if chosen_category:
+        categories = categories.filter(pk=chosen_category)
+
+    counted = categories.annotate(
+        arizalar=Count(CATEGORY_APPLICATIONS, filter=inside_period, distinct=True),
+        **status_counters(
+            columns, CATEGORY_APPLICATIONS, CATEGORY_CONTRACT_STATUS, inside_period
+        ),
+    ).order_by("-arizalar", "name")
+
+    rows = tuple(
+        ReportRow(
+            subject_label=category.name,
+            detail=str(category.category_number),
+            total=category.arizalar,
+            counters=tuple(getattr(category, column.alias) for column in columns),
+            subject_id=category.pk,
+        )
+        for category in counted
+    )
+    return Report(columns=columns, rows=rows, totals=totals_of(columns, rows))
