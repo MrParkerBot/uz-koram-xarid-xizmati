@@ -51,6 +51,13 @@ class CompletedStatusTests(TestCase):
 
         self.assertIsNone(ShartnomaStatus.completed_status())
 
+    def test_a_deleted_status_still_holds_the_marker(self) -> None:
+        """Deleting deactivates (DEC-009); what was finished stays finished."""
+        delivered = ShartnomaStatus.objects.get(name=DELIVERED)
+        deactivate(delivered)
+
+        self.assertEqual(ShartnomaStatus.completed_status(), delivered)
+
 
 class IndicatorTests(TestCase):
     """What the three figures count."""
@@ -138,6 +145,26 @@ class IndicatorTests(TestCase):
         self.assertEqual(indicators.created.percentage, 0)
         self.assertEqual(indicators.completed.percentage, 0)
 
+    def test_a_half_percent_rounds_up(self) -> None:
+        """12.5% is 13% on the card, which is the arithmetic a person does."""
+        for name, inn in (
+            ("MetalGrup JV", "223456789"),
+            ("UzElektro", "323456789"),
+            ("GazTrade", "423456789"),
+            ("QurilishMat", "523456789"),
+            ("Kimyo Invest", "623456789"),
+            ("Neft Trade", "723456789"),
+            ("Agro Mash", "823456789"),
+        ):
+            a_supplier(name=name, inn=inn)
+        self.a_contract_in(self.drawn_up)
+
+        created = dashboard_indicators().created
+
+        # One contract, eight suppliers: the seven above and a_contract()'s own.
+        self.assertEqual((created.count, created.measured_against), (1, 8))
+        self.assertEqual(created.percentage, 13)
+
     def test_more_contracts_than_suppliers_pass_a_hundred_percent(self) -> None:
         """A supplier may hold several contracts, so the ratio is not clamped."""
         self.a_contract_in(self.drawn_up)
@@ -165,7 +192,9 @@ class DashboardPageTests(SignedInAdminTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "1 / 1 jami")
-        self.assertContains(response, "100%")
+        # The card itself, not the progress bar's width:100% on the same card.
+        self.assertContains(response, '<div class="kpi-value">100%</div>', html=False)
+        self.assertContains(response, '<div class="kpi-value">1</div>', html=False)
 
     def test_an_empty_database_still_renders(self) -> None:
         response = self.client.get(page("dashboard"))

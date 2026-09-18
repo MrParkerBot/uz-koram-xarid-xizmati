@@ -513,6 +513,14 @@ class ShartnomaStatus(OrderedStatus):
         None rather than an error: master data may be edited into a state
         where nothing is marked, and the dashboard then reports no completed
         contracts instead of failing to render.
+
+        A deleted status still answers. Deleting deactivates (DEC-009), and a
+        contract that reached the finished state stayed finished when the row
+        naming that state left the lists; dropping it from the count would
+        make the dashboard fall the moment somebody tidied the status list.
+        The marker is what is being read here, not the list of statuses still
+        on offer, which is why this does not use active() the way
+        status_columns() does.
         """
         return cls.objects.filter(is_completed=True).first()
 

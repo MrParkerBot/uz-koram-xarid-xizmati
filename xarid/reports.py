@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.contrib.auth.models import AbstractBaseUser
 from django.db.models import Count, Q
@@ -475,9 +476,19 @@ def as_percentage_of(count: int, supplier_count: int) -> Indicator:
     A department with no suppliers on file is not an error - it is a database
     nobody has filled in yet - so the percentage is zero rather than a
     division.
+
+    A half rounds up, which is the arithmetic somebody checking the card by
+    hand will have done. Python's own round() would send 12.5% down to 12 and
+    13.5% up to 14, which is defensible statistics and an odd thing to have to
+    explain to the department.
     """
-    percentage = round(count * 100 / supplier_count) if supplier_count else 0
-    return Indicator(count=count, measured_against=supplier_count, percentage=percentage)
+    if not supplier_count:
+        return Indicator(count=count, measured_against=supplier_count, percentage=0)
+
+    exact = Decimal(count * 100) / Decimal(supplier_count)
+    whole = int(exact.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+    return Indicator(count=count, measured_against=supplier_count, percentage=whole)
 
 
 def dashboard_indicators() -> DashboardIndicators:

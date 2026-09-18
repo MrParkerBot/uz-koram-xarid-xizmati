@@ -31,20 +31,20 @@ UZK-052.
       <div class="panel stat-card">
         <div class="stat-icon"><i class="bi bi-buildings text-primary" aria-hidden="true"></i></div>
         <div class="stat-label">Jami Yetkazib beruvchilar</div>
-        <div class="kpi-value" data-supplier-count>{{ indicators.supplier_count }}</div>
+        <div class="kpi-value">{{ indicators.supplier_count }}</div>
         <div class="stat-sub muted">Ro'yhatdagi faol firmalar</div>
       </div>
       <div class="panel stat-card">
         <div class="stat-icon"><i class="bi bi-file-earmark-text text-info" aria-hidden="true"></i></div>
         <div class="stat-label">Tuzilgan Shartnomalar %</div>
-        <div class="kpi-value" data-created-percentage>{{ indicators.created.percentage }}%</div>
+        <div class="kpi-value">{{ indicators.created.percentage }}%</div>
         <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:{{ indicators.created.bar_width }}%"></div></div>
         <div class="stat-sub">{{ indicators.created.count }} / {{ indicators.created.measured_against }} jami</div>
       </div>
       <div class="panel stat-card">
         <div class="stat-icon"><i class="bi bi-check2-circle text-success" aria-hidden="true"></i></div>
         <div class="stat-label">Tugallangan %</div>
-        <div class="kpi-value" data-completed-percentage>{{ indicators.completed.percentage }}%</div>
+        <div class="kpi-value">{{ indicators.completed.percentage }}%</div>
         <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:{{ indicators.completed.bar_width }}%"></div></div>
         <div class="stat-sub">{{ indicators.completed.count }} / {{ indicators.completed.measured_against }} jami</div>
       </div>
