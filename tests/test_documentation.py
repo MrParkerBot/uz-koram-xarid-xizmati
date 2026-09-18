@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ElementTree
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from django.core.management import call_command
 from django.test import SimpleTestCase
@@ -17,6 +18,7 @@ from xarid.management.commands.delivery_docs import (
     BPMN_NS,
     BPMNDI_NS,
     CONTRACT_BPMN,
+    DOCS,
     PURCHASE_BPMN,
     SCHEMA_FILE,
     UML_FILE,
@@ -39,29 +41,39 @@ class TheDocumentsMatchTheCodeTests(SimpleTestCase):
         call_command("delivery_docs", check=True)
 
     def test_the_check_command_fails_when_a_document_is_stale(self) -> None:
-        stale = Path(SCHEMA_FILE)
-        original = stale.read_text(encoding="utf-8")
-        try:
-            stale.write_text(original + "\nA table nobody has.\n", encoding="utf-8")
+        """Against a copy: a run killed mid-test must not leave the tree dirty."""
+        with TemporaryDirectory() as elsewhere:
+            somewhere_else = Path(elsewhere)
+            call_command("delivery_docs", root=str(somewhere_else))
+            stale = somewhere_else / SCHEMA_FILE
+            stale.write_text(
+                stale.read_text(encoding="utf-8") + "\nA table nobody has.\n",
+                encoding="utf-8",
+            )
 
             with self.assertRaises(SystemExit):
-                call_command("delivery_docs", check=True)
-        finally:
-            stale.write_text(original, encoding="utf-8")
+                call_command("delivery_docs", root=str(somewhere_else), check=True)
+
+    def test_the_check_command_reports_a_document_that_was_never_written(self) -> None:
+        with TemporaryDirectory() as elsewhere, self.assertRaises(SystemExit):
+            call_command("delivery_docs", root=elsewhere, check=True)
 
 
 class TheSchemaDocumentTests(SimpleTestCase):
     """What the schema document has to name."""
 
+    def written(self) -> str:
+        return (DOCS / SCHEMA_FILE).read_text(encoding="utf-8")
+
     def test_it_lists_every_table_the_models_declare(self) -> None:
-        written = SCHEMA_FILE.read_text(encoding="utf-8")
+        written = self.written()
 
         for model in domain_models():
             with self.subTest(model=model.__name__):
                 self.assertIn(f"`{model._meta.db_table}`", written)
 
     def test_it_names_a_column_of_every_table(self) -> None:
-        written = SCHEMA_FILE.read_text(encoding="utf-8")
+        written = self.written()
 
         for model in domain_models():
             with self.subTest(model=model.__name__):
@@ -73,22 +85,29 @@ class TheClassDiagramTests(SimpleTestCase):
     """What the UML has to cover."""
 
     def test_it_has_a_class_for_every_entity(self) -> None:
-        written = UML_FILE.read_text(encoding="utf-8")
+        written = (DOCS / UML_FILE).read_text(encoding="utf-8")
 
         for model in domain_models():
             with self.subTest(model=model.__name__):
                 self.assertIn(f"class {model.__name__} ", written)
 
     def test_it_opens_and_closes_as_plantuml(self) -> None:
-        written = UML_FILE.read_text(encoding="utf-8")
+        written = (DOCS / UML_FILE).read_text(encoding="utf-8")
 
         self.assertTrue(written.startswith("@startuml"))
         self.assertTrue(written.rstrip().endswith("@enduml"))
 
-    def test_it_draws_a_relation_between_two_entities(self) -> None:
-        written = UML_FILE.read_text(encoding="utf-8")
+    def test_it_draws_an_association_with_its_multiplicity(self) -> None:
+        written = (DOCS / UML_FILE).read_text(encoding="utf-8")
 
-        self.assertIn("Contract --> Supplier : supplier", written)
+        self.assertIn('Contract "*" --> "1" Supplier : supplier', written)
+
+    def test_a_one_to_one_is_an_association_and_not_inheritance(self) -> None:
+        """--|> would say a UserProfile is a kind of User, which it is not."""
+        written = (DOCS / UML_FILE).read_text(encoding="utf-8")
+
+        self.assertIn('UserProfile "1" -- "1" User : user', written)
+        self.assertNotIn("--|>", written)
 
 
 class TheBpmnFilesTests(SimpleTestCase):
@@ -98,7 +117,7 @@ class TheBpmnFilesTests(SimpleTestCase):
         return ElementTree.fromstring(path.read_text(encoding="utf-8"))
 
     def test_each_file_parses_and_declares_one_process(self) -> None:
-        for path in (PURCHASE_BPMN, CONTRACT_BPMN):
+        for path in (DOCS / PURCHASE_BPMN, DOCS / CONTRACT_BPMN):
             with self.subTest(document=str(path)):
                 processes = self.parsed(path).findall(f"{{{BPMN_NS}}}process")
 
@@ -106,7 +125,7 @@ class TheBpmnFilesTests(SimpleTestCase):
 
     def test_every_element_has_a_shape_so_a_viewer_can_draw_it(self) -> None:
         """Elements without diagram interchange open as an error, not a diagram."""
-        for path in (PURCHASE_BPMN, CONTRACT_BPMN):
+        for path in (DOCS / PURCHASE_BPMN, DOCS / CONTRACT_BPMN):
             with self.subTest(document=str(path)):
                 root = self.parsed(path)
                 process = root.find(f"{{{BPMN_NS}}}process")
@@ -119,7 +138,7 @@ class TheBpmnFilesTests(SimpleTestCase):
                 self.assertEqual(declared - drawn, set())
 
     def test_every_sequence_flow_joins_two_declared_elements(self) -> None:
-        for path in (PURCHASE_BPMN, CONTRACT_BPMN):
+        for path in (DOCS / PURCHASE_BPMN, DOCS / CONTRACT_BPMN):
             with self.subTest(document=str(path)):
                 process = self.parsed(path).find(f"{{{BPMN_NS}}}process")
                 declared = {element.get("id") for element in process}
@@ -130,7 +149,7 @@ class TheBpmnFilesTests(SimpleTestCase):
 
     def test_the_purchase_flow_has_both_approvals_dec_016_asks_for(self) -> None:
         """Section 4.2 was superseded: the head decides, then the director."""
-        process = self.parsed(PURCHASE_BPMN).find(f"{{{BPMN_NS}}}process")
+        process = self.parsed(DOCS / PURCHASE_BPMN).find(f"{{{BPMN_NS}}}process")
         gateways = [
             gateway.get("name")
             for gateway in process.findall(f"{{{BPMN_NS}}}exclusiveGateway")
@@ -141,7 +160,7 @@ class TheBpmnFilesTests(SimpleTestCase):
         self.assertIn("Direktor qarori", gateways)
 
     def test_the_contract_flow_returns_a_refused_contract_to_its_specialist(self) -> None:
-        process = self.parsed(CONTRACT_BPMN).find(f"{{{BPMN_NS}}}process")
+        process = self.parsed(DOCS / CONTRACT_BPMN).find(f"{{{BPMN_NS}}}process")
         paths = {
             (flow.get("sourceRef"), flow.get("targetRef"))
             for flow in process.findall(f"{{{BPMN_NS}}}sequenceFlow")
