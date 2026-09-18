@@ -106,7 +106,13 @@ own account (DEC-018), never typed.
               <td>{{ qator.olchov_birligi }}</td>
               {% if loop.first %}
               <td rowspan="{{ lines|length }}">
-                {% if ariza.status %}<span class="badge badge-info">{{ ariza.status.name }}</span>{% else %}<span class="muted small">—</span>{% endif %}
+                {% set holat = ariza.shown_status %}
+                {% if holat %}<span class="badge {{ holat.badge_class }}">{{ holat.name }}</span>{% else %}<span class="muted small">—</span>{% endif %}
+                {% if ariza.status_follows_contract %}
+                <div class="muted small" style="margin-top:4px;">
+                  Shartnoma holati{% if may_name_contract(ariza.contract) %}: {{ ariza.contract.shartnoma_raqami }}{% endif %}
+                </div>
+                {% endif %}
               </td>
               {% endif %}
               <td style="font-size:11px;" class="mono-cell">{{ qator.mahsulot_turi.category_number }} — {{ qator.mahsulot_turi.name }}</td>

@@ -1326,6 +1326,16 @@ class Contract(models.Model):
         return self.stage == self.Stage.SIGNED
 
     @property
+    def page_showing(self) -> str | None:
+        """The page this contract is currently on, or None while it is on none.
+
+        One place answers it, because two things ask: whoever wants to link to
+        a contract, and whoever has to decide whether somebody may be told it
+        exists at all.
+        """
+        return PAGE_SHOWING_CONTRACT.get(self.stage)
+
+    @property
     def is_sent(self) -> bool:
         """Whether this contract is with the department head."""
         return self.stage == self.Stage.SENT
@@ -1676,6 +1686,18 @@ def contract_value_of(lines: Iterable[ContractItem]) -> Decimal:
     )
 
 
+# Which page shows a contract at each stage. A contract with its specialist is
+# on Kelishinlingan; once it is sent it is on Tuzilgan, decided or not. The map
+# is what decides whether somebody may be told a contract's number, the way
+# PAGE_SHOWING_STAGE decides whether they may download an application.
+PAGE_SHOWING_CONTRACT: dict[str, str] = {
+    Contract.Stage.AGREED: "kelishinlingan",
+    Contract.Stage.REJECTED: "kelishinlingan",
+    Contract.Stage.SENT: "tuzilgan",
+    Contract.Stage.SIGNED: "tuzilgan",
+}
+
+
 class ContractStatusChange(models.Model):
     """One move of a contract from one status to another (REQ-ROLE-010).
 
@@ -1912,6 +1934,70 @@ class PurchaseApplication(models.Model):
 
     def __str__(self) -> str:
         return f"{self.xarid_raqami} - {self.shartnoma_nomi}"
+
+    @property
+    def contract(self) -> Contract | None:
+        """The contract formed from this request, or None while there is none.
+
+        Three hops, any of which can be missing, and each missing hop is an
+        ordinary state rather than a fault: a request that has not been
+        approved has raised no department application, and one that has may
+        have no contract against it yet.
+
+        The newest when there is more than one. Nothing forbids a second
+        contract against the same application, so the ordering Contract
+        already declares is what decides - read as a list rather than a slice,
+        so a page that prefetched the contracts pays nothing here.
+        """
+        if self.raised_application_id is None:
+            return None
+
+        contracts = list(self.raised_application.contracts.all())
+
+        return contracts[0] if contracts else None
+
+    @property
+    def status_follows_contract(self) -> bool:
+        """Whether what this request shows comes from its contract.
+
+        The page asks so that it can say so. A status that silently changed
+        from one table's word to another table's word would leave a requester
+        with no way to tell why - and DEC-010 makes the two tables
+        independent, so the words need not even look related.
+        """
+        contract = self.contract
+
+        return contract is not None and contract.status_id is not None
+
+    @property
+    def shown_status(self):
+        """The state this request is currently in (REQ-ARIZA-017).
+
+        Section 4.9 has the current status change according to the contract's
+        state, and the mapping is worth reading slowly: DEC-010 answered
+        UNKNOWN-005 without defining any correspondence between an ArizaStatus
+        and a ShartnomaStatus. An administrator extends the two tables
+        independently, so a translation table written here would be invented
+        in the code and invalidated by the next row somebody adds on either
+        page. The contract's status is therefore shown as it is, and that is
+        the whole mapping.
+
+        Derived rather than copied. A column kept in step by a hook is out of
+        step the first time something writes around the hook - and this record
+        needs no column, because the contract knows its status and the request
+        knows its contract. status is left exactly as it was, so the record
+        still knows what it was raised as.
+
+        Not the same as Application.current_status_label, which TASK-UZK-047
+        added one model along: that answers a printed label for a report row,
+        and this answers the status row itself, so a page can render its
+        badge and its colour. Two questions that look alike and are not.
+        """
+        contract = self.contract
+        if contract is not None and contract.status_id is not None:
+            return contract.status
+
+        return self.status
 
     @property
     def awaits_approval(self) -> bool:

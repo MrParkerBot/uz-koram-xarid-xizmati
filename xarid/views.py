@@ -62,6 +62,7 @@ from xarid.jinja2 import display_name
 from xarid.models import (
     BOLIM_BOSHLIGI,
     DIREKTOR,
+    PAGE_SHOWING_CONTRACT,
     Application,
     ApplicationItem,
     ArizaStatus,
@@ -1066,7 +1067,16 @@ def purchase_applications() -> QuerySet[PurchaseApplication]:
     """Every purchase application, newest first (REQ-ARIZA-014)."""
     return (
         PurchaseApplication.objects.select_related("department", "status")
-        .prefetch_related(purchase_lines())
+        .prefetch_related(
+            purchase_lines(),
+            # The status cell walks request -> department application ->
+            # contract -> status, and the page has a test about costing the
+            # same with five rows as with one.
+            Prefetch(
+                "raised_application__contracts",
+                queryset=Contract.objects.select_related("status"),
+            ),
+        )
         .all()
     )
 
@@ -1172,8 +1182,14 @@ def purchase_page(
     chosen_filters: Mapping[str, str] | None = None,
     form: PurchaseApplicationForm | None = None,
     items: PurchaseApplicationItemFormSet | None = None,
+    viewer: AbstractBaseUser | None = None,
 ) -> dict[str, object]:
-    """Everything the Xarid Arizasi page renders."""
+    """Everything the Xarid Arizasi page renders.
+
+    Args:
+        viewer: who is reading it, which decides whether the status cell may
+            name the contract a state came from.
+    """
     table_filter = TableFilter(
         PURCHASE_FILTERS,
         purchase_applications(),
@@ -1186,6 +1202,11 @@ def purchase_page(
         "table_filter": table_filter,
         "signed_in_department": signed_in_department,
         "approvals": approvals,
+        # Whether this viewer may be told which contract a status came from.
+        # DEC-015 gives Users this page and no contract page at all, so the
+        # explanation must not hand them a fact from a page they cannot open -
+        # the rule the attachment download already follows.
+        "may_name_contract": contract_naming_test(viewer),
         "form": form if form is not None else PurchaseApplicationForm(),
         "item_formset": (
             items
@@ -1203,6 +1224,7 @@ def purchase_application_list(request: HttpRequest) -> HttpResponse:
         signed_in_department=department_of(request.user),
         approvals=approvals_for(request.user),
         chosen_filters=request.GET,
+        viewer=request.user,
     )
     report_invalid_filters(request, page_context["table_filter"])
 
@@ -1248,7 +1270,13 @@ def purchase_application_create(request: HttpRequest) -> HttpResponse:
         return render(
             request,
             PURCHASE_TEMPLATE,
-            purchase_page(department, approvals_for(request.user), form=form, items=items),
+            purchase_page(
+                department,
+                approvals_for(request.user),
+                form=form,
+                items=items,
+                viewer=request.user,
+            ),
         )
 
     if not (form.is_valid() and items.is_valid()):
@@ -1256,7 +1284,13 @@ def purchase_application_create(request: HttpRequest) -> HttpResponse:
         return render(
             request,
             PURCHASE_TEMPLATE,
-            purchase_page(department, approvals_for(request.user), form=form, items=items),
+            purchase_page(
+                department,
+                approvals_for(request.user),
+                form=form,
+                items=items,
+                viewer=request.user,
+            ),
         )
 
     with transaction.atomic():
@@ -1926,3 +1960,24 @@ def contract_reject(request: HttpRequest, pk: int) -> HttpResponse:
         messages.info(request, f"{contract.shartnoma_raqami} allaqachon hal qilingan.")
 
     return redirect("xarid:tuzilgan")
+
+
+def contract_naming_test(user: AbstractBaseUser) -> Callable[[Contract | None], bool]:
+    """A test of whether this person may be told a given contract's number.
+
+    Asked once per page rather than per row: may_open reads the person's user
+    type, which is a query.
+
+    Args:
+        user: the person reading the page.
+
+    Returns:
+        A predicate over one contract, false for no contract at all.
+    """
+    openable = {
+        page_name
+        for page_name in set(PAGE_SHOWING_CONTRACT.values())
+        if may_open(user, page_name)
+    }
+
+    return lambda contract: contract is not None and contract.page_showing in openable
