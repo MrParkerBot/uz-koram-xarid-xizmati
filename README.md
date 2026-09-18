@@ -38,7 +38,17 @@ supplied with the assignment, on SQLite, behind Django's own authentication.
   in days. The charts, the top suppliers list, the category table and the
   activity list are still the supplied prototype's sample data. Its Top
   suppliers panel shows the first five of the Top suppliers page and links to
-  it.
+  it. The supplier category block counts how many distinct firms supply each
+  product type - a type nobody supplies is listed with zero - beside the
+  number of types actually delivered, meaning those that reached the status
+  marked completed rather than those somebody merely has a contract for. Its
+  bar chart draws the same rows as its table. A firm is credited with every
+  type its application ordered, because a contract is against an application
+  and not against one of its lines. A share is that type's count as a percentage of the table, so
+  the column adds to a hundred; a firm supplying two types is counted under
+  both, which the block says under it. REQ-DASH-009 words the share as a
+  percentage of total firms instead, which is the same number only while no
+  firm supplies more than one type.
 - **Top suppliers** (`Hisobotlar / Top Yetkazib beruvchilar`): every firm
   ranked by what its contracts come to inside the chosen period (DEC-025),
   narrowed by the firm's Daraja. A firm with no contracts in the period is not
@@ -64,7 +74,32 @@ because a resend overwrites that column (DEC-024) and a contract sent twice
 would report only the time since its last send. An average covers only the
 contracts that recorded both of its ends: a stage nothing has completed prints
 a dash, not nought days.
-- **Drafted contracts, 1C integration and logs** are still the supplied
+- **The log** (section 10): every create, edit and delete the application makes
+  through its own pages writes one entry naming the acting user, their
+  department at the time, the record, and when. An approval does not add a
+  row - it completes the one the creation left, with the approver, their
+  department, the comment and the time, which is the row section 10's columns
+  describe. Entries are kept indefinitely and the application builds no way to
+  edit or delete one (DEC-029); the Django admin registers the table for
+  reading only, and deleting a user there is now refused while they hold
+  entries. A record approved twice - a purchase request goes to the
+  department head and then to the director (DEC-016) - gets a second entry
+  rather than having the first approver overwritten, because the columns
+  hold one approver. Writes made through the admin, a shell or a migration
+  are not logged.
+- **Notifications**: accepting an application tells its sender; refusing tells
+  them the reason. Delivery is in-app and nothing else - an entry on the
+  Bildirishnomalar page and a number on the bell in the header - with no email
+  and no SMS (DEC-012). Opening the page marks what it showed as read. An
+  application entered on the Qabul qilingan page has no sender behind it
+  (DEC-031), so it tells nobody. The page is closed by `login_required` alone:
+  it is not a page a user type may open, it is everybody's own.
+- **The Logs page** (`Tizim / Logs`) lists those entries newest first with the
+  nine columns section 10 names and a drop-down per column - user, department,
+  form, action - beside the period. An entry nobody has decided leaves its
+  four approval cells empty rather than labelling them. There is no export:
+  section 10 is the one page that does not ask for one (DEC-029).
+- **Drafted contracts and the 1C integration screen** are still the supplied
   prototype pages with sample data.
 
 ## Project structure
@@ -72,6 +107,10 @@ a dash, not nought days.
 ```text
 .
 ├── manage.py
+├── docs/                     the section 6.2 deliverables, generated:
+│   ├── bpmn/                 the purchase request and contract flows
+│   ├── uml/                  a class diagram of every entity
+│   └── database-schema.md    every table and column
 ├── requirements.txt          runtime dependencies
 ├── requirements-dev.txt      ruff, for the lint gate
 ├── .env.example              every environment variable, with placeholders
@@ -441,6 +480,23 @@ prototype pages.
 ```bash
 python manage.py collectstatic
 ```
+
+## Technical documents
+
+`docs/` holds the BPMN, the UML and the database schema that section 6.2 lists
+as deliverables beside the code (REQ-ACCEPT-002). They are generated from the
+models and from the flows as the code runs them, not written by hand:
+
+```bash
+python manage.py delivery_docs          # write them
+python manage.py delivery_docs --check  # fail if they are out of date
+```
+
+`tests/test_documentation.py` runs that check, so a migration that leaves the
+schema document behind fails the build rather than being noticed years later.
+The flows drawn are the ones that were built - DEC-016 put the requester's
+department head and the director in front of the purchasing department - and
+not the assignment's superseded section 4.2.
 
 ## Configuration
 

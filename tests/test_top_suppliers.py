@@ -22,7 +22,14 @@ from tests.support import (
     page,
 )
 from xarid.filters import DatePeriod
-from xarid.models import DIREKTOR, KATTA_MUTAXASIS, MENEJER, Contract, Supplier
+from xarid.models import (
+    DIREKTOR,
+    KATTA_MUTAXASIS,
+    MENEJER,
+    Contract,
+    Supplier,
+    deactivate,
+)
 from xarid.reports import SPENDINGS_PERIOD, daraja_options, top_suppliers
 
 # What the page and the panel both say when nothing is ranked. Template text,
@@ -151,6 +158,41 @@ class RankingTests(TestCase):
 
     def test_nothing_ranked_is_an_empty_ranking_rather_than_an_error(self) -> None:
         self.assertEqual(top_suppliers(None), ())
+
+    def test_contracts_on_different_days_are_still_one_row_for_the_firm(self) -> None:
+        """The accounting date is annotated on the rows being grouped.
+
+        Whether it lands in the GROUP BY decides whether a firm with two
+        contracts on two days is one row or two, and every other test here
+        dates a firm's contracts on the same day - so without this one the
+        suite would pass either way.
+        """
+        firm = self.a_supplier_with("MetalGrup JV", "223456789")
+        self.a_contract_worth("100", firm, on=self.today)
+        self.a_contract_worth("250", firm, on=self.today - timedelta(days=5))
+
+        ranking = top_suppliers(None)
+
+        self.assertEqual(len(ranking), 1)
+        self.assertEqual((ranking[0].contracts, ranking[0].total.amount), (2, Decimal("350")))
+
+    def test_a_deleted_firm_keeps_its_place_in_what_was_spent(self) -> None:
+        """DEC-009 deletes by deactivating; it does not unspend the money."""
+        firm = self.a_supplier_with("MetalGrup JV", "223456789")
+        self.a_contract_worth("500", firm)
+        deactivate(firm)
+
+        self.assertEqual([row.supplier for row in top_suppliers(None)], [firm])
+
+    def test_a_share_of_the_leader_rounds_a_half_up(self) -> None:
+        """The same rounding as every other percentage on the dashboard."""
+        leader = self.a_supplier_with("MetalGrup JV", "223456789")
+        follower = self.a_supplier_with("UzElektro", "323456789")
+        self.a_contract_worth("800", leader)
+        self.a_contract_worth("100", follower)
+
+        # 100 of 800 is 12.5%, which round() would send down to 12.
+        self.assertEqual([row.share_of_leader for row in top_suppliers(None)], [100, 13])
 
 
 class TopSuppliersPageTests(SignedInAdminTestCase):

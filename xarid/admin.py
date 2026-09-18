@@ -6,6 +6,7 @@ from xarid.models import (
     Application,
     ApplicationItem,
     ArizaStatus,
+    AuditEntry,
     Contract,
     ContractItem,
     Department,
@@ -143,3 +144,35 @@ class NotificationAdmin(admin.ModelAdmin):
         "read_at",
     )
     list_filter = ("kind",)
+
+
+@admin.register(AuditEntry)
+class AuditEntryAdmin(admin.ModelAdmin):
+    """The section 10 log, which nobody may write through the admin.
+
+    DEC-029 says entries are kept indefinitely and can never be edited or
+    deleted through the application. The admin is part of the application, so
+    it is registered for reading and nothing else - an audit trail an
+    administrator can quietly correct is not one.
+    """
+
+    list_display = (
+        "created_at",
+        "actor",
+        "actor_department",
+        "form_name",
+        "record_label",
+        "action",
+    )
+    list_filter = ("action", "form_name", "actor_department")
+    search_fields = ("record_label", "form_name")
+    date_hierarchy = "created_at"
+
+    def has_add_permission(self, request) -> bool:
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:
+        return False
+
+    def has_delete_permission(self, request, obj=None) -> bool:
+        return False
