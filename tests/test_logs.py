@@ -86,13 +86,26 @@ class LogsPageTests(SignedInAdminTestCase):
         self.assertIn("Texnoprom LLC", rows)
         self.assertIn("Created", rows)
 
-    def test_an_undecided_entry_leaves_the_approval_cells_empty(self) -> None:
+    def approval_cells_of(self, rows: str) -> list[str]:
+        """The four approval cells of the first row, with their tags stripped.
+
+        Read by position rather than by counting empty cells: the last of the
+        four carries a class, and an actor with no department leaves an empty
+        cell of its own, so counting would check neither the right cells nor
+        all of them.
+        """
+        import re
+
+        cells = re.findall(r"<td[^>]*>(.*?)</td>", rows, flags=re.S)
+
+        return [re.sub(r"<[^>]+>", "", cell).strip() for cell in cells[-4:]]
+
+    def test_an_undecided_entry_leaves_all_four_approval_cells_empty(self) -> None:
         self.an_entry()
 
         rows = self.rows_of(self.client.get(page("logs")))
 
-        self.assertNotIn("Tasdiqlanmagan", rows)
-        self.assertEqual(rows.count("<td></td>"), 3)
+        self.assertEqual(self.approval_cells_of(rows), ["", "", "", ""])
 
     def test_a_decided_entry_prints_all_four_approval_cells(self) -> None:
         supplier = a_supplier()
@@ -107,10 +120,12 @@ class LogsPageTests(SignedInAdminTestCase):
         record_decision(approver, supplier, approved=True, comment="Hujjatlar to'liq")
 
         rows = self.rows_of(self.client.get(page("logs")))
+        approver, department, comment, decided_at = self.approval_cells_of(rows)
 
-        self.assertIn("Dilnoza Yusupova", rows)
-        self.assertIn("Texnik bo`lim", rows)
-        self.assertIn("Hujjatlar to&#39;liq", rows)
+        self.assertEqual(approver, "Dilnoza Yusupova")
+        self.assertEqual(department, "Texnik bo`lim")
+        self.assertEqual(comment, "Hujjatlar to&#39;liq")
+        self.assertTrue(decided_at)
 
     def test_filtering_by_user_narrows_the_rows_to_that_user(self) -> None:
         self.an_entry(actor=self.clerk, name="Texnoprom LLC", inn="123456789")
@@ -138,12 +153,21 @@ class LogsPageTests(SignedInAdminTestCase):
         gone = a_supplier(name="MetalGrup JV", inn="223456789")
         record_deleted(self.clerk, gone)
 
-        rows = self.rows_of(
-            self.client.get(page("logs"), {"amal": AuditEntry.Action.DELETED})
-        )
+        response = self.client.get(page("logs"), {"amal": AuditEntry.Action.DELETED})
+        rows = self.rows_of(response)
 
         self.assertIn("MetalGrup JV", rows)
         self.assertNotIn("Texnoprom LLC", rows)
+
+    def test_the_action_drop_down_and_the_column_agree_on_a_name(self) -> None:
+        """A bar that says "created" over a column that says "Created" is two names."""
+        self.an_entry()
+
+        rendered = self.client.get(page("logs")).content.decode()
+        options = rendered.split('name="amal"', 1)[1].split("</select>", 1)[0]
+
+        self.assertIn(">Created<", options)
+        self.assertNotIn(">created<", options)
 
     def test_filtering_by_form_narrows_the_rows(self) -> None:
         self.an_entry()
@@ -185,13 +209,19 @@ class LogsPageTests(SignedInAdminTestCase):
         self.assertContains(response, EMPTY_LOG)
 
     def test_the_page_offers_no_export(self) -> None:
-        """DEC-029: section 10 is the one page that does not ask for one."""
+        """DEC-029: section 10 is the one page that does not ask for one.
+
+        The page's own body, not the shell around it: a word appearing in
+        base.html later must not fail a Logs test.
+        """
         self.an_entry()
 
         rendered = self.client.get(page("logs")).content.decode()
+        body = rendered.split('<div class="page-wrap">', 1)[1]
 
-        self.assertNotIn("Export", rendered)
-        self.assertNotIn("eksport", rendered)
+        self.assertNotIn("Export", body)
+        self.assertNotIn("eksport", body)
+        self.assertNotIn("Excel", body)
 
 
 class LogsPermissionTests(TestCase):

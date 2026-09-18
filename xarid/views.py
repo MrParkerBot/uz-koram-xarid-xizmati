@@ -220,8 +220,9 @@ LOGS_TEMPLATE = "xarid/pages/logs.html"
 LOGS_PERIOD = DateColumn("Sana/Soat", "created_at")
 
 # One drop-down per column REQ-LOG-001 asks to filter by. The action's
-# options are the stored values, which are the English words section 10's
-# own column header uses: Created, Deleted, Edited.
+# options are labelled from the model's own choices, so the bar and the
+# column under it call a value the same thing: Created, Edited, Deleted -
+# the words section 10's own column header uses.
 LOGS_FILTERS = (
     FilterColumn(
         parameter="foydalanuvchi",
@@ -247,6 +248,7 @@ LOGS_FILTERS = (
         label="Amal",
         value_lookup="action",
         label_lookups=("action",),
+        option_labels=dict(AuditEntry.Action.choices),
     ),
 )
 
@@ -268,14 +270,16 @@ def logs_page(request: HttpRequest) -> HttpResponse:
     """
     table_filter = TableFilter(LOGS_FILTERS, logged_events(), request.GET, date_column=LOGS_PERIOD)
     report_invalid_filters(request, table_filter)
-    entries = table_filter.apply()
+    # Evaluated once: the page prints the rows and how many of them there are,
+    # and counting them again would be a second pass over the same table.
+    entries = list(table_filter.apply())
 
     return render(
         request,
         LOGS_TEMPLATE,
         {
             "entries": entries,
-            "entry_count": entries.count(),
+            "entry_count": len(entries),
             "table_filter": table_filter,
         },
     )
