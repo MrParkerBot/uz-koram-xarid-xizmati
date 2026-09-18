@@ -153,8 +153,7 @@ reverses the rows.
 
 The Excel and PDF buttons beside the bar download the table as the page
 shows it, filtered or whole, in the order it shows it, one row per order
-line with the table's
-columns as headers (`xarid/exports.py`, routes `<page>/eksport/xlsx/` and
+line with the table's columns as headers (`xarid/exports.py`, routes `<page>/eksport/xlsx/` and
 `<page>/eksport/pdf/` under the page's own permission). An empty list still
 downloads a valid file with headers only.
 
