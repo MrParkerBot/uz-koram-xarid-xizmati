@@ -62,7 +62,7 @@ deciding on it.
               <td rowspan="{{ qatorlar|length }}">
                 {% if shartnoma.status %}<span class="badge {{ shartnoma.status.badge_class }}">{{ shartnoma.status.name }}</span>{% else %}<span class="muted small">Holat belgilanmagan</span>{% endif %}
                 {% if shartnoma.inkor_izohi %}<div class="muted small" style="margin-top:4px;">Oldingi inkor: {{ shartnoma.inkor_izohi }}</div>{% endif %}
-                {% if shartnoma.status_may_move and shartnoma_statuslari %}
+                {% if shartnoma.status_may_move and shartnoma_statuslari and is_own_contract(shartnoma) %}
                 <form method="post" action="{{ url('xarid:kelishinlingan-holat', shartnoma.pk) }}" style="display:flex;gap:4px;margin-top:6px;">
                   {{ csrf_input }}
                   <select class="form-control" name="holat" style="width:130px;" aria-label="{{ shartnoma.shartnoma_raqami }} holati">

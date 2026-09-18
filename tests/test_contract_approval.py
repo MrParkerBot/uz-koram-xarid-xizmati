@@ -245,6 +245,26 @@ class TuzilganPageTests(SignedInAdminTestCase):
 
         self.assertContains(response, page("kelishinlingan-holat", contract.pk))
 
+    def test_a_specialist_is_offered_the_status_control_only_on_their_own(self) -> None:
+        """A control that always answers 'not your work' should not be drawn.
+
+        The matrix lets a Katta Mutaxasis open this page, and the status route
+        still asks whose contract it is - so the page has to ask the same
+        question the other contract page does.
+        """
+        other = make_user("tuzilgan.other", user_type=KATTA_MUTAXASIS)
+        mine = self.a_sent_contract()
+        mine.accept(by=self.admin)
+        theirs = a_contract(an_assigned_application(self.admin, other), other)
+        theirs.send_for_approval(by=other)
+        theirs.accept(by=self.admin)
+        self.client.force_login(self.specialist)
+
+        response = self.client.get(page("tuzilgan"))
+
+        self.assertContains(response, page("kelishinlingan-holat", mine.pk))
+        self.assertNotContains(response, page("kelishinlingan-holat", theirs.pk))
+
     def test_the_status_route_returns_to_the_page_it_came_from(self) -> None:
         status = ShartnomaStatus.objects.active().last()
         contract = self.a_sent_contract()
