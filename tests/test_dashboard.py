@@ -8,7 +8,11 @@ tests move the marker and expect the figure to follow.
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+from decimal import Decimal
+
 from django.test import TestCase
+from django.utils import timezone
 
 from tests.support import (
     SignedInAdminTestCase,
@@ -19,8 +23,22 @@ from tests.support import (
     make_user,
     page,
 )
-from xarid.models import KATTA_MUTAXASIS, MENEJER, ShartnomaStatus, Supplier, deactivate
-from xarid.reports import dashboard_indicators
+from xarid.filters import DatePeriod
+from xarid.models import (
+    KATTA_MUTAXASIS,
+    MENEJER,
+    Contract,
+    ShartnomaStatus,
+    Supplier,
+    deactivate,
+    money_display,
+)
+from xarid.reports import (
+    SPENDINGS_PERIOD,
+    Money,
+    dashboard_indicators,
+    spending_indicators,
+)
 
 DELIVERED = "Yetkazib berilgan"
 DRAWN_UP = "Shartnoma tuzilgan"
@@ -209,3 +227,147 @@ class DashboardPageTests(SignedInAdminTestCase):
         response = self.client.get(page("dashboard"))
 
         self.assertEqual(response.status_code, 403)
+
+
+class SpendingTests(TestCase):
+    """What the Sariflangan card adds up (REQ-DASH-008, REQ-DASH-010)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.manager = make_user("spend.manager", user_type=MENEJER)
+        cls.specialist = make_user("spend.specialist", user_type=KATTA_MUTAXASIS)
+        cls.department = a_department()
+        cls.today = timezone.localdate()
+
+    def a_contract_worth(self, amount: str, on: date | None = None) -> Contract:
+        """One contract of a known value, dated on a known day.
+
+        The value is the sum of the goods rows, which raise_contract computes
+        and refuses to be given, so it is written afterwards; `on` is the
+        contract's own date, and None leaves it absent the way a contract
+        loaded outside the entry form would be.
+        """
+        application = an_assigned_application(
+            self.manager, self.specialist, department=self.department
+        )
+        contract = a_contract(application, self.specialist)
+        Contract.objects.filter(pk=contract.pk).update(
+            qiymati=Decimal(amount), shartnoma_sanasi=on
+        )
+        return contract
+
+    def period_between(self, start: date, end: date) -> DatePeriod:
+        """The period bar's own object, built the way a request builds it."""
+        return DatePeriod(
+            SPENDINGS_PERIOD,
+            {"dan": start.isoformat(), "gacha": end.isoformat()},
+        )
+
+    def test_the_period_total_is_the_sum_of_the_contracts_inside_it(self) -> None:
+        self.a_contract_worth("100.00", on=self.today - timedelta(days=1))
+        self.a_contract_worth("250.00", on=self.today)
+        self.a_contract_worth("999.00", on=self.today + timedelta(days=1))
+
+        period = self.period_between(self.today - timedelta(days=1), self.today)
+
+        self.assertEqual(spending_indicators(period).period.amount, Decimal("350.00"))
+
+    def test_a_period_with_no_contracts_is_zero(self) -> None:
+        self.a_contract_worth("100.00", on=self.today)
+
+        period = self.period_between(
+            self.today - timedelta(days=30), self.today - timedelta(days=20)
+        )
+
+        self.assertEqual(spending_indicators(period).period.amount, Decimal("0"))
+
+    def test_no_period_means_every_contract_on_file(self) -> None:
+        self.a_contract_worth("100.00", on=self.today - timedelta(days=400))
+        self.a_contract_worth("250.00", on=self.today)
+
+        self.assertEqual(spending_indicators(None).period.amount, Decimal("350.00"))
+
+    def test_the_year_covers_the_calendar_year_and_nothing_outside_it(self) -> None:
+        year = self.today.year
+        self.a_contract_worth("500.00", on=date(year, 1, 1))
+        self.a_contract_worth("700.00", on=date(year, 12, 31))
+        self.a_contract_worth("900.00", on=date(year - 1, 12, 31))
+
+        indicators = spending_indicators(None)
+
+        self.assertEqual(indicators.year_number, year)
+        self.assertEqual(indicators.year.amount, Decimal("1200.00"))
+
+    def test_the_year_ignores_the_chosen_period(self) -> None:
+        """Narrowing to one day moves the spend and leaves the year alone."""
+        self.a_contract_worth("500.00", on=date(self.today.year, 1, 1))
+        self.a_contract_worth("700.00", on=self.today)
+
+        narrowed = spending_indicators(self.period_between(self.today, self.today))
+
+        self.assertEqual(narrowed.period.amount, Decimal("700.00"))
+        self.assertEqual(narrowed.year.amount, Decimal("1200.00"))
+
+    def test_a_contract_with_no_date_of_its_own_counts_on_the_day_it_was_raised(self) -> None:
+        """The column allows null even though the entry form requires it."""
+        self.a_contract_worth("400.00", on=None)
+
+        today_only = self.period_between(self.today, self.today)
+
+        self.assertEqual(spending_indicators(today_only).period.amount, Decimal("400.00"))
+
+    def test_a_refused_period_is_not_applied(self) -> None:
+        """A start after the end narrows nothing, as on every other page."""
+        self.a_contract_worth("100.00", on=self.today)
+        backwards = self.period_between(self.today, self.today - timedelta(days=5))
+
+        self.assertIsNotNone(backwards.refusal)
+        self.assertEqual(spending_indicators(backwards).period.amount, Decimal("100.00"))
+
+    def test_an_amount_prints_grouped_and_without_tiyin_on_the_card(self) -> None:
+        money = Money(Decimal("1240000000.00"))
+
+        self.assertEqual(money.display, money_display(Decimal("1240000000.00")))
+        self.assertTrue(money.display.endswith(",00"))
+        self.assertFalse(money.whole_display.endswith(",00"))
+
+
+class SpendingPageTests(SignedInAdminTestCase):
+    """The card and the period bar as the page renders them."""
+
+    def a_contract_worth(self, amount: str, on: date) -> None:
+        manager = make_user(f"page.spend.manager.{amount}", user_type=MENEJER)
+        specialist = make_user(f"page.spend.specialist.{amount}", user_type=KATTA_MUTAXASIS)
+        application = an_assigned_application(manager, specialist, department=a_department())
+        contract = a_contract(application, specialist)
+        Contract.objects.filter(pk=contract.pk).update(
+            qiymati=Decimal(amount), shartnoma_sanasi=on
+        )
+
+    def test_the_card_prints_the_period_total_in_uzs(self) -> None:
+        today = timezone.localdate()
+        self.a_contract_worth("1500", on=today)
+
+        response = self.client.get(page("dashboard"), {"dan": today.isoformat()})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f"{money_display(Decimal('1500')).rpartition(',')[0]} UZS")
+        self.assertContains(response, "tanlangan davr")
+
+    def test_the_page_offers_the_period_bar(self) -> None:
+        response = self.client.get(page("dashboard"))
+
+        self.assertContains(response, 'name="dan"')
+        self.assertContains(response, 'name="gacha"')
+        self.assertContains(response, "jami")
+
+    def test_a_refused_period_is_reported_to_the_reader(self) -> None:
+        today = timezone.localdate()
+
+        response = self.client.get(
+            page("dashboard"),
+            {"dan": today.isoformat(), "gacha": (today - timedelta(days=1)).isoformat()},
+            follow=True,
+        )
+
+        self.assertContains(response, "Davr boshlanishi tugashidan keyin")

@@ -1,11 +1,14 @@
 {% extends "xarid/base.html" %}
+{% from "xarid/_filters.html" import filter_bar with context %}
 {#
 The dashboard, which answers at the site root. The three contract indicators
-are counted from the database (REQ-DASH-001 to REQ-DASH-004, TASK-UZK-048).
-Everything below them - the spendings card, the charts, the top suppliers
-list, the category table and the activity list - is still the supplied
-prototype's own sample data, and belongs to UZK-049, UZK-051, UZK-057 and
-UZK-052.
+(REQ-DASH-001 to REQ-DASH-004, TASK-UZK-048) and the spendings card
+(REQ-DASH-008, REQ-DASH-010, TASK-UZK-049) are counted from the database.
+The period bar narrows the spend alone; the other three cards report where
+the department stands now, and say so.
+The charts, the top suppliers list, the category table and the activity list
+are still the supplied prototype's own sample data, and belong to UZK-051,
+UZK-057 and UZK-052.
 #}
 {% block title %}Dashboard{% endblock %}
 {% block breadcrumb %}Umumiy / Dashboard{% endblock %}
@@ -24,6 +27,12 @@ UZK-052.
         <button class="btn btn-outline-custom" data-generate-export><i class="bi bi-download" aria-hidden="true"></i> <span class="label-text">Hisobotni yuklash</span></button>
         <a class="btn btn-primary-custom" href="{{ url('xarid:kelib-arizalar') }}"><i class="bi bi-inbox" aria-hidden="true"></i> <span class="label-text">Arizalarni ko'rish</span></a>
       </div>
+    </div>
+
+    {# Narrows the Sariflangan card only; the yearly figure and the three
+       contract cards do not follow it. #}
+    <div class="toolbar mb-4">
+      {{ filter_bar(table_filter, url('xarid:dashboard')) }}
     </div>
 
     <!-- KPI ROW -->
@@ -50,9 +59,10 @@ UZK-052.
       </div>
       <div class="panel stat-card">
         <div class="stat-icon"><i class="bi bi-cash-coin text-warning" aria-hidden="true"></i></div>
-        <div class="stat-label">Sariflangan (yil)</div>
-        <div class="kpi-value">1.24B</div>
-        <div class="stat-sub text-success">Tejaldi: 48M UZS</div>
+        <div class="stat-label">Sariflangan{% if table_filter.period.is_active %} (tanlangan davr){% else %} (jami){% endif %}</div>
+        <div class="kpi-value" style="font-size:20px;" title="{{ spendings.period.display }} UZS">{{ spendings.period.whole_display }} UZS</div>
+        <div class="stat-sub">{{ spendings.year_number }}-yilda kelishilgan: {{ spendings.year.whole_display }} UZS</div>
+        <div class="stat-sub">Tejaldi: formulasi kutilmoqda (DEC-025)</div>
       </div>
     </div>
 

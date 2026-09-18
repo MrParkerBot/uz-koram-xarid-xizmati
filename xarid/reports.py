@@ -21,13 +21,16 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.contrib.auth.models import AbstractBaseUser
-from django.db.models import Count, Q
+from django.db.models import Count, DateField, Q, QuerySet, Sum
+from django.db.models.functions import Coalesce, TruncDate
+from django.utils import timezone
 
 from xarid.exports import ExportColumn, TableExport
-from xarid.filters import DatePeriod
+from xarid.filters import DateColumn, DatePeriod
 from xarid.models import (
     Contract,
     Department,
@@ -35,6 +38,7 @@ from xarid.models import (
     ShartnomaStatus,
     Supplier,
     assignable_specialists,
+    money_display,
 )
 
 # The ORM path from a specialist to one of their assigned applications, and
@@ -517,4 +521,119 @@ def dashboard_indicators() -> DashboardIndicators:
         supplier_count=supplier_count,
         created=as_percentage_of(contracts.count(), supplier_count),
         completed=as_percentage_of(completed_count, supplier_count),
+    )
+
+
+# ---------------------------------------------------------------------------
+# The dashboard spendings (section 2, REQ-DASH-008 and REQ-DASH-010)
+# ---------------------------------------------------------------------------
+
+# The date a contract is accounted under: the date on the contract itself,
+# and where there is none the day it was raised. The entry form requires the
+# contract date, but the column allows null - a contract loaded some other
+# way must still be counted somewhere rather than falling out of every total.
+ACCOUNTING_DATE = "hisob_sanasi"
+
+# The period bar the dashboard offers, narrowing by that date.
+SPENDINGS_PERIOD = DateColumn("Shartnoma sanasi", ACCOUNTING_DATE, carries_time=False)
+
+NOTHING = Decimal("0")
+
+
+def dated_contracts() -> QuerySet:
+    """Every contract, carrying the date its money is accounted under."""
+    return Contract.objects.annotate(
+        **{
+            ACCOUNTING_DATE: Coalesce(
+                "shartnoma_sanasi",
+                TruncDate("yaratilingan_sana"),
+                output_field=DateField(),
+            )
+        }
+    )
+
+
+@dataclass(frozen=True)
+class Money:
+    """An amount of soums, and the two ways the dashboard prints it.
+
+    Attributes:
+        amount: the exact total, in UZS (DEC-026).
+    """
+
+    amount: Decimal
+
+    @property
+    def display(self) -> str:
+        """The exact amount, grouped: 1 240 000 000,00."""
+        return money_display(self.amount)
+
+    @property
+    def whole_display(self) -> str:
+        """The amount to the soum, for a headline with no room for tiyin.
+
+        The same rendering as `display` with the tiyin dropped, rather than a
+        second way of grouping an amount.
+        """
+        whole = self.amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return money_display(whole).rpartition(",")[0]
+
+
+@dataclass(frozen=True)
+class SpendingIndicators:
+    """What the department committed, in the chosen period and in the year.
+
+    Attributes:
+        period: the total inside the period the reader chose, or everything
+            on file when no period was chosen.
+        year: the total agreed across the current calendar year, which the
+            period never narrows.
+        year_number: the calendar year `year` covers, so the card can name it.
+    """
+
+    period: Money
+    year: Money
+    year_number: int
+
+
+def total_value_of(contracts: QuerySet) -> Money:
+    """What these contracts come to. An empty set is 0,00, not nothing."""
+    return Money(contracts.aggregate(total=Sum("qiymati"))["total"] or NOTHING)
+
+
+def spending_indicators(period: DatePeriod | None) -> SpendingIndicators:
+    """The spend inside the period and the year's agreed total.
+
+    Both are sums of Contract.qiymati, which is the value of the goods rows
+    (REQ-SHARTNOMA-006) and is held in UZS (DEC-026). Every contract counts:
+    nothing in this system records money as unspent, so a contract that was
+    rejected is still money the department committed on paper, and the
+    acceptance criterion asks for the sum of contract values in the period.
+
+    The yearly figure ignores the period deliberately - the specification
+    asks for the total agreed during the year (REQ-DASH-008) beside the
+    spend of the period being looked at (REQ-DASH-010), so narrowing to one
+    week must not move it.
+
+    Args:
+        period: the period chosen in the bar. None, or a refused period,
+            means every contract on file.
+
+    Returns:
+        The period total, the year total and the year it covers.
+    """
+    contracts = dated_contracts()
+    year = timezone.localdate().year
+
+    return SpendingIndicators(
+        period=total_value_of(period.apply(contracts) if period else contracts),
+        year=total_value_of(
+            contracts.filter(
+                **{
+                    f"{ACCOUNTING_DATE}__gte": date(year, 1, 1),
+                    f"{ACCOUNTING_DATE}__lte": date(year, 12, 31),
+                }
+            )
+        ),
+        year_number=year,
     )
