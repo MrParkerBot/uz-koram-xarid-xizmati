@@ -2322,8 +2322,9 @@ class PurchaseApplicationItem(OrderLine):
 class Notification(models.Model):
     """Something one person should be told about one record.
 
-    read_at stays null until something has actually shown it to them; the
-    in-app panel DEC-012 describes is not built yet, so nothing sets it.
+    read_at stays null until the panel has actually shown it to them
+    (TASK-UZK-054). Delivery is in-app and nothing else: a panel entry and an
+    unread badge, no email and no SMS (DEC-012).
     """
 
     class Kind(models.TextChoices):
@@ -2331,6 +2332,8 @@ class Notification(models.Model):
 
         SPECIALIST_ACCEPTED = "specialist_accepted", "Xodim arizani qabul qildi"
         PURCHASE_REJECTED = "purchase_rejected", "Xarid arizasi inkor etildi"
+        APPLICATION_ACCEPTED = "application_accepted", "Arizangiz qabul qilindi"
+        APPLICATION_REJECTED = "application_rejected", "Arizangiz inkor etildi"
 
     recipient = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -2355,6 +2358,15 @@ class Notification(models.Model):
         verbose_name="Xarid arizasi",
     )
     kind = models.CharField(max_length=32, choices=Kind.choices)
+    izoh = models.TextField(
+        "Izoh",
+        blank=True,
+        help_text=(
+            "The comment the decision carried, kept here rather than read "
+            "back from the record: what the sender was told is what the "
+            "decision said at the time."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     read_at = models.DateTimeField(null=True, blank=True)
 
