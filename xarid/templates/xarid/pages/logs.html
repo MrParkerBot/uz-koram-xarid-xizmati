@@ -1,106 +1,72 @@
 {% extends "xarid/base.html" %}
-{# The Logs page: still the supplied prototype with sample rows. #}
+{% from "xarid/_filters.html" import filter_bar with context %}
+{#
+The Logs page (section 10, REQ-LOG-001). Reads the audit table TASK-UZK-052
+writes; nothing here writes to it.
+
+The nine columns are the ones the assignment lists, in its order. The last
+four are the approval, and an entry nobody has decided leaves them empty
+rather than printing a label for nothing.
+
+No export: DEC-029 says section 10 is the one page that does not ask for a
+download, and the prototype's Export button raised a toast.
+#}
 {% block title %}Logs{% endblock %}
 {% block breadcrumb %}Tizim / Logs{% endblock %}
 {% block page_heading %}Logs{% endblock %}
 {% block content %}
 
     <div class="page-header">
-      <div><h1 class="page-title">Tizim Loglari</h1><div class="muted">System Activity Logs — Audit Trail</div></div>
-      <div class="page-actions"><span class="role-tag role-admin">Admin only</span></div>
-    </div>
-
-    <div class="grid-4" style="margin-bottom:24px;">
-      <div class="panel stat-card">
-        <div class="stat-icon" style="background:rgba(223,88,48,.12);"><i class="bi bi-clipboard" aria-hidden="true"></i></div>
-        <div class="stat-label">Jami Loglar</div>
-        <div class="kpi-value">1,482</div>
-        <div class="stat-sub">Barcha vaqt uchun</div>
+      <div>
+        <h1 class="page-title">Tizim Loglari</h1>
+        <div class="muted">Yaratilgan, tahrirlangan va o'chirilgan yozuvlar, hamda ularning tasdiqlari.</div>
       </div>
-      <div class="panel stat-card">
-        <div class="stat-icon" style="background:rgba(46,125,50,.12);"><i class="bi bi-check-circle" aria-hidden="true"></i></div>
-        <div class="stat-label">Muvaffaqiyatli</div>
-        <div class="kpi-value" style="color:var(--color-success);">1,398</div>
-        <div class="stat-sub">94.3%</div>
-      </div>
-      <div class="panel stat-card">
-        <div class="stat-icon" style="background:rgba(192,57,43,.12);"><i class="bi bi-x-circle" aria-hidden="true"></i></div>
-        <div class="stat-label">Xatolar</div>
-        <div class="kpi-value" style="color:var(--color-danger);">84</div>
-        <div class="stat-sub">5.7%</div>
-      </div>
-      <div class="panel stat-card">
-        <div class="stat-icon" style="background:rgba(75,85,99,.12);"><i class="bi bi-person" aria-hidden="true"></i></div>
-        <div class="stat-label">Faol Sessiyalar</div>
-        <div class="kpi-value" style="color:var(--color-info);">3</div>
-        <div class="stat-sub">Hozir onlayn</div>
+      <div class="page-actions">
+        <span class="badge badge-soft">Jami: {{ entry_count }} ta yozuv</span>
       </div>
     </div>
 
     <div class="panel">
-      <div class="toolbar"><div class="toolbar-group">
-        <span class="toolbar-label">Filter:</span>
-        <div class="search-box" style="flex:1;max-width:260px;"><i class="bi bi-search search-icon" aria-hidden="true"></i>
-          <input type="text" class="form-control" id="log-search" data-table-search="#logs-table" placeholder="Qidirish…"/>
-        </div>
-        <select class="form-control" style="width:140px;">
-          <option value="">Foydalanuvchi: barchasi</option>
-          <option>Admin</option>
-          <option>Manager</option>
-          <option>Specialist</option>
-        </select>
-        <select class="form-control" style="width:130px;">
-          <option value="">Holati: barchasi</option>
-          <option value="200">200 OK</option>
-          <option value="201">201 Created</option>
-          <option value="400">400 Error</option>
-          <option value="500">500 Error</option>
-        </select>
-        <select class="form-control" style="width:120px;">
-          <option value="">Metod: barchasi</option>
-          <option value="GET">GET</option>
-          <option value="POST">POST</option>
-          <option value="PUT">PUT</option>
-          <option value="DELETE">DELETE</option>
-        </select>
-        <input class="form-control" type="date" style="width:140px;"/>
-        <button class="btn btn-primary-custom btn-sm"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
-        </div><div class="toolbar-group">
-          <button class="btn btn-outline-custom btn-sm" onclick="Toast.info('Loglar eksport qilindi')"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Export</button>
-        </div>
-      </div>
+      <div class="toolbar">{{ filter_bar(table_filter, url('xarid:logs')) }}</div>
       <div class="table-wrap">
         <table class="table-app" id="logs-table">
           <thead><tr>
             <th style="width:36px;">#</th>
-            <th>Vaqt</th>
             <th>Foydalanuvchi</th>
-            <th>Metod</th>
-            <th>Endpoint</th>
-            <th style="text-align:center;width:70px;">Status</th>
-            <th>Amal</th>
-            <th style="text-align:center;width:80px;">Davomiylik</th>
-            <th>IP</th>
+            <th>Foydalanuvchi Bo'limi</th>
+            <th>Forma Nomi</th>
+            <th style="width:150px;">Sana/Soat</th>
+            <th style="width:110px;text-align:center;">Amal</th>
+            <th>Tasdiqlovchi</th>
+            <th>Tasdiqlovchi Bo'lim</th>
+            <th>Tasdiq comment</th>
+            <th style="width:150px;">Tasdiq Sanasi/Vaqti</th>
           </tr></thead>
-          <tbody id="logs-tbody"></tbody>
+          <tbody id="logs-tbody">
+          {% for entry in entries %}
+            <tr>
+              <td>{{ loop.index }}</td>
+              <td>{{ display_name(entry.actor) }}</td>
+              <td>{{ entry.actor_department.name if entry.actor_department else "" }}</td>
+              <td><span class="fw-semibold">{{ entry.form_name }}</span><div class="muted small">{{ entry.record_label }}</div></td>
+              <td class="mono">{{ entry.created_at|date("Y-m-d H:i") }}</td>
+              <td style="text-align:center;"><span class="badge badge-soft">{{ entry.get_action_display() }}</span></td>
+              {# The approval half. Empty cells, not labelled ones: an entry
+                 nobody has decided has no approver, not an unknown one. #}
+              <td>{% if entry.was_decided %}{{ display_name(entry.approver) }}{% endif %}</td>
+              <td>{% if entry.was_decided and entry.approver_department %}{{ entry.approver_department.name }}{% endif %}</td>
+              <td>{{ entry.approval_comment }}</td>
+              <td class="mono">{% if entry.was_decided %}{{ entry.approved_at|date("Y-m-d H:i") }}{% endif %}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="10" class="muted" style="text-align:center;">Log yozuvlari topilmadi.</td></tr>
+          {% endfor %}
+          </tbody>
         </table>
       </div>
-      <div class="pagination-wrap">
-        <button class="btn btn-outline-custom btn-sm prev-btn">‹ Oldingi</button>
-        <button class="btn btn-primary-custom btn-sm page-btn" data-page="1">1</button>
-        <button class="btn btn-outline-custom btn-sm page-btn" data-page="2">2</button>
-        <button class="btn btn-outline-custom btn-sm page-btn" data-page="3">3</button>
-        <span style="color:var(--color-text-muted);font-size:12px;">…</span>
-        <button class="btn btn-outline-custom btn-sm page-btn" data-page="60">60</button>
-        <button class="btn btn-outline-custom btn-sm next-btn">Keyingi ›</button>
-        <div class="pagination-info">
-          <select class="form-control" style="width:70px;"><option>25</option><option>10</option><option>50</option></select>
-          <span>Jami: 1,482 ta</span>
-        </div>
+      <div class="panel-body footer-note">
+        Yozuvlar muddatsiz saqlanadi va tizim orqali tahrirlanmaydi yoki o'chirilmaydi (DEC-029).
       </div>
     </div>
 
-{% endblock %}
-{% block scripts %}
-<script src="{{ static('xarid/js/pages/logs.js') }}"></script>
 {% endblock %}

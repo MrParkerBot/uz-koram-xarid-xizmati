@@ -11,12 +11,15 @@ from __future__ import annotations
 from django.test import TestCase
 
 from tests.support import (
+    PASSWORD,
     SignedInAdminTestCase,
     a_category,
+    a_contract,
     a_department,
     a_pdf,
     a_supplier,
     an_application,
+    an_assigned_application,
     formset_management,
     make_user,
     page,
@@ -26,12 +29,15 @@ from xarid.models import (
     ADMIN,
     BOLIM_BOSHLIGI,
     DIREKTOR,
+    KATTA_MUTAXASIS,
     MENEJER,
     USERS,
     AuditEntry,
+    Contract,
     PurchaseApplication,
     Supplier,
     UserSpecialty,
+    UserType,
 )
 
 
@@ -289,3 +295,158 @@ class LogIsAppendOnlyTests(SignedInAdminTestCase):
         ]
 
         self.assertEqual(writing, [])
+
+
+class ContractLoggingTests(TestCase):
+    """The contract sites, where the approvals this table exists for happen."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.department = a_department()
+        cls.manager = make_user("c.log.manager", user_type=MENEJER, department=cls.department)
+        cls.specialist = make_user(
+            "c.log.specialist", user_type=KATTA_MUTAXASIS, department=cls.department
+        )
+        # DEC-013 makes Admin the Xarid bo`lim boshlig`i, who is the one
+        # REQ-SHARTNOMA-002 gives the contract decision to.
+        cls.decider = make_user("c.log.decider", user_type=ADMIN, department=cls.department)
+
+    def a_held_contract(self) -> Contract:
+        application = an_assigned_application(
+            self.manager, self.specialist, department=self.department
+        )
+        return a_contract(application, self.specialist)
+
+    def test_sending_a_contract_for_approval_is_logged_as_an_edit(self) -> None:
+        contract = self.a_held_contract()
+        self.client.force_login(self.specialist)
+
+        self.client.post(page("kelishinlingan-yuborish", contract.pk))
+
+        entry = AuditEntry.objects.get()
+        self.assertEqual(entry.action, AuditEntry.Action.EDITED)
+        self.assertEqual(entry.actor, self.specialist)
+        self.assertEqual(entry.record_label, str(contract))
+
+    def test_sending_twice_is_logged_once(self) -> None:
+        contract = self.a_held_contract()
+        self.client.force_login(self.specialist)
+
+        self.client.post(page("kelishinlingan-yuborish", contract.pk))
+        self.client.post(page("kelishinlingan-yuborish", contract.pk))
+
+        self.assertEqual(AuditEntry.objects.count(), 1)
+
+    def test_approving_a_contract_records_the_approver(self) -> None:
+        contract = self.a_held_contract()
+        self.client.force_login(self.specialist)
+        self.client.post(page("kelishinlingan-yuborish", contract.pk))
+        self.client.force_login(self.decider)
+
+        self.client.post(page("tuzilgan-tasdiqlash", contract.pk))
+
+        decided = AuditEntry.objects.filter(approved_at__isnull=False).get()
+        self.assertEqual(decided.approver, self.decider)
+        self.assertEqual(decided.approver_department, self.department)
+        self.assertEqual(decided.approval_outcome, APPROVED)
+
+    def test_refusing_a_contract_carries_its_comment(self) -> None:
+        contract = self.a_held_contract()
+        self.client.force_login(self.specialist)
+        self.client.post(page("kelishinlingan-yuborish", contract.pk))
+        self.client.force_login(self.decider)
+
+        self.client.post(page("tuzilgan-inkor", contract.pk), {"izoh": "Narx yuqori"})
+
+        decided = AuditEntry.objects.filter(approved_at__isnull=False).get()
+        self.assertEqual(decided.approval_outcome, REFUSED)
+        self.assertEqual(decided.approval_comment, "Narx yuqori")
+
+    def test_a_refusal_with_no_comment_is_not_logged(self) -> None:
+        contract = self.a_held_contract()
+        self.client.force_login(self.specialist)
+        self.client.post(page("kelishinlingan-yuborish", contract.pk))
+        AuditEntry.objects.all().delete()
+        self.client.force_login(self.decider)
+
+        self.client.post(page("tuzilgan-inkor", contract.pk), {"izoh": "  "})
+
+        self.assertFalse(AuditEntry.objects.exists())
+
+
+class UserLoggingTests(SignedInAdminTestCase):
+    """The Users page, whose records come from Django rather than from here."""
+
+    def user_fields(self, **overrides) -> dict:
+        fields = {
+            "first_name": "Bobur",
+            "last_name": "Toshmatov",
+            "password": PASSWORD,
+            "phone_number": "90 123 45 67",
+            "user_type": UserType.objects.get(name=MENEJER).pk,
+            "department": a_department().pk,
+        }
+        fields.update(overrides)
+        return fields
+
+    def test_adding_a_user_is_logged_under_a_name_the_log_chose(self) -> None:
+        self.client.post(page("user-create"), self.user_fields())
+
+        entry = AuditEntry.objects.get()
+        self.assertEqual(entry.action, AuditEntry.Action.CREATED)
+        self.assertEqual(entry.form_name, "Foydalanuvchi")
+
+    def test_deleting_a_user_is_logged_before_they_are_deactivated(self) -> None:
+        doomed = make_user("doomed.user", user_type=MENEJER)
+
+        self.client.post(page("user-delete", doomed.pk))
+
+        entry = AuditEntry.objects.get()
+        self.assertEqual(entry.action, AuditEntry.Action.DELETED)
+        self.assertEqual(entry.record_label, "doomed.user")
+
+    def test_deleting_your_own_account_is_refused_and_not_logged(self) -> None:
+        self.client.post(page("user-delete", self.admin.pk))
+
+        self.assertFalse(AuditEntry.objects.exists())
+
+
+class TwoApprovalsTests(TestCase):
+    """DEC-016's chain: the head approves, then the director."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.department = a_department()
+        cls.requester = make_user("two.requester", user_type=USERS, department=cls.department)
+        cls.head = make_user("two.head", user_type=BOLIM_BOSHLIGI, department=cls.department)
+        cls.direktor = make_user("two.direktor", user_type=DIREKTOR)
+
+    def test_the_second_approval_does_not_erase_the_first(self) -> None:
+        """One approver per row, so two approvals need two rows."""
+        self.client.force_login(self.requester)
+        self.client.post(
+            page("xarid-ariza-yaratish"),
+            {
+                "shartnoma_nomi": "Kabel xaridi",
+                "muddat_talabi": "",
+                "izoh": "",
+                **formset_management(1),
+                "form-0-mahsulot_turi": a_category().pk,
+                "form-0-buyurtma_nomi": "Kabel 4mm",
+                "form-0-buyurtma_soni": "200",
+                "form-0-olchov_birligi": "m",
+                "pdf": a_pdf(),
+            },
+        )
+        application = PurchaseApplication.objects.get()
+
+        self.client.force_login(self.head)
+        self.client.post(page("xarid-ariza-tasdiqlash", application.pk))
+        self.client.force_login(self.direktor)
+        self.client.post(page("xarid-ariza-tasdiqlash", application.pk))
+
+        approvers = [
+            entry.approver
+            for entry in AuditEntry.objects.filter(approved_at__isnull=False).order_by("id")
+        ]
+        self.assertEqual(approvers, [self.head, self.direktor])

@@ -10,9 +10,12 @@ The processing-time panel is counted too (REQ-DASH-012, TASK-UZK-050); what
 each of its stages is measured between is this application's own definition,
 which is why the panel prints it beside every figure.
 The Top suppliers panel is counted too (REQ-DASH-005, TASK-UZK-051) and is
-the head of the page it links to.
-The charts, the category table and the activity list are still the supplied
-prototype's own sample data, and belong to UZK-057 and UZK-052.
+the head of the page it links to, and so is the supplier category block
+(REQ-DASH-007, REQ-DASH-009, TASK-UZK-057), whose table and bar chart draw
+the same rows.
+The 12-month spendings chart and the activity list are still the supplied
+prototype's own sample data; the activity list is the log TASK-UZK-052
+writes, which has a page of its own.
 #}
 {% block title %}Dashboard{% endblock %}
 {% block breadcrumb %}Umumiy / Dashboard{% endblock %}
@@ -140,26 +143,38 @@ prototype's own sample data, and belong to UZK-057 and UZK-052.
     <!-- CATEGORY TABLE + BAR -->
     <div class="grid-2 mb-4">
       <div class="panel">
-        <div class="panel-header"><div class="panel-title">Supplier Category Taqsimoti</div></div>
+        <div class="panel-header">
+          <div class="panel-title">Supplier Category Taqsimoti</div>
+          <span class="badge badge-soft" title="Tugallangan holatga yetgan mahsulot turlari">Yetkazib berilgan turlar: {{ categories.delivered_types }}</span>
+        </div>
         <div class="table-wrap">
           <table class="table-app">
             <thead><tr>
-              <th>#</th><th>Kategoriya</th><th>Supplier soni</th><th>Ulush %</th>
+              <th style="width:40px;">#</th><th>Kategoriya</th><th style="width:120px;text-align:center;">Supplier soni</th><th style="width:110px;text-align:center;">Ulush %</th>
             </tr></thead>
             <tbody>
-              <tr><td>1</td><td>Metallurgiya</td><td>48</td><td><span class="badge badge-primary">19.4%</span></td></tr>
-              <tr><td>2</td><td>Kimyoviy</td><td>36</td><td><span class="badge badge-info">14.5%</span></td></tr>
-              <tr><td>3</td><td>Elektr uskunalar</td><td>52</td><td><span class="badge badge-approved">21%</span></td></tr>
-              <tr><td>4</td><td>Qurilish materiallari</td><td>28</td><td><span class="badge badge-trial">11.3%</span></td></tr>
-              <tr><td>5</td><td>Yoqilg'i</td><td>22</td><td><span class="badge badge-soft">8.9%</span></td></tr>
-              <tr><td>6</td><td>Boshqa</td><td>62</td><td><span class="badge badge-soft">25%</span></td></tr>
+            {% for row in categories.rows %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ row.category.name }}</td>
+                <td style="text-align:center;">{{ row.firms }}</td>
+                <td style="text-align:center;"><span class="badge {% if row.firms %}badge-primary{% else %}badge-soft{% endif %}">{{ row.share }}%</span></td>
+              </tr>
+            {% else %}
+              <tr><td colspan="4" class="muted" style="text-align:center;">Mahsulot turlari kiritilmagan.</td></tr>
+            {% endfor %}
             </tbody>
           </table>
+        </div>
+        <div class="panel-body footer-note">
+          Ulush har bir turdagi firmalar sonining jadval yig'indisiga ({{ categories.placements }}) nisbati. Ikki tur bo'yicha ishlaydigan firma har ikkalasida ham sanaladi.
         </div>
       </div>
       <div class="panel chart-card">
         <div class="panel-header"><div class="panel-title">Category Bar Chart</div></div>
         <div class="panel-body"><canvas id="category-chart"></canvas></div>
+        {# The same rows the table shows, so the two cannot drift apart. #}
+        <script type="application/json" id="category-chart-data">{{ category_chart|tojson }}</script>
       </div>
     </div>
 
