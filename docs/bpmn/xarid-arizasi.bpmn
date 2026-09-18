@@ -1,0 +1,95 @@
+<?xml version='1.0' encoding='utf-8'?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="definitions-xarid-arizasi" targetNamespace="http://uz-koram/xarid">
+  <bpmn:process id="xarid-arizasi" name="Xarid arizasi (DEC-016)" isExecutable="false">
+    <bpmn:startEvent id="start" name="Xodim xarid arizasini yuboradi" />
+    <bpmn:task id="submit" name="Ariza yaratiladi (PDF bilan)" />
+    <bpmn:exclusiveGateway id="head" name="Bo`lim boshlig`i qarori" />
+    <bpmn:task id="head_ok" name="Direktorga yuboriladi" />
+    <bpmn:exclusiveGateway id="director" name="Direktor qarori" />
+    <bpmn:task id="approved" name="QR kod bosiladi va ariza yaratiladi" />
+    <bpmn:task id="arrived" name="Xarid bo`limiga tushadi" />
+    <bpmn:task id="refused" name="Yuboruvchi izoh bilan xabardor qilinadi" />
+    <bpmn:endEvent id="done" name="Tugadi" />
+    <bpmn:sequenceFlow id="start-submit" sourceRef="start" targetRef="submit" name="" />
+    <bpmn:sequenceFlow id="submit-head" sourceRef="submit" targetRef="head" name="" />
+    <bpmn:sequenceFlow id="head-head_ok" sourceRef="head" targetRef="head_ok" name="Tasdiq" />
+    <bpmn:sequenceFlow id="head-refused" sourceRef="head" targetRef="refused" name="Inkor" />
+    <bpmn:sequenceFlow id="head_ok-director" sourceRef="head_ok" targetRef="director" name="" />
+    <bpmn:sequenceFlow id="director-approved" sourceRef="director" targetRef="approved" name="Tasdiq" />
+    <bpmn:sequenceFlow id="director-refused" sourceRef="director" targetRef="refused" name="Inkor" />
+    <bpmn:sequenceFlow id="approved-arrived" sourceRef="approved" targetRef="arrived" name="" />
+    <bpmn:sequenceFlow id="arrived-done" sourceRef="arrived" targetRef="done" name="" />
+    <bpmn:sequenceFlow id="refused-done" sourceRef="refused" targetRef="done" name="" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="diagram-xarid-arizasi">
+    <bpmndi:BPMNPlane id="plane-xarid-arizasi" bpmnElement="xarid-arizasi">
+      <bpmndi:BPMNShape id="shape-start" bpmnElement="start">
+        <dc:Bounds x="120" y="142" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape-submit" bpmnElement="submit">
+        <dc:Bounds x="300" y="120" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape-head" bpmnElement="head">
+        <dc:Bounds x="480" y="135" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape-head_ok" bpmnElement="head_ok">
+        <dc:Bounds x="660" y="120" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape-director" bpmnElement="director">
+        <dc:Bounds x="840" y="135" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape-approved" bpmnElement="approved">
+        <dc:Bounds x="1020" y="120" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape-arrived" bpmnElement="arrived">
+        <dc:Bounds x="1200" y="120" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape-refused" bpmnElement="refused">
+        <dc:Bounds x="1380" y="120" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="shape-done" bpmnElement="done">
+        <dc:Bounds x="1560" y="142" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="edge-start-submit" bpmnElement="start-submit">
+        <di:waypoint x="138" y="160" />
+        <di:waypoint x="360" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge-submit-head" bpmnElement="submit-head">
+        <di:waypoint x="360" y="160" />
+        <di:waypoint x="505" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge-head-head_ok" bpmnElement="head-head_ok">
+        <di:waypoint x="505" y="160" />
+        <di:waypoint x="720" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge-head-refused" bpmnElement="head-refused">
+        <di:waypoint x="505" y="160" />
+        <di:waypoint x="1440" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge-head_ok-director" bpmnElement="head_ok-director">
+        <di:waypoint x="720" y="160" />
+        <di:waypoint x="865" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge-director-approved" bpmnElement="director-approved">
+        <di:waypoint x="865" y="160" />
+        <di:waypoint x="1080" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge-director-refused" bpmnElement="director-refused">
+        <di:waypoint x="865" y="160" />
+        <di:waypoint x="1440" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge-approved-arrived" bpmnElement="approved-arrived">
+        <di:waypoint x="1080" y="160" />
+        <di:waypoint x="1260" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge-arrived-done" bpmnElement="arrived-done">
+        <di:waypoint x="1260" y="160" />
+        <di:waypoint x="1578" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="edge-refused-done" bpmnElement="refused-done">
+        <di:waypoint x="1440" y="160" />
+        <di:waypoint x="1578" y="160" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
