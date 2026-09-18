@@ -67,6 +67,7 @@ from xarid.models import (
     Application,
     ApplicationItem,
     ArizaStatus,
+    AuditEntry,
     Contract,
     ContractItem,
     ContractStatusChange,
@@ -87,6 +88,7 @@ from xarid.models import (
     department_of,
     has_user_type,
 )
+from xarid.notifications import tell_sender_of_acceptance, tell_sender_of_refusal
 from xarid.permissions import (
     acts_on_own_work_only,
     contract_editor,
@@ -111,6 +113,7 @@ from xarid.reports import (
     report_export,
     spending_indicators,
     staff_workload,
+    supplier_categories,
     top_suppliers,
 )
 
@@ -121,11 +124,11 @@ ASSIGNED_TEMPLATE = "xarid/pages/tayinlangan.html"
 AGREED_CONTRACTS_TEMPLATE = "xarid/pages/kelishinlingan.html"
 PURCHASE_TEMPLATE = "xarid/pages/xarid-ariza.html"
 
-# The pages that are still the supplied prototype: the two system pages. Each
-# is a template with no data behind it yet, served under its own permission.
+# The page that is still the supplied prototype: the 1C integration screen,
+# which stays mocked until an API specification is supplied. A template with
+# no data behind it, served under its own permission.
 PROTOTYPE_PAGE_TEMPLATES: dict[str, str] = {
     "integration": "xarid/pages/integration.html",
-    "logs": "xarid/pages/logs.html",
 }
 
 DASHBOARD_TEMPLATE = "xarid/index.html"
@@ -150,14 +153,16 @@ def dashboard(request: HttpRequest) -> HttpResponse:
     figure a fortnight has an answer for - which is why the cards and the
     panel say what each figure covers.
 
-    The category breakdown, the charts and the activity list are still the
-    supplied prototype's own numbers, and are UZK-057 and UZK-052.
+    The spendings chart and the activity list are still the supplied
+    prototype's own numbers; the activity list is UZK-052's log, which has a
+    page of its own.
     """
     # The bar offers no column filters and no ordering, so it is built for
     # its period and its rendering alone; spending_indicators() applies that
     # period to its own query, and nothing calls table_filter.apply().
     table_filter = TableFilter((), dated_contracts(), request.GET, date_column=SPENDINGS_PERIOD)
     report_invalid_filters(request, table_filter)
+    categories = supplier_categories()
 
     return render(
         request,
@@ -167,6 +172,10 @@ def dashboard(request: HttpRequest) -> HttpResponse:
             "spendings": spending_indicators(table_filter.period),
             "stages": processing_times(),
             "top_suppliers": top_suppliers(table_filter.period, limit=DASHBOARD_TOP_SUPPLIERS),
+            "categories": categories,
+            "category_chart": [
+                {"label": row.category.name, "firms": row.firms} for row in categories.rows
+            ],
             "table_filter": table_filter,
         },
     )
@@ -206,6 +215,122 @@ def top_suppliers_page(request: HttpRequest) -> HttpResponse:
             "table_filter": table_filter,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# The Logs page (section 10, REQ-LOG-001)
+# ---------------------------------------------------------------------------
+
+LOGS_TEMPLATE = "xarid/pages/logs.html"
+
+# The period narrows by when the thing happened, which is the entry's own
+# Sana/Soat column.
+LOGS_PERIOD = DateColumn("Sana/Soat", "created_at")
+
+# One drop-down per column REQ-LOG-001 asks to filter by. The action's
+# options are labelled from the model's own choices, so the bar and the
+# column under it call a value the same thing: Created, Edited, Deleted -
+# the words section 10's own column header uses.
+LOGS_FILTERS = (
+    FilterColumn(
+        parameter="foydalanuvchi",
+        label="Foydalanuvchi",
+        value_lookup="actor_id",
+        label_lookups=("actor__first_name", "actor__last_name"),
+        label_fallback_lookup="actor__username",
+    ),
+    FilterColumn(
+        parameter="bolim",
+        label="Bo`lim",
+        value_lookup="actor_department_id",
+        label_lookups=("actor_department__name",),
+    ),
+    FilterColumn(
+        parameter="forma",
+        label="Forma",
+        value_lookup="form_name",
+        label_lookups=("form_name",),
+    ),
+    FilterColumn(
+        parameter="amal",
+        label="Amal",
+        value_lookup="action",
+        label_lookups=("action",),
+        option_labels=dict(AuditEntry.Action.choices),
+    ),
+)
+
+
+def logged_events() -> QuerySet:
+    """Every entry, newest first, with the people and departments joined."""
+    return AuditEntry.objects.select_related(
+        "actor", "actor_department", "approver", "approver_department"
+    )
+
+
+def logs_page(request: HttpRequest) -> HttpResponse:
+    """The Logs page: what the application did, and who did it.
+
+    Reads the table TASK-UZK-052 writes. Nothing on this page writes to it:
+    DEC-029 keeps entries indefinitely and gives the application no way to
+    edit or delete one, and no export - section 10 is the one page that does
+    not ask for a download.
+    """
+    table_filter = TableFilter(LOGS_FILTERS, logged_events(), request.GET, date_column=LOGS_PERIOD)
+    report_invalid_filters(request, table_filter)
+    # Evaluated once: the page prints the rows and how many of them there are,
+    # and counting them again would be a second pass over the same table.
+    entries = list(table_filter.apply())
+
+    return render(
+        request,
+        LOGS_TEMPLATE,
+        {
+            "entries": entries,
+            "entry_count": len(entries),
+            "table_filter": table_filter,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Notifications (REQ-ARIZA-004, REQ-ARIZA-005, DEC-012)
+# ---------------------------------------------------------------------------
+
+NOTIFICATIONS_TEMPLATE = "xarid/pages/bildirishnomalar.html"
+
+
+@login_required
+def notifications_page(request: HttpRequest) -> HttpResponse:
+    """Everything this person has been told, newest first.
+
+    Not in the DEC-015 matrix on purpose: it is not a page a user type may
+    open, it is everybody's own, and the matrix answers the first question
+    rather than the second. login_required alone is the whole rule.
+
+    Showing a notification is what marks it read, so the bell stops counting
+    what the reader has just been shown. The page says so.
+
+    The rows are read first and marked afterwards, and the page renders what
+    was read - so this once, the entries that were new still say so while the
+    bell beside them is already empty. That is the point: somebody should see
+    what changed before it stops being new. A reload shows them unmarked.
+
+    The marking is one statement over this person's unread rows rather than a
+    list of the ids just read: an account that has collected more
+    notifications than SQLite will bind at once would otherwise lose its own
+    panel.
+    """
+    shown = list(
+        Notification.objects.filter(recipient=request.user).select_related(
+            "application", "purchase_application"
+        )
+    )
+    Notification.objects.filter(recipient=request.user, read_at__isnull=True).update(
+        read_at=timezone.now()
+    )
+
+    return render(request, NOTIFICATIONS_TEMPLATE, {"notifications": shown})
 
 
 @login_required
@@ -926,6 +1051,7 @@ def accept_application(request: HttpRequest, pk: int) -> HttpResponse:
 
     if accepted:
         record_decision(request.user, application, approved=True)
+        tell_sender_of_acceptance(application)
         messages.success(request, f"{application.ariza_raqami} qabul qilindi.")
     else:
         messages.info(request, f"{application.ariza_raqami} allaqachon qabul qilingan.")
@@ -961,6 +1087,7 @@ def reject_application(request: HttpRequest, pk: int) -> HttpResponse:
             approved=False,
             comment=application.inkor_izohi,
         )
+        tell_sender_of_refusal(application)
         messages.success(request, f"{application.ariza_raqami} inkor etildi.")
     else:
         messages.info(request, f"{application.ariza_raqami} allaqachon inkor etilgan.")

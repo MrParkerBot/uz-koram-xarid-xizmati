@@ -293,17 +293,33 @@ const Charts = {
     });
   },
 
-  categoryBarChart(canvasId) {
+  /* The supplier category chart, drawn from the rows the table beside it
+     shows. They come from a JSON script element rather than from this file,
+     so the chart and the table cannot say different things. */
+  categoryBarChart(canvasId, dataId) {
     const ctx = document.getElementById(canvasId);
     if (!ctx || typeof Chart === 'undefined') return;
+
+    const source = dataId && document.getElementById(dataId);
+    if (!source) return;
+
+    let rows = [];
+    try {
+      rows = JSON.parse(source.textContent) || [];
+    } catch (unreadable) {
+      return;
+    }
+    if (!rows.length) return;
+
+    const palette = ['#DF5830', '#F97316', '#4B5563', '#2E7D32', '#C67A00', '#666054'];
     new Chart(ctx, {
       type: 'bar',
       data: {
-        labels: ['Metallurgiya','Kimyoviy','Elektr','Qurilish','Yoqilg\'i','Boshqa'],
+        labels: rows.map(row => row.label),
         datasets: [{
           label: 'Yetkazib beruvchilar',
-          data: [48, 36, 52, 28, 22, 62],
-          backgroundColor: ['#DF5830','#F97316','#4B5563','#2E7D32','#C67A00','#666054'],
+          data: rows.map(row => row.firms),
+          backgroundColor: rows.map((row, index) => palette[index % palette.length]),
           borderRadius: 6,
         }]
       },

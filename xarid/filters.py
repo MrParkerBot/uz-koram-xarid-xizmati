@@ -42,6 +42,10 @@ class FilterColumn:
             an option, such as ("department__name",) or a first and last name.
         label_fallback_lookup: the path used when the label lookups are all
             empty, such as a username for an account without a name.
+        option_labels: what to call each stored value, for a column whose
+            value is a code rather than a name. Without it a drop-down offers
+            the code itself, which is how a bar comes to say "created" above
+            a table that says "Created".
         multi_valued: whether value_lookup crosses a to-many relation, in
             which case the filtered rows are made distinct.
     """
@@ -52,6 +56,7 @@ class FilterColumn:
     label_lookups: tuple[str, ...]
     label_fallback_lookup: str | None = None
     multi_valued: bool = False
+    option_labels: Mapping[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -339,6 +344,7 @@ class TableFilter:
         if column.label_fallback_lookup:
             lookups.append(column.label_fallback_lookup)
 
+        named = column.option_labels or {}
         seen: dict[str, str] = {}
         for row in self.rows.order_by().values_list(*lookups).distinct():
             value, *label_parts = row
@@ -346,7 +352,8 @@ class TableFilter:
                 continue
             fallback = label_parts.pop() if column.label_fallback_lookup else ""
             label = " ".join(str(part) for part in label_parts if part).strip()
-            seen.setdefault(str(value), label or str(fallback) or str(value))
+            option = str(value)
+            seen.setdefault(option, named.get(option) or label or str(fallback) or option)
 
         return tuple(
             sorted(
