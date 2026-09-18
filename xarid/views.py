@@ -162,6 +162,7 @@ def dashboard(request: HttpRequest) -> HttpResponse:
     # period to its own query, and nothing calls table_filter.apply().
     table_filter = TableFilter((), dated_contracts(), request.GET, date_column=SPENDINGS_PERIOD)
     report_invalid_filters(request, table_filter)
+    categories = supplier_categories()
 
     return render(
         request,
@@ -171,7 +172,10 @@ def dashboard(request: HttpRequest) -> HttpResponse:
             "spendings": spending_indicators(table_filter.period),
             "stages": processing_times(),
             "top_suppliers": top_suppliers(table_filter.period, limit=DASHBOARD_TOP_SUPPLIERS),
-            "categories": supplier_categories(),
+            "categories": categories,
+            "category_chart": [
+                {"label": row.category.name, "firms": row.firms} for row in categories.rows
+            ],
             "table_filter": table_filter,
         },
     )

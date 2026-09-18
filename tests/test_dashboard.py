@@ -629,8 +629,15 @@ class SupplierCategoryTests(TestCase):
         )
         return category
 
-    def a_supply(self, firm: Supplier, *categories: MahsulotTuri) -> None:
-        """One contract with that firm, against an application ordering those types."""
+    def a_supply(
+        self, firm: Supplier, *categories: MahsulotTuri, delivered: bool = False
+    ) -> None:
+        """One contract with that firm, against an application ordering those types.
+
+        `delivered` puts the contract in the status marked completed, which
+        is what the delivered-types figure counts - a contract that merely
+        exists is not a delivery.
+        """
         application = an_assigned_application(
             self.manager, self.specialist, department=self.department
         )
@@ -643,7 +650,8 @@ class SupplierCategoryTests(TestCase):
                 buyurtma_soni=Decimal("1"),
                 olchov_birligi="ta",
             )
-        a_contract(application, self.specialist, supplier=firm)
+        status = ShartnomaStatus.objects.get(name=DELIVERED) if delivered else None
+        a_contract(application, self.specialist, supplier=firm, status=status)
 
     def a_firm(self, name: str, inn: str) -> Supplier:
         firm, _ = Supplier.objects.get_or_create(name=name, defaults={"inn": inn})
@@ -707,9 +715,9 @@ class SupplierCategoryTests(TestCase):
     def test_the_shares_add_up_to_a_hundred(self) -> None:
         metal = self.a_category(100001, "Metall prokat")
         chemical = self.a_category(100002, "Kimyoviy")
-        self.a_supply(self.a_firm("MetalGrup JV", "223456789"), metal)
+        self.a_supply(self.a_firm("MetalGrup JV", "223456789"), metal, delivered=True)
         self.a_supply(self.a_firm("UzElektro", "323456789"), metal)
-        self.a_supply(self.a_firm("Kimyo Invest", "423456789"), chemical)
+        self.a_supply(self.a_firm("Kimyo Invest", "423456789"), chemical, delivered=True)
         self.a_supply(self.a_firm("Neft Trade", "523456789"), chemical)
 
         categories = supplier_categories()
@@ -717,6 +725,24 @@ class SupplierCategoryTests(TestCase):
         self.assertEqual(sum(row.share for row in categories.rows), 100)
         self.assertEqual(categories.placements, 4)
         self.assertEqual(categories.delivered_types, 2)
+
+    def test_shares_that_do_not_divide_evenly_stay_within_rounding(self) -> None:
+        """Three thirds are 33 each: a hundred within rounding, not on the nose."""
+        for number, name, inn in (
+            (100001, "Metall prokat", "223456789"),
+            (100002, "Kimyoviy", "323456789"),
+            (100003, "Qurilish", "423456789"),
+        ):
+            self.a_supply(self.a_firm(name + " LLC", inn), self.a_category(number, name))
+
+        shares = [
+            row.share
+            for row in supplier_categories().rows
+            if row.category.name in {"Metall prokat", "Kimyoviy", "Qurilish"}
+        ]
+
+        self.assertEqual(shares, [33, 33, 33])
+        self.assertLessEqual(abs(sum(shares) - 100), len(shares))
 
     def test_nothing_supplied_leaves_every_share_at_zero(self) -> None:
         self.a_category(100001, "Metall prokat")
@@ -726,13 +752,32 @@ class SupplierCategoryTests(TestCase):
         self.assertEqual({row.share for row in categories.rows}, {0})
         self.assertEqual((categories.placements, categories.delivered_types), (0, 0))
 
-    def test_the_delivered_total_counts_only_types_with_a_firm_behind_them(self) -> None:
+    def test_the_delivered_total_counts_types_that_reached_completed(self) -> None:
         metal = self.a_category(100001, "Metall prokat")
-        self.a_category(100002, "Kimyoviy")
+        chemical = self.a_category(100002, "Kimyoviy")
         self.a_category(100003, "Qurilish")
-        self.a_supply(self.a_firm("MetalGrup JV", "223456789"), metal)
+        self.a_supply(self.a_firm("MetalGrup JV", "223456789"), metal, delivered=True)
+        self.a_supply(self.a_firm("Kimyo Invest", "423456789"), chemical)
 
         self.assertEqual(supplier_categories().delivered_types, 1)
+
+    def test_a_type_only_contracted_for_is_not_a_type_delivered(self) -> None:
+        """REQ-DASH-007 says delivered, and a contract is not a delivery."""
+        metal = self.a_category(100001, "Metall prokat")
+        self.a_supply(self.a_firm("MetalGrup JV", "223456789"), metal)
+
+        categories = supplier_categories()
+
+        self.assertEqual(categories.rows[0].firms, 1)
+        self.assertEqual(categories.delivered_types, 0)
+
+    def test_nothing_marked_completed_means_nothing_delivered(self) -> None:
+        """Master data may be edited into having no completed state (DEC-010)."""
+        metal = self.a_category(100001, "Metall prokat")
+        self.a_supply(self.a_firm("MetalGrup JV", "223456789"), metal, delivered=True)
+        ShartnomaStatus.objects.update(is_completed=False)
+
+        self.assertEqual(supplier_categories().delivered_types, 0)
 
     def test_the_busiest_type_is_listed_first(self) -> None:
         metal = self.a_category(100001, "Metall prokat")

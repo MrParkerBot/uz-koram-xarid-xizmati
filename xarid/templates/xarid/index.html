@@ -145,7 +145,7 @@ writes, which has a page of its own.
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title">Supplier Category Taqsimoti</div>
-          <span class="badge badge-soft">Yetkazib berilayotgan turlar: {{ categories.delivered_types }}</span>
+          <span class="badge badge-soft" title="Tugallangan holatga yetgan mahsulot turlari">Yetkazib berilgan turlar: {{ categories.delivered_types }}</span>
         </div>
         <div class="table-wrap">
           <table class="table-app">
@@ -174,9 +174,7 @@ writes, which has a page of its own.
         <div class="panel-header"><div class="panel-title">Category Bar Chart</div></div>
         <div class="panel-body"><canvas id="category-chart"></canvas></div>
         {# The same rows the table shows, so the two cannot drift apart. #}
-        <script type="application/json" id="category-chart-data">
-          [{% for row in categories.rows %}{"label": {{ row.category.name|tojson }}, "firms": {{ row.firms }}}{{ "," if not loop.last }}{% endfor %}]
-        </script>
+        <script type="application/json" id="category-chart-data">{{ category_chart|tojson }}</script>
       </div>
     </div>
 
