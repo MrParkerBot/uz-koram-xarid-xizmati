@@ -148,11 +148,11 @@ class DatePeriod:
 
     def __init__(self, column: DateColumn, chosen: Mapping[str, str]) -> None:
         self.column = column
-        requested_start = (chosen.get(column.start_parameter) or "").strip()
-        requested_end = (chosen.get(column.end_parameter) or "").strip()
-        self.start = self._as_date(requested_start)
-        self.end = self._as_date(requested_end)
-        self.refusal = self._refusal(requested_start, requested_end)
+        self.requested_start = (chosen.get(column.start_parameter) or "").strip()
+        self.requested_end = (chosen.get(column.end_parameter) or "").strip()
+        self.start = self._as_date(self.requested_start)
+        self.end = self._as_date(self.requested_end)
+        self.refusal = self._refusal()
 
     @staticmethod
     def _as_date(requested: str) -> date | None:
@@ -162,10 +162,10 @@ class DatePeriod:
         except ValueError:
             return None
 
-    def _refusal(self, requested_start: str, requested_end: str) -> str | None:
+    def _refusal(self) -> str | None:
         """Why this period was not applied, or None when it was."""
-        unreadable = (requested_start and self.start is None) or (
-            requested_end and self.end is None
+        unreadable = (self.requested_start and self.start is None) or (
+            self.requested_end and self.end is None
         )
         if unreadable:
             return (
@@ -183,6 +183,11 @@ class DatePeriod:
     def is_active(self) -> bool:
         """Whether a usable bound was chosen."""
         return self.refusal is None and (self.start is not None or self.end is not None)
+
+    @property
+    def was_requested(self) -> bool:
+        """Whether a bound was typed at all, including one that was refused."""
+        return bool(self.requested_start or self.requested_end)
 
     @property
     def selections(self) -> dict[str, str]:
@@ -341,6 +346,20 @@ class TableFilter:
             any(field.is_active for field in self.fields)
             or (self.period is not None and self.period.is_active)
             or self.sort.is_active
+        )
+
+    @property
+    def can_be_cleared(self) -> bool:
+        """Whether the bar holds anything to clear, applied or refused.
+
+        A refused period is not applied, so it is not active - but it is still
+        sitting in the inputs, and somebody told it was refused needs the one
+        button that empties them.
+        """
+        return (
+            self.is_active
+            or bool(self.invalid)
+            or (self.period is not None and self.period.was_requested)
         )
 
     @property

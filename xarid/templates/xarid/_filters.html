@@ -4,7 +4,8 @@ The filter bar every list page renders from a TableFilter.
 A GET form, so the chosen values travel in the query string and survive a
 re-render or a bookmark. One select per column with a "barchasi" option, then
 the period and the ordering the page offers, the Qidirish button, and a
-Tozalash link back to the unfiltered page while anything is chosen.
+Tozalash link back to the unfiltered page while the bar holds anything -
+including a period that was refused and therefore never applied.
 #}
 {% macro filter_bar(table_filter, action_url) -%}
 <form method="get" action="{{ action_url }}" class="toolbar-group" data-filter-bar>
@@ -17,10 +18,10 @@ Tozalash link back to the unfiltered page while anything is chosen.
   {% endfor %}
   {% if table_filter.period %}
   <span class="toolbar-label">Sana:</span>
-  <input class="form-control" type="date" style="width:140px;" name="{{ table_filter.period.column.start_parameter }}" id="f-dan"
+  <input class="form-control" type="date" style="width:140px;" name="{{ table_filter.period.column.start_parameter }}" id="f-{{ table_filter.period.column.start_parameter }}"
          value="{{ table_filter.period.start.isoformat() if table_filter.period.start else '' }}"
          aria-label="{{ table_filter.period.column.label }}: davr boshi"/>
-  <input class="form-control" type="date" style="width:140px;" name="{{ table_filter.period.column.end_parameter }}" id="f-gacha"
+  <input class="form-control" type="date" style="width:140px;" name="{{ table_filter.period.column.end_parameter }}" id="f-{{ table_filter.period.column.end_parameter }}"
          value="{{ table_filter.period.end.isoformat() if table_filter.period.end else '' }}"
          aria-label="{{ table_filter.period.column.label }}: davr oxiri"/>
   {% endif %}
@@ -30,7 +31,7 @@ Tozalash link back to the unfiltered page while anything is chosen.
   </select>
   {% endif %}
   <button type="submit" class="btn btn-primary-custom btn-sm"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
-  {% if table_filter.is_active %}<a class="btn btn-outline-custom btn-sm" href="{{ action_url }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Tozalash</a>{% endif %}
+  {% if table_filter.can_be_cleared %}<a class="btn btn-outline-custom btn-sm" href="{{ action_url }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Tozalash</a>{% endif %}
 </form>
 {%- endmacro %}
 
