@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from django.db import DatabaseError
 from django.test import TestCase
+from django.utils import timezone
 
 from tests.support import a_department, an_application, make_user, page
 from xarid.models import (
@@ -129,7 +130,7 @@ class UnreadCountTests(TestCase):
 
     def test_a_read_notification_is_not_counted(self) -> None:
         notification = self.a_notification_for(self.requester)
-        Notification.objects.filter(pk=notification.pk).update(read_at="2026-03-02 12:00+00:00")
+        Notification.objects.filter(pk=notification.pk).update(read_at=timezone.now())
 
         self.assertEqual(unread_for(self.requester), 0)
 
