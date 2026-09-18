@@ -1,0 +1,62 @@
+{% extends "xarid/base.html" %}
+{% from "xarid/_forms.html" import text_input, delete_form, save_and_cancel with context %}
+{# The Shartnoma Turi master data page (section 3.7, DEC-023). #}
+{% block title %}Shartnoma Turi{% endblock %}
+{% block breadcrumb %}Ma'lumotlar / Shartnoma Turi{% endblock %}
+{% block page_heading %}Shartnoma Turi{% endblock %}
+{% block content %}
+
+    <div class="page-header">
+      <div><h1 class="page-title">Shartnoma Turi</h1><div class="muted">Contract types — Shartnoma 4.8 formida ishlatiladi</div></div>
+      <div class="page-actions"><span class="role-tag role-admin">Admin only</span></div>
+    </div>
+
+    <div class="split-layout">
+      <div class="split-table-side">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div style="font-size:14px;font-weight:700;">Shartnoma Turlari Ro'yhati</div>
+          <a class="btn btn-primary-custom btn-sm" href="{{ url('xarid:shartnoma-turi') }}">+ Yangi qo'shish</a>
+        </div>
+        <div class="search-box" style="margin-bottom:14px;"><i class="bi bi-search search-icon" aria-hidden="true"></i><input type="text" class="form-control" id="search-input" data-table-search="#turi-table" placeholder="Qidirish…"/></div>
+        <div class="table-wrap">
+          <table class="table-app" id="turi-table">
+            <thead><tr>
+              <th style="width:40px;">#</th>
+              <th class="sortable">Shartnoma Turi<span class="sort-icon"></span></th>
+              <th style="width:120px;text-align:center;">Amallar</th>
+            </tr></thead>
+            <tbody id="turi-tbody">
+            {% for contract_type in contract_types %}
+              <tr data-id="{{ contract_type.pk }}">
+                <td>{{ loop.index }}</td>
+                <td>{{ contract_type.name }}</td>
+                <td style="text-align:center;white-space:nowrap;">
+                  <a class="btn btn-outline-custom btn-xs" href="{{ url('xarid:shartnoma-turi') }}?edit={{ contract_type.pk }}"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</a>
+                  {{ delete_form(url('xarid:shartnoma-turi-delete', contract_type.pk), contract_type.name ~ " o'chirilsinmi?") }}
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="3" class="muted" style="text-align:center;">Hozircha yozuv yo'q.</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="split-form-side">
+        <form method="post" action="{% if edited_record %}{{ url('xarid:shartnoma-turi-update', edited_record.pk) }}{% else %}{{ url('xarid:shartnoma-turi-create') }}{% endif %}">
+          {{ csrf_input }}
+          <div class="split-form-title" id="form-title">
+            {% if edited_record %}<i class="bi bi-pencil" aria-hidden="true"></i> Shartnoma Turi tahrirlash{% else %}<i class="bi bi-plus-lg" aria-hidden="true"></i> Yangi Shartnoma Turi qo'shish{% endif %}
+          </div>
+          {{ text_input(form.name, "Shartnoma Turi", placeholder="masalan: Import, Local, Framework…", required=true) }}
+          {{ text_input(form.category_number, "Category Number", placeholder="100123", type="number", hint="6 xonali son. Majburiy emas.") }}
+          {{ save_and_cancel(url('xarid:shartnoma-turi')) }}
+          <div class="alert alert-info" style="margin-top:20px;">
+            <span>ℹ</span><div>Bu turlari <strong>Kelishinlingan Shartnoma (4.8)</strong> kiritish formasida dropdown sifatida ishlatiladi. Ro'yhat tahrirlanadi: Import va Local boshlang'ich qiymatlar, to'liq ro'yhat emas (DEC-023).</div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+{% endblock %}

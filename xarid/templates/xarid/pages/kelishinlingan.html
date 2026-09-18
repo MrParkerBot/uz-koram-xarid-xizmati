@@ -1,0 +1,188 @@
+{% extends "xarid/base.html" %}
+{% from "xarid/_forms.html" import widget, required_mark with context %}
+{#
+The Kelishinlingan Shartnoma page (section 4.6) with the Shartnoma Kiritish
+form (section 4.8). Buyurtma nomi comes from the contract's own goods rows.
+Firma INN raqami is shown, not typed: the drop-down carries the INN on each
+option. Ko'rish and Yuborish are still waiting for later work.
+#}
+{% block title %}Kelishinlingan Shartnoma{% endblock %}
+{% block breadcrumb %}Shartnomalar / Kelishinlingan{% endblock %}
+{% block page_heading %}Kelishinlingan{% endblock %}
+{% block content %}
+
+    <div class="page-header">
+      <div><h1 class="page-title">Kelishinlingan Shartnoma</h1><div class="muted">Agreed Contracts</div></div>
+      <div class="page-actions">
+        <span class="role-tag role-admin">Admin</span>
+        <span class="role-tag role-manager">Manager</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar"><div class="toolbar-group">
+        <span class="toolbar-label">Filter:</span>
+        <select class="form-control" style="width:160px;" disabled>
+          <option value="">Firma: barchasi</option>
+        </select>
+        <input class="form-control" type="date" style="width:140px;" disabled/>
+        <button class="btn btn-primary-custom btn-sm" disabled title="Filtrlash keyingi bosqichda"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
+        </div><div class="toolbar-group">
+          <button class="btn btn-primary-custom btn-sm" type="button" data-open-modal="sht-modal"><i class="bi bi-plus-lg" aria-hidden="true"></i> Shartnoma Kiritish</button>
+          <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
+          <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table-app" id="kelish-table">
+          <thead><tr>
+            <th style="width:36px;">#</th>
+            <th>Ariza №</th>
+            <th>Bo'lim</th>
+            <th>Buyurtma nomi</th>
+            <th>Shartnoma №</th>
+            <th>Firma</th>
+            <th>Kim tuzdi</th>
+            <th>Yaratilgan</th>
+            <th>Qiymati (UZS)</th>
+            <th style="text-align:center;width:60px;">Ko'rish</th>
+            <th style="text-align:center;width:100px;">Yuborish</th>
+            <th>Izoh</th>
+          </tr></thead>
+          <tbody id="kelish-tbody">
+          {% for shartnoma in contracts %}
+            {% set contract_row = loop %}
+            {% set lines = shartnoma.items.all()|list %}
+            {% for qator in lines %}
+            <tr data-id="{{ shartnoma.pk }}">
+              {% if loop.first %}
+              <td rowspan="{{ lines|length }}">{{ contract_row.index }}</td>
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ shartnoma.application.ariza_raqami }}</td>
+              <td rowspan="{{ lines|length }}">{{ shartnoma.application.department.name }}</td>
+              {% endif %}
+              <td style="font-weight:500;">{{ qator.buyurtma_nomi }}{% if qator.part_number %} <span class="muted small mono-cell">{{ qator.part_number }}</span>{% endif %}</td>
+              {% if loop.first %}
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ shartnoma.shartnoma_raqami }}</td>
+              <td rowspan="{{ lines|length }}">{{ shartnoma.supplier.name }}</td>
+              <td rowspan="{{ lines|length }}">{{ display_name(shartnoma.created_by) }}</td>
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ shartnoma.yaratilingan_sana|date("Y-m-d") }}</td>
+              <td style="font-weight:600;color:var(--color-primary);" rowspan="{{ lines|length }}">{{ shartnoma.qiymati_display }}</td>
+              <td style="text-align:center;" rowspan="{{ lines|length }}">
+                <button class="btn btn-outline-custom btn-xs" disabled title="Ko'rish keyingi bosqichda"><i class="bi bi-eye" aria-hidden="true"></i></button>
+              </td>
+              <td style="text-align:center;" rowspan="{{ lines|length }}">
+                <button class="btn btn-primary-custom btn-xs" disabled title="Yuborish keyingi bosqichda">Yuborish</button>
+              </td>
+              <td style="font-size:11px;color:var(--color-text-muted);" rowspan="{{ lines|length }}">{{ shartnoma.inkor_izohi or "—" }}</td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="12" class="muted" style="text-align:center;">Hozircha kelishinlingan shartnoma yo'q.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+{% endblock %}
+{% block scripts %}
+<datalist id="olchov-birliklari">
+  {% for birlik in suggested_units %}<option value="{{ birlik }}"></option>{% endfor %}
+</datalist>
+
+<div id="sht-modal" class="modal-overlay{% if not open_form %} hidden{% endif %}">
+  <div class="modal-box modal-lg" style="max-width:860px;">
+    <form method="post" action="{{ url('xarid:shartnoma-yaratish') }}" data-contract-form>
+      {{ csrf_input }}
+      <div class="modal-title"><i class="bi bi-file-earmark-text" aria-hidden="true"></i> Shartnoma Kiritish</div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Shartnoma Raqami</label>
+          <input type="text" class="form-control mono" value="Saqlashda beriladi" disabled/>
+          <div class="form-hint">DEC-022: SHT-{{ now('Y') }}-00001.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Yaratilingan Sana</label>
+          <input type="text" class="form-control" value="{{ now('Y-m-d') }}" disabled/>
+        </div>
+      </div>
+
+      <div class="form-row">
+        {{ widget(form.application, "Ariza Raqami", required=true, hint="Tayinlangan arizalar (REQ-ROLE-007).") }}
+        {{ widget(form.shartnoma_sanasi, "Shartnoma Sanasi", required=true) }}
+      </div>
+
+      <div class="form-row">
+        <div data-inn-source>{{ widget(form.supplier, "Firma Nomi", required=true) }}</div>
+        <div class="form-group">
+          <label class="form-label" for="sht-firma-inn">Firma INN Raqami</label>
+          <input type="text" class="form-control mono" id="sht-firma-inn" value="" readonly data-inn-target/>
+          <div class="form-hint">Tanlangan firmadan olinadi (DEC-011).</div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        {{ widget(form.shartnoma_turi, "Shartnoma Turi", hint="Shartnoma turi ma'lumotnomasidan (DEC-023).") }}
+        {{ widget(form.status, "Status") }}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Buyurtma tovarlari {{ required_mark() }}</label>
+        <div class="form-error">{{ item_formset.non_form_errors()|striptags }}</div>
+        {{ item_formset.management_form }}
+        <div id="sht-item-rows" data-contract-rows>
+          {% for qator_form in item_formset %}
+          <div class="form-row-items-4 js-sht-qator" style="margin-bottom:10px;">
+            {{ qator_form.id }}
+            {{ widget(qator_form.buyurtma_nomi, "Buyurtma Nomi", compact=true) }}
+            {{ widget(qator_form.part_number, "Part Number", compact=true) }}
+            {{ widget(qator_form.buyurtma_soni, "Miqdori", compact=true) }}
+            {{ widget(qator_form.olchov_birligi, "Birligi", compact=true) }}
+            {{ widget(qator_form.narxi, "Narxi", compact=true) }}
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label">Umumiy Narx</label>
+              <input type="text" class="form-control mono js-qator-jami" value="0,00" readonly/>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        <button type="button" class="btn btn-outline-custom btn-xs" data-add-row data-row-template="sht-row-template" data-row-container="sht-item-rows" data-total-forms="id_form-TOTAL_FORMS">+ Qator qo'shish</button>
+      </div>
+
+      <div class="form-row">
+        {{ widget(form.tolash_muddati, "To'lash Muddati") }}
+        {{ widget(form.muddat_talabi, "Muddat Talabi") }}
+      </div>
+
+      <div class="form-row">
+        {{ widget(form.izoh, "Izoh") }}
+        <div class="form-group">
+          <label class="form-label">Shartnoma Qiymati (UZS)</label>
+          <input type="text" class="form-control mono" id="sht-qiymati" value="0,00" readonly data-contract-value/>
+          <div class="form-hint">Qatorlar yig'indisi; saqlashda server hisoblaydi.</div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-custom" data-close-modal="sht-modal"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</button>
+        <button type="submit" class="btn btn-primary-custom"><i class="bi bi-check-lg" aria-hidden="true"></i> Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<template id="sht-row-template">
+  <div class="form-row-items-4 js-sht-qator" style="margin-bottom:10px;">
+    {{ item_formset.empty_form.id }}
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Buyurtma Nomi</label>{{ item_formset.empty_form.buyurtma_nomi }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Part Number</label>{{ item_formset.empty_form.part_number }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Miqdori</label>{{ item_formset.empty_form.buyurtma_soni }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Birligi</label>{{ item_formset.empty_form.olchov_birligi }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Narxi</label>{{ item_formset.empty_form.narxi }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Umumiy Narx</label><input type="text" class="form-control mono js-qator-jami" value="0,00" readonly/></div>
+  </div>
+</template>
+{% endblock %}

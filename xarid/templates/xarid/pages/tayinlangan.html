@@ -1,0 +1,110 @@
+{% extends "xarid/base.html" %}
+{% from "xarid/_forms.html" import pdf_badge with context %}
+{#
+The Tayinlangan Arizalar page (REQ-ARIZA-012). A Katta Mutaxasis sees what was
+assigned to them; everybody else sees all of it with the holder column. The
+Holat drop-down has a Save button rather than submitting on change, so
+keyboard users are not reloaded on every arrow key.
+#}
+{% block title %}Tayinlangan Arizalar{% endblock %}
+{% block breadcrumb %}Arizalar / Tayinlangan{% endblock %}
+{% block page_heading %}Tayinlangan{% endblock %}
+{% block content %}
+
+    <div class="page-header">
+      <div><h1 class="page-title">Tayinlangan Arizalar</h1><div class="muted">Assigned Applications — Specialist View</div></div>
+      <div class="page-actions">
+        <span class="role-tag role-manager">Manager</span>
+        <span class="role-tag role-specialist">Specialist</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar"><div class="toolbar-group">
+        <span class="toolbar-label">Filter:</span>
+        <select class="form-control" style="width:150px;" disabled>
+          <option value="">Bo'lim: barchasi</option>
+        </select>
+        <select class="form-control" style="width:170px;" disabled>
+          <option value="">Holati: barchasi</option>
+        </select>
+        <button class="btn btn-primary-custom btn-sm" disabled title="Filtrlash keyingi bosqichda"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
+        </div><div class="toolbar-group">
+          <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
+          <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table-app" id="tayinlangan-table">
+          <thead><tr>
+            <th style="width:36px;">#</th>
+            <th>Ariza №</th>
+            <th>Bo'lim</th>
+            <th>Mahsulot Turi</th>
+            <th>Buyurtma nomi</th>
+            <th>Soni</th>
+            <th>O'lchov</th>
+            <th>Izoh</th>
+            <th>PDF</th>
+            <th>Qabul qilingan sana</th>
+            {% if shows_the_holder %}<th>Tayinlangan xodim</th>{% endif %}
+            <th style="text-align:center;width:120px;">Qabul</th>
+            <th style="width:180px;">Holat</th>
+          </tr></thead>
+          <tbody id="tayinlangan-tbody">
+          {% for ariza in applications %}
+            {% set application_row = loop %}
+            {% set lines = ariza.items.all()|list %}
+            {% for qator in lines %}
+            <tr data-id="{{ ariza.pk }}">
+              {% if loop.first %}
+              <td rowspan="{{ lines|length }}">{{ application_row.index }}</td>
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.ariza_raqami }}</td>
+              <td rowspan="{{ lines|length }}">{{ ariza.department.name }}</td>
+              {% endif %}
+              <td style="font-size:11px;" class="mono-cell">{{ qator.mahsulot_turi.category_number }} — {{ qator.mahsulot_turi.name }}</td>
+              <td style="font-weight:500;">{{ qator.buyurtma_nomi }}</td>
+              <td style="font-weight:600;color:var(--color-primary);">{{ qator.soni_display }}</td>
+              <td>{{ qator.olchov_birligi }}</td>
+              {% if loop.first %}
+              <td style="font-size:11px;color:var(--color-text-muted);" rowspan="{{ lines|length }}">{{ ariza.izoh or "—" }}</td>
+              <td rowspan="{{ lines|length }}">
+                {% if ariza.pdf %}{{ pdf_badge(url('xarid:ariza-pdf', ariza.pk), ariza.ariza_raqami ~ ".pdf") }}{% else %}<span class="muted small">—</span>{% endif %}
+              </td>
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.qabul_qilingan_sana|date("Y-m-d") }}</td>
+              {% if shows_the_holder %}
+              <td rowspan="{{ lines|length }}"><span class="badge badge-info">{{ display_name(ariza.assigned_to) }}</span></td>
+              {% endif %}
+              <td style="text-align:center;white-space:nowrap;" rowspan="{{ lines|length }}">
+                {% if ariza.is_taken %}
+                  <span class="badge badge-success" title="{{ ariza.xodim_qabul_qilgan_sana|date('Y-m-d H:i') }}"><i class="bi bi-check-lg" aria-hidden="true"></i> Qabul qilingan</span>
+                {% else %}
+                  <form method="post" action="{{ url('xarid:tayinlangan-qabul', ariza.pk) }}" style="display:inline;" data-confirm="{{ ariza.ariza_raqami }} qabul qilinsinmi?">
+                    {{ csrf_input }}
+                    <button type="submit" class="btn btn-outline-custom text-success btn-xs"><i class="bi bi-check-lg" aria-hidden="true"></i> Qabul</button>
+                  </form>
+                {% endif %}
+              </td>
+              <td rowspan="{{ lines|length }}">
+                <form method="post" action="{{ url('xarid:tayinlangan-holat', ariza.pk) }}">
+                  {{ csrf_input }}
+                  <select class="form-control" name="status" style="width:160px;padding:5px 8px;font-size:11px;">
+                    <option value="">— {{ ariza.status.name if ariza.status else "Tanlang" }} —</option>
+                    {% for holat in statuses %}<option value="{{ holat.pk }}"{% if holat.pk == ariza.status_id %} selected{% endif %}>{{ holat.name }}</option>{% endfor %}
+                  </select>
+                  <button type="submit" class="btn btn-outline-custom btn-xs" style="margin-top:4px;">Saqlash</button>
+                </form>
+              </td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="{{ 13 if shows_the_holder else 12 }}" class="muted" style="text-align:center;">Hozircha tayinlangan ariza yo'q.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+{% endblock %}

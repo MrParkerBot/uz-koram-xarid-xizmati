@@ -1,0 +1,69 @@
+{% extends "xarid/base.html" %}
+{% from "xarid/_forms.html" import text_input, delete_form, save_and_cancel with context %}
+{# The Firmalar master data page (DEC-011): suppliers chosen on the contract form. #}
+{% block title %}Firmalar{% endblock %}
+{% block breadcrumb %}Ma'lumotlar / Firmalar{% endblock %}
+{% block page_heading %}Firmalar{% endblock %}
+{% block content %}
+
+    <div class="page-header">
+      <div><h1 class="page-title">Firmalar</h1><div class="muted">Mol yetkazib beruvchilar — shartnoma formasida tanlanadi</div></div>
+      <div class="page-actions"><span class="role-tag role-admin">Admin only</span></div>
+    </div>
+
+    <div class="split-layout" style="grid-template-columns:1fr 360px;">
+      <div class="split-table-side">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div style="font-size:14px;font-weight:700;">Firmalar Ro'yhati</div>
+          <a class="btn btn-primary-custom btn-sm" href="{{ url('xarid:firmalar') }}">+ Yangi qo'shish</a>
+        </div>
+        <div class="search-box" style="margin-bottom:14px;"><i class="bi bi-search search-icon" aria-hidden="true"></i><input type="text" class="form-control" id="search-input" data-table-search="#firma-table" placeholder="Qidirish…"/></div>
+        <div class="table-wrap">
+          <table class="table-app" id="firma-table">
+            <thead><tr>
+              <th style="width:40px;">#</th>
+              <th class="sortable">Firma Nomi<span class="sort-icon"></span></th>
+              <th style="width:120px;">INN</th>
+              <th style="width:110px;">Daraja</th>
+              <th style="width:120px;text-align:center;">Amallar</th>
+            </tr></thead>
+            <tbody id="firma-tbody">
+            {% for supplier in suppliers %}
+              <tr data-id="{{ supplier.pk }}">
+                <td>{{ loop.index }}</td>
+                <td>{{ supplier.name }}</td>
+                <td class="mono-cell">{{ supplier.inn or "—" }}</td>
+                <td>{% if supplier.daraja %}<span class="badge badge-soft">{{ supplier.daraja }}</span>{% else %}<span class="muted small">—</span>{% endif %}</td>
+                <td style="text-align:center;white-space:nowrap;">
+                  <a class="btn btn-outline-custom btn-xs" href="{{ url('xarid:firmalar') }}?edit={{ supplier.pk }}"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</a>
+                  {{ delete_form(url('xarid:firmalar-delete', supplier.pk), supplier.name ~ " o'chirilsinmi?") }}
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="5" class="muted" style="text-align:center;">Hozircha firma yo'q. Birinchisini o'ng tomondagi shakl orqali qo'shing.</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="split-form-side">
+        <form method="post" action="{% if edited_record %}{{ url('xarid:firmalar-update', edited_record.pk) }}{% else %}{{ url('xarid:firmalar-create') }}{% endif %}">
+          {{ csrf_input }}
+          <div class="split-form-title" id="form-title">
+            {% if edited_record %}<i class="bi bi-pencil" aria-hidden="true"></i> Firma tahrirlash{% else %}<i class="bi bi-plus-lg" aria-hidden="true"></i> Yangi Firma qo'shish{% endif %}
+          </div>
+          {{ text_input(form.name, "Firma Nomi", placeholder="Firma/kompaniya nomi", required=true) }}
+          {{ text_input(form.inn, "Firma INN raqami", placeholder="123456789", extra_class="mono", maxlength=9, hint="9 raqam. Majburiy emas: chet el firmasida O'zbekiston INN si bo'lmaydi.") }}
+          {{ text_input(form.daraja, "Daraja", placeholder="masalan: A", hint="Dashboard shu bo'yicha filtrlaydi (DEC-025). Qiymatlari hali belgilanmagan.") }}
+          {{ text_input(form.category_number, "Category Number", placeholder="100123", type="number", hint="6 xonali son. Majburiy emas.") }}
+          {{ save_and_cancel(url('xarid:firmalar')) }}
+          <div class="alert alert-info" style="margin-top:20px;">
+            <span>ℹ</span>
+            <div>INN takrorlanmas bo'lishi kerak: dashboard firmalarni shu bo'yicha sanaydi (DEC-011). O'chirilgan firma ro'yhatdan chiqadi, lekin unga bog'langan shartnomalar saqlanib qoladi.</div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+{% endblock %}

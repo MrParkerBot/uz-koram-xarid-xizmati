@@ -1,6 +1,0 @@
-{% comment %}
-The markup the supplied sidebar.js used to build in the browser, produced by
-Django instead. The class names are its class names: style.css keys off
-nav-section-label, nav-link, active and label-text.
-{% endcomment %}
-{% for group in navigation_groups %}<div class="nav-section-label">{{ group.label }}</div>{% for entry in group.entries %}<a href="{% url entry.url_name %}" class="nav-link{% if entry.url_name == active_url_name %} active{% endif %}"><i class="bi {{ entry.icon }}" aria-hidden="true"></i><span class="label-text">{{ entry.label }}</span></a>{% endfor %}{% endfor %}

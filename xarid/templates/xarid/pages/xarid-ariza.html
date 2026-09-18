@@ -1,0 +1,229 @@
+{% extends "xarid/base.html" %}
+{% from "xarid/_forms.html" import widget, pdf_badge, required_mark with context %}
+{#
+The Xarid Arizasi page (section 4.9): the other way into the department. The
+queue above the list is DEC-016's approval chain and shows only what is
+waiting for whoever is looking. Bo`lim nomi is filled from the requester's
+own account (DEC-018), never typed.
+#}
+{% block title %}Xarid Arizasi{% endblock %}
+{% block breadcrumb %}Xaridlar / Xarid Arizasi{% endblock %}
+{% block page_heading %}Xarid Arizasi{% endblock %}
+{% block content %}
+
+    <div class="page-header">
+      <div><h1 class="page-title">Xarid Arizasi</h1><div class="muted">Purchase Requests</div></div>
+      <div class="page-actions">
+        <span class="role-tag role-user">Users</span>
+        <span class="role-tag role-admin">Admin</span>
+      </div>
+    </div>
+
+    {% if approvals %}
+    <div class="panel" style="margin-bottom:24px;">
+      <div class="page-header" style="margin-bottom:12px;">
+        <div><h2 class="page-title" style="font-size:18px;">Tasdiqlashni kutayotgan arizalar</h2><div class="muted">DEC-016: bo'lim boshlig'i, so'ngra direktor</div></div>
+      </div>
+      <div class="table-wrap">
+        <table class="table-app" id="xa-approvals">
+          <thead><tr>
+            <th style="width:36px;">#</th>
+            <th>Ariza №</th>
+            <th>Shartnoma nomi</th>
+            <th>Bo'lim</th>
+            <th>Buyurtmachi</th>
+            <th>Izoh</th>
+            <th>PDF</th>
+            <th>Yaratilgan</th>
+            <th style="text-align:center;width:170px;">Amallar</th>
+          </tr></thead>
+          <tbody id="xa-approvals-tbody">
+          {% for ariza in approvals %}
+            <tr data-id="{{ ariza.pk }}">
+              <td>{{ loop.index }}</td>
+              <td class="mono-cell">{{ ariza.xarid_raqami }}</td>
+              <td style="font-weight:500;">{{ ariza.shartnoma_nomi }}</td>
+              <td>{{ ariza.department.name }}</td>
+              <td>{{ display_name(ariza.created_by) }}</td>
+              <td style="font-size:11px;color:var(--color-text-muted);">{{ ariza.izoh or "—" }}</td>
+              <td>
+                {% if ariza.pdf %}{{ pdf_badge(url('xarid:xarid-ariza-pdf', ariza.pk), ariza.xarid_raqami ~ ".pdf") }}{% else %}<span class="muted small">—</span>{% endif %}
+              </td>
+              <td class="mono-cell">{{ ariza.yaratilingan_sana|date("Y-m-d") }}</td>
+              <td style="text-align:center;white-space:nowrap;">
+                <form method="post" action="{{ url('xarid:xarid-ariza-tasdiqlash', ariza.pk) }}" style="display:inline;" data-confirm="{{ ariza.xarid_raqami }} tasdiqlansinmi?">
+                  {{ csrf_input }}
+                  <button type="submit" class="btn btn-outline-custom text-success btn-xs"><i class="bi bi-check-lg" aria-hidden="true"></i> Tasdiqlash</button>
+                </form>
+                <button type="button" class="btn btn-outline-custom text-danger btn-xs" data-modal-form="xa-reject-modal" data-action-url="{{ url('xarid:xarid-ariza-inkor', ariza.pk) }}" data-fill-ariza="{{ ariza.xarid_raqami }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Inkor</button>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="panel">
+      <div class="toolbar"><div class="toolbar-group">
+        <span class="toolbar-label">Filter:</span>
+        <select class="form-control" style="width:180px;" disabled>
+          <option value="">Mahsulot turi: barchasi</option>
+        </select>
+        <input class="form-control" type="date" style="width:140px;" disabled/>
+        <button class="btn btn-primary-custom btn-sm" disabled title="Filtrlash keyingi bosqichda"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
+        </div><div class="toolbar-group">
+          <button class="btn btn-primary-custom btn-sm" type="button" data-open-modal="xa-modal"><i class="bi bi-plus-lg" aria-hidden="true"></i> Ariza Yaratish</button>
+          <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
+          <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table-app" id="xa-table">
+          <thead><tr>
+            <th style="width:36px;">#</th>
+            <th>Ariza №</th>
+            <th>Shartnoma nomi</th>
+            <th>Bo'lim</th>
+            <th>Buyurtma nomi</th>
+            <th>Soni</th>
+            <th>O'lchov</th>
+            <th>Holati</th>
+            <th>Mahsulot Turi</th>
+            <th>Izoh</th>
+            <th>PDF</th>
+            <th>Yaratilgan</th>
+          </tr></thead>
+          <tbody id="xa-tbody">
+          {% for ariza in applications %}
+            {% set application_row = loop %}
+            {% set lines = ariza.items.all()|list %}
+            {% for qator in lines %}
+            <tr data-id="{{ ariza.pk }}">
+              {% if loop.first %}
+              <td rowspan="{{ lines|length }}">{{ application_row.index }}</td>
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.xarid_raqami }}</td>
+              <td rowspan="{{ lines|length }}" style="font-weight:500;">{{ ariza.shartnoma_nomi }}</td>
+              <td rowspan="{{ lines|length }}">{{ ariza.department.name }}</td>
+              {% endif %}
+              <td>{{ qator.buyurtma_nomi }}</td>
+              <td style="font-weight:600;color:var(--color-primary);">{{ qator.soni_display }}</td>
+              <td>{{ qator.olchov_birligi }}</td>
+              {% if loop.first %}
+              <td rowspan="{{ lines|length }}">
+                {% if ariza.status %}<span class="badge badge-info">{{ ariza.status.name }}</span>{% else %}<span class="muted small">—</span>{% endif %}
+              </td>
+              {% endif %}
+              <td style="font-size:11px;" class="mono-cell">{{ qator.mahsulot_turi.category_number }} — {{ qator.mahsulot_turi.name }}</td>
+              {% if loop.first %}
+              <td style="font-size:11px;color:var(--color-text-muted);" rowspan="{{ lines|length }}">{{ ariza.izoh or "—" }}</td>
+              <td rowspan="{{ lines|length }}">
+                {% if ariza.pdf %}{{ pdf_badge(url('xarid:xarid-ariza-pdf', ariza.pk), ariza.xarid_raqami ~ ".pdf") }}{% else %}<span class="muted small">—</span>{% endif %}
+              </td>
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.yaratilingan_sana|date("Y-m-d") }}</td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="12" class="muted" style="text-align:center;">Hozircha xarid arizasi yo'q.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+{% endblock %}
+{% block scripts %}
+<datalist id="olchov-birliklari">
+  {% for birlik in suggested_units %}<option value="{{ birlik }}"></option>{% endfor %}
+</datalist>
+
+<div id="xa-modal" class="modal-overlay{% if not open_form %} hidden{% endif %}">
+  <div class="modal-box modal-lg" style="max-width:720px;">
+    <form method="post" action="{{ url('xarid:xarid-ariza-yaratish') }}" enctype="multipart/form-data">
+      {{ csrf_input }}
+      <div class="modal-title"><i class="bi bi-cart3" aria-hidden="true"></i> Xarid Arizasi Yaratish</div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Ariza Raqami</label>
+          <input type="text" class="form-control mono" value="Saqlashda beriladi" disabled/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Yaratilingan Sana</label>
+          <input type="text" class="form-control" value="{{ now('Y-m-d') }}" disabled/>
+        </div>
+      </div>
+
+      <div class="form-row">
+        {{ widget(form.shartnoma_nomi, "Shartnoma Nomi", required=true) }}
+        <div class="form-group">
+          <label class="form-label">Bo'lim Nomi</label>
+          <input type="text" class="form-control" value="{{ signed_in_department.name if signed_in_department else 'Hisobingizga biriktirilgan bo`lim' }}" disabled/>
+          <div class="form-hint">Hisobingizdan olinadi (DEC-018).</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Buyurtma qatorlari {{ required_mark() }}</label>
+        <div class="form-error">{{ item_formset.non_form_errors()|striptags }}</div>
+        {{ item_formset.management_form }}
+        <div id="xa-item-rows">
+          {% for qator_form in item_formset %}
+          <div class="form-row-items-4" style="margin-bottom:10px;">
+            {{ qator_form.id }}
+            {{ widget(qator_form.mahsulot_turi, "Mahsulot Turi", compact=true) }}
+            {{ widget(qator_form.buyurtma_nomi, "Buyurtma Nomi", compact=true) }}
+            {{ widget(qator_form.buyurtma_soni, "Soni", compact=true) }}
+            {{ widget(qator_form.olchov_birligi, "O'lchov", compact=true) }}
+          </div>
+          {% endfor %}
+        </div>
+        <button type="button" class="btn btn-outline-custom btn-xs" data-add-row data-row-template="xa-row-template" data-row-container="xa-item-rows" data-total-forms="id_form-TOTAL_FORMS">+ Qator qo'shish</button>
+      </div>
+
+      <div class="form-row">
+        {{ widget(form.muddat_talabi, "Muddat Talabi") }}
+        {{ widget(form.izoh, "Izoh") }}
+      </div>
+
+      {{ widget(form.pdf, "Ilova (PDF)", required=true, hint="PDF, eng ko'pi bilan 10 MB (DEC-019).") }}
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-custom" data-close-modal="xa-modal"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</button>
+        <button type="submit" class="btn btn-primary-custom"><i class="bi bi-check-lg" aria-hidden="true"></i> Yaratish</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<template id="xa-row-template">
+  <div class="form-row-items-4" style="margin-bottom:10px;">
+    {{ item_formset.empty_form.id }}
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Mahsulot Turi</label>{{ item_formset.empty_form.mahsulot_turi }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Buyurtma Nomi</label>{{ item_formset.empty_form.buyurtma_nomi }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Soni</label>{{ item_formset.empty_form.buyurtma_soni }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">O'lchov</label>{{ item_formset.empty_form.olchov_birligi }}</div>
+  </div>
+</template>
+
+<div id="xa-reject-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <form method="post" id="xa-reject-form">
+      {{ csrf_input }}
+      <div class="modal-title"><i class="bi bi-x-circle" aria-hidden="true"></i> Xarid arizasini inkor etish</div>
+      <p class="modal-desc muted">Ariza <span data-fill="ariza" class="mono-cell"></span> inkor etiladi. Sababi buyurtmachiga yetkaziladi.</p>
+      <div class="form-group">
+        <label class="form-label" for="xa-reject-izoh">Izoh {{ required_mark() }}</label>
+        <textarea class="form-control" id="xa-reject-izoh" name="inkor_izohi" rows="4" placeholder="Nima uchun inkor etilmoqda?" required></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-custom" data-close-modal="xa-reject-modal">Bekor qilish</button>
+        <button type="submit" class="btn btn-outline-custom text-danger">OK</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,146 @@
+{% extends "xarid/base.html" %}
+{% from "xarid/_forms.html" import text_input, select, errors, required_mark with context %}
+{#
+The Users page (section 3.3). Passwords are hashed and never rendered
+(DEC-020); deleting deactivates (DEC-009); the Edit Permission column is the
+exclusive contract-editing lock of DEC-021 and posts to its own action.
+#}
+{% block title %}Foydalanuvchilar{% endblock %}
+{% block breadcrumb %}Ma'lumotlar / Foydalanuvchilar{% endblock %}
+{% block page_heading %}Foydalanuvchilar{% endblock %}
+{% block content %}
+
+    <div class="page-header">
+      <div><h1 class="page-title">Foydalanuvchilar</h1><div class="muted">Tizim foydalanuvchilari boshqaruvi</div></div>
+      <div class="page-actions"><span class="role-tag role-admin">Admin only</span></div>
+    </div>
+
+    <div class="alert alert-warning" style="margin-bottom:20px;">
+      <span><i class="bi bi-exclamation-triangle" aria-hidden="true"></i></span>
+      <div><strong>Tahrirlash ruxsati:</strong> Faqat bitta foydalanuvchi tahrirlash ruxsatiga ega bo'lishi mumkin. Boshqa foydalanuvchiga ruxsat berilganda, avvalgisinikini avtomatik o'chiriladi.
+        {% if contract_editor %}Hozir: <strong>{{ display_name(contract_editor.user) }}</strong>.{% else %}Hozircha hech kimda yo'q.{% endif %}
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:20px;">
+      <div class="panel-header">
+        <div class="panel-title">Foydalanuvchilar Ro'yhati</div>
+        <button type="button" class="btn btn-primary-custom btn-sm" data-open-modal="user-modal">+ Yangi qo'shish</button>
+      </div>
+      <div class="toolbar">
+        <div class="toolbar-group">
+          <div class="search-box" style="max-width:300px;"><i class="bi bi-search search-icon" aria-hidden="true"></i><input type="text" class="form-control" id="search-input" data-table-search="#users-table" placeholder="Ism yoki telefon qidirish…"/></div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table-app" id="users-table">
+          <thead><tr>
+            <th style="width:40px;">#</th>
+            <th>To'liq Ism</th>
+            <th>Telefon</th>
+            <th>User Type</th>
+            <th>Bo'lim</th>
+            <th style="text-align:center;">Tahrirlash ruxsati</th>
+            <th style="text-align:center;">Amallar</th>
+          </tr></thead>
+          <tbody id="users-tbody">
+          {% for listed_user in users %}
+            {% set profile = profile_for(listed_user) %}
+            <tr>
+              <td>{{ loop.index }}</td>
+              <td>
+                <div class="user-avatar-cell">
+                  <div class="user-avatar">{{ user_initials(listed_user) }}</div>
+                  <div>
+                    <span>{{ display_name(listed_user) }}</span>
+                    <div class="muted small mono-cell">{{ listed_user.get_username() }}</div>
+                  </div>
+                </div>
+              </td>
+              <td class="mono-cell">{% if profile and profile.phone_number %}+998 {{ profile.phone_number }}{% endif %}</td>
+              <td>{% if profile and profile.user_type %}<span class="badge badge-primary">{{ profile.user_type.name }}</span>{% else %}<span class="muted small">Belgilanmagan</span>{% endif %}</td>
+              <td>{% if profile and profile.department %}{{ profile.department.name }}{% else %}<span class="muted small">Belgilanmagan</span>{% endif %}</td>
+              <td style="text-align:center;">
+                <form method="post" action="{{ url('xarid:user-contract-editing', listed_user.pk) }}" id="contract-editing-{{ listed_user.pk }}">
+                  {{ csrf_input }}
+                  <label class="toggle edit-permission-toggle-wrap">
+                    <input type="checkbox" class="edit-permission-toggle" name="may_edit_contracts" onchange="this.form.submit();"{% if profile and profile.may_edit_contracts %} checked{% endif %}/>
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <noscript><button type="submit" class="btn btn-outline-custom btn-xs">Saqlash</button></noscript>
+                </form>
+              </td>
+              <td style="text-align:center;">
+                <a class="btn btn-outline-custom btn-xs" href="{{ url('xarid:users') }}?edit={{ listed_user.pk }}" aria-label="Tahrirlash"><i class="bi bi-pencil" aria-hidden="true"></i></a>
+                <form method="post" action="{{ url('xarid:user-delete', listed_user.pk) }}" style="display:inline;" data-confirm="{{ display_name(listed_user) }} o'chirilsinmi?">
+                  {{ csrf_input }}
+                  <button type="submit" class="btn btn-outline-custom btn-xs text-danger" aria-label="O'chirish"><i class="bi bi-trash" aria-hidden="true"></i></button>
+                </form>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="7" class="muted" style="text-align:center;">Hozircha foydalanuvchi yo'q.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination-wrap">
+        <div class="pagination-info"><span>Jami: <span class="count">{{ users|length }}</span> ta</span></div>
+      </div>
+    </div>
+
+{% endblock %}
+{% block scripts %}
+<div id="user-modal" class="modal-overlay{% if not open_form %} hidden{% endif %}">
+  <div class="modal-box modal-lg">
+    <form method="post" action="{% if edited_user_id %}{{ url('xarid:user-update', edited_user_id) }}{% else %}{{ url('xarid:user-create') }}{% endif %}">
+      {{ csrf_input }}
+      <div class="modal-title" id="user-modal-title">{% if edited_user_id %}Foydalanuvchini Tahrirlash{% else %}Yangi Foydalanuvchi Qo'shish{% endif %}</div>
+      <div class="form-row">
+        {{ text_input(form.first_name, "Ism", placeholder="Ismini kiriting", required=true) }}
+        {{ text_input(form.last_name, "Familiya", placeholder="Familiyasini kiriting", required=true) }}
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="{{ form.password.id_for_label }}">Parol {% if not edited_user_id %}{{ required_mark() }}{% endif %}</label>
+          <div class="input-group">
+            <input type="password" class="form-control pwd-strength-input" name="{{ form.password.html_name }}" id="{{ form.password.id_for_label }}" placeholder="{% if edited_user_id %}O'zgartirmaslik uchun bo'sh qoldiring{% else %}Parolni kiriting{% endif %}"/>
+            <button type="button" class="input-group-icon pwd-toggle" aria-label="Parolni ko'rsatish"><i class="bi bi-eye" aria-hidden="true"></i></button>
+          </div>
+          <div class="pwd-strength">
+            <div class="pwd-strength-bar"></div>
+            <div class="pwd-strength-bar"></div>
+            <div class="pwd-strength-bar"></div>
+          </div>
+          {{ errors(form.password) }}
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ form.phone_number.id_for_label }}">Telefon Raqam {{ required_mark() }}</label>
+          <div class="input-group">
+            <input type="text" class="form-control" name="{{ form.phone_number.html_name }}" id="{{ form.phone_number.id_for_label }}" value="{{ form.phone_number.value() or '' }}" placeholder="90 123 45 67" maxlength="12" required/>
+            <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--color-text-muted);font-family:var(--mono);">+998</span>
+          </div>
+          <div class="form-hint">Format: 90 123 45 67</div>
+          {{ errors(form.phone_number) }}
+        </div>
+      </div>
+      <div class="form-row">
+        {{ select(form.user_type, "User Type", empty_label="Belgilanmagan") }}
+        {{ select(form.department, "Bo'lim", empty_label="Belgilanmagan", hint="Xarid Arizasi formasi shu bo'limni avtomatik to'ldiradi (DEC-018).") }}
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Tahrirlash Ruxsati</label>
+          <div class="toggle-wrap" style="margin-top:10px;">
+            <span class="toggle-label muted">Jadvaldagi kalit orqali beriladi.</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <a class="btn btn-outline-custom" href="{{ url('xarid:users') }}">Bekor</a>
+        <button type="submit" class="btn btn-primary-custom"><i class="bi bi-save" aria-hidden="true"></i> Saqlash</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

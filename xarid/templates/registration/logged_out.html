@@ -1,0 +1,25 @@
+{% extends "xarid/base.html" %}
+{# Shown by Django's LogoutView after the session has ended. #}
+{% block title %}Chiqish{% endblock %}
+{% block body_class %} class="login-body"{% endblock %}
+{% block content %}
+<div class="login-shell">
+  <div class="login-aside">
+    <div class="d-flex align-items-center gap-3 mb-4">
+      <div class="brand-mark">UK</div>
+      <div>
+        <div class="h6 mb-1">Uz-Koram</div>
+        <p class="mb-0 muted small">Xarid Xizmati Bo'limi</p>
+      </div>
+    </div>
+    <div class="section-title mb-3">Tizimdan chiqdingiz</div>
+    <p class="muted mb-4">Sessiya yakunlandi. Davom etish uchun qaytadan kiring.</p>
+  </div>
+
+  <div class="login-card">
+    <h1 class="page-title">Xayr!</h1>
+    <p class="muted mb-4">Siz tizimdan muvaffaqiyatli chiqdingiz.</p>
+    <a class="btn btn-primary-custom btn-lg w-100 justify-content-center" href="{{ url('login') }}"><i class="bi bi-box-arrow-in-right" aria-hidden="true"></i> Qayta kirish</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,192 @@
+{% extends "xarid/base.html" %}
+{% from "xarid/_forms.html" import widget, errors, pdf_badge, required_mark with context %}
+{#
+The Qabul qilingan Arizalar page (REQ-ARIZA-006): accepted applications
+waiting to be given to a specialist, the ones already given (re-assignment
+is offered on the row), and the Ariza Yaratish form of section 4.2. One row
+per order line, with the application's own cells spanning its lines.
+#}
+{% block title %}Qabul Qilingan Arizalar{% endblock %}
+{% block breadcrumb %}Arizalar / Qabul Qilingan{% endblock %}
+{% block page_heading %}Qabul Qilingan{% endblock %}
+{% block content %}
+
+    <div class="page-header">
+      <div><h1 class="page-title">Qabul Qilingan Arizalar</h1><div class="muted">Accepted Applications + Employee Assignment</div></div>
+      <div class="page-actions">
+        <span class="role-tag role-admin">Admin</span>
+        <span class="role-tag role-manager">Manager</span>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:24px;">
+      <div class="toolbar"><div class="toolbar-group">
+        <button class="btn btn-primary-custom btn-sm" type="button" data-open-modal="create-modal"><i class="bi bi-plus-lg" aria-hidden="true"></i> Ariza Yaratish</button>
+        <span class="toolbar-label">Filter:</span>
+        <select class="form-control" id="f-bolim" style="width:150px;" disabled>
+          <option value="">Bo'lim: barchasi</option>
+        </select>
+        <select class="form-control" id="f-xodim" style="width:160px;" disabled>
+          <option value="">Tayinlangan xodim</option>
+        </select>
+        <input class="form-control" type="date" id="f-sana" style="width:140px;" disabled/>
+        <button class="btn btn-primary-custom btn-sm" disabled title="Filtrlash keyingi bosqichda"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
+        </div><div class="toolbar-group">
+          <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
+          <button class="btn btn-outline-custom btn-sm" disabled title="Eksport keyingi bosqichda"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table-app" id="qabul-table">
+          <thead><tr>
+            <th style="width:36px;">#</th>
+            <th>Ariza №</th>
+            <th>Bo'lim</th>
+            <th>Mahsulot Turi</th>
+            <th>Buyurtma nomi</th>
+            <th>Soni</th>
+            <th>O'lchov</th>
+            <th>PDF</th>
+            <th>Qabul qilingan sana</th>
+            <th>Tayinlangan xodim</th>
+            <th style="text-align:center;width:150px;">Amallar</th>
+          </tr></thead>
+          <tbody id="qabul-tbody">
+          {% for ariza in applications %}
+            {% set application_row = loop %}
+            {% set lines = ariza.items.all()|list %}
+            {% for qator in lines %}
+            <tr data-id="{{ ariza.pk }}">
+              {% if loop.first %}
+              <td rowspan="{{ lines|length }}">{{ application_row.index }}</td>
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.ariza_raqami }}</td>
+              <td rowspan="{{ lines|length }}">{{ ariza.department.name }}</td>
+              {% endif %}
+              <td style="font-size:11px;" class="mono-cell">{{ qator.mahsulot_turi.category_number }} — {{ qator.mahsulot_turi.name }}</td>
+              <td style="font-weight:500;">{{ qator.buyurtma_nomi }}</td>
+              <td style="font-weight:600;color:var(--color-primary);">{{ qator.soni_display }}</td>
+              <td>{{ qator.olchov_birligi }}</td>
+              {% if loop.first %}
+              <td rowspan="{{ lines|length }}">
+                {% if ariza.pdf %}{{ pdf_badge(url('xarid:ariza-pdf', ariza.pk), ariza.ariza_raqami ~ ".pdf") }}{% else %}<span class="muted small">—</span>{% endif %}
+              </td>
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.qabul_qilingan_sana|date("Y-m-d") }}</td>
+              <td rowspan="{{ lines|length }}">
+                {% if ariza.assigned_to %}
+                  <span class="badge badge-info">{{ display_name(ariza.assigned_to) }}</span>
+                {% else %}
+                  <select class="form-control" form="tayinlash-{{ ariza.pk }}" name="xodim" style="width:140px;padding:5px 8px;font-size:11px;" required>
+                    <option value="">— Tanlang —</option>
+                    {% for xodim in specialists %}<option value="{{ xodim.pk }}">{{ display_name(xodim) }}</option>{% endfor %}
+                  </select>
+                {% endif %}
+              </td>
+              <td style="text-align:center;white-space:nowrap;" rowspan="{{ lines|length }}">
+                {% if ariza.assigned_to %}
+                  <button type="button" class="btn btn-outline-custom btn-xs" data-modal-form="reassign-modal" data-action-url="{{ url('xarid:ariza-tayinlash', ariza.pk) }}" data-fill-ariza="{{ ariza.ariza_raqami }}" data-fill-xodim="{{ display_name(ariza.assigned_to) }}"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Qayta</button>
+                {% else %}
+                  <form method="post" id="tayinlash-{{ ariza.pk }}" action="{{ url('xarid:ariza-tayinlash', ariza.pk) }}" style="display:inline;">
+                    {{ csrf_input }}
+                    <button type="submit" class="btn btn-primary-custom btn-xs">Tayinlash</button>
+                  </form>
+                {% endif %}
+              </td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="11" class="muted" style="text-align:center;">Hozircha qabul qilingan ariza yo'q.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+{% endblock %}
+{% block scripts %}
+{# The creation form opens by itself when a refused submission comes back. #}
+<div id="create-modal" class="modal-overlay{% if not open_form %} hidden{% endif %}">
+  <div class="modal-box modal-lg" style="max-width:720px;">
+    <form method="post" action="{{ url('xarid:ariza-yaratish') }}" enctype="multipart/form-data">
+      {{ csrf_input }}
+      <div class="modal-title"><i class="bi bi-clipboard" aria-hidden="true"></i> Ariza Yaratish Formasi</div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Ariza Raqami</label>
+          <input type="text" class="form-control mono" value="Saqlashda beriladi" disabled/>
+          <div class="form-hint">Raqam saqlanganda avtomatik beriladi (DEC-022).</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Yaratilingan Sana</label>
+          <input type="text" class="form-control" value="{{ now('Y-m-d') }}" disabled/>
+        </div>
+      </div>
+
+      <div class="form-row">
+        {{ widget(form.department, "Bo'lim Nomi", required=true) }}
+        {{ widget(form.buyurtmachi_ismi, "Buyurtmachi Ismi", required=true) }}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Buyurtma qatorlari {{ required_mark() }}</label>
+        <div class="form-error">{{ item_formset.non_form_errors()|striptags }}</div>
+        {{ item_formset.management_form }}
+        <div id="item-rows-container">
+          {% for qator_form in item_formset %}
+          <div class="form-row-items-4" style="margin-bottom:10px;">
+            {{ qator_form.id }}
+            {{ widget(qator_form.mahsulot_turi, "Mahsulot Turi", compact=true) }}
+            {{ widget(qator_form.buyurtma_nomi, "Buyurtma Nomi", compact=true) }}
+            {{ widget(qator_form.buyurtma_soni, "Soni", compact=true) }}
+            {{ widget(qator_form.olchov_birligi, "O'lchov", compact=true) }}
+          </div>
+          {% endfor %}
+        </div>
+        <button type="button" class="btn btn-outline-custom btn-xs" data-add-row data-row-template="item-row-template" data-row-container="item-rows-container" data-total-forms="id_form-TOTAL_FORMS">+ Qator qo'shish</button>
+      </div>
+
+      <div style="margin-top:16px;">{{ widget(form.pdf, "Ilova (PDF)", required=true, hint="PDF, eng ko'pi bilan 10 MB (DEC-019).") }}</div>
+      {{ widget(form.izoh, "Izoh") }}
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-custom" data-close-modal="create-modal"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</button>
+        <button type="submit" class="btn btn-primary-custom"><i class="bi bi-check-lg" aria-hidden="true"></i> Yaratish</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# The row the plus button clones: Django's empty_form, with __prefix__ standing in for the index. #}
+<template id="item-row-template">
+  <div class="form-row-items-4" style="margin-bottom:10px;">
+    {{ item_formset.empty_form.id }}
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Mahsulot Turi</label>{{ item_formset.empty_form.mahsulot_turi }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Buyurtma Nomi</label>{{ item_formset.empty_form.buyurtma_nomi }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Soni</label>{{ item_formset.empty_form.buyurtma_soni }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">O'lchov</label>{{ item_formset.empty_form.olchov_birligi }}</div>
+  </div>
+</template>
+
+<div id="reassign-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <form method="post" id="reassign-form">
+      {{ csrf_input }}
+      <div class="modal-title"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Qayta tayinlash</div>
+      <p class="modal-desc muted">Ariza <span data-fill="ariza" class="mono-cell"></span> hozir <span data-fill="xodim"></span>da. Boshqa xodimga o'tkazish uchun tanlang.</p>
+      <div class="form-group">
+        <label class="form-label" for="reassign-select">Xodim {{ required_mark() }}</label>
+        <select class="form-control" id="reassign-select" name="xodim" required>
+          <option value="">— Tanlang —</option>
+          {% for xodim in specialists %}<option value="{{ xodim.pk }}">{{ display_name(xodim) }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-custom" data-close-modal="reassign-modal">Bekor qilish</button>
+        <button type="submit" class="btn btn-primary-custom">O'tkazish</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
