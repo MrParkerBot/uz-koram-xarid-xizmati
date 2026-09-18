@@ -44,6 +44,28 @@ def pdf_text(response) -> str:
     return "\n".join(page.extract_text() for page in PdfReader(BytesIO(response.content)).pages)
 
 
+def page_width(response) -> float:
+    """The width of the first page of a downloaded PDF, in points."""
+    return float(PdfReader(BytesIO(response.content)).pages[0].mediabox.width)
+
+
+def drawn_width(response) -> float:
+    """How far right anything is actually drawn on the first page.
+
+    Reportlab will happily draw a table wider than the paper, and the text
+    still extracts, so a download can read as complete while its last columns
+    are off the page. This is what says whether it is really there.
+    """
+    first = PdfReader(BytesIO(response.content)).pages[0]
+    positions: list[float] = []
+    first.extract_text(
+        visitor_text=lambda text, cm, tm, font, size: (
+            positions.append(tm[4]) if text.strip() else None
+        )
+    )
+    return max(positions, default=0.0)
+
+
 class ExportRouteTests(SignedInAdminTestCase):
     PAGES = ("kelib-arizalar", "qabul-arizalar", "tayinlangan", "kelishinlingan", "xarid-ariza")
 
@@ -387,6 +409,30 @@ class ReportExportTests(SignedInAdminTestCase):
         text = pdf_text(self.client.get(page("bolimlar-eksport", "pdf")))
 
         self.assertIn("Jami:", text)
+
+    def test_a_report_wider_than_the_page_is_narrowed_to_fit_it(self) -> None:
+        """DEC-010 lets anybody add a status, and a PDF cannot scroll.
+
+        Asserting the text is present is not enough: reportlab draws a table
+        at its natural width and pypdf reads that text back happily, off the
+        page and all. What matters is where it was drawn.
+        """
+        an_application(department=self.texnik)
+        for number in range(25):
+            ShartnomaStatus.objects.create(name=f"Holat {number}", badge_colour="blue")
+
+        response = self.client.get(page("bolimlar-eksport", "pdf"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(drawn_width(response), page_width(response))
+
+    def test_a_report_that_fits_is_not_narrowed(self) -> None:
+        an_application(department=self.texnik)
+
+        response = self.client.get(page("bolimlar-eksport", "pdf"))
+
+        self.assertLessEqual(drawn_width(response), page_width(response))
+        self.assertIn("Jami:", pdf_text(response))
 
     def test_a_type_the_matrix_refuses_cannot_download_either(self) -> None:
         manager = make_user("export.manager", user_type=MENEJER)
