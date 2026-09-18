@@ -8,7 +8,7 @@ tests move the marker and expect the figure to follow.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.test import TestCase
@@ -27,20 +27,35 @@ from xarid.filters import DatePeriod
 from xarid.models import (
     KATTA_MUTAXASIS,
     MENEJER,
+    Application,
     Contract,
+    ContractStatusChange,
     ShartnomaStatus,
     Supplier,
     deactivate,
 )
 from xarid.reports import (
+    APPROVAL,
+    DELIVERY,
+    INVOICE,
+    ORDER_ENTRY,
     SPENDINGS_PERIOD,
+    STAGE_SPANS,
     Money,
+    StageAverage,
+    completed_at,
     dashboard_indicators,
+    processing_times,
+    span_of,
     spending_indicators,
 )
 
 DELIVERED = "Yetkazib berilgan"
 DRAWN_UP = "Shartnoma tuzilgan"
+
+# A fixed moment the stage fixtures are dated from, so an average never
+# depends on when the suite happened to run.
+AT_NOON = timezone.make_aware(datetime(2026, 3, 2, 12, 0))
 
 # What money_display() groups thousands with: a non-breaking space, so that a
 # browser cannot wrap an amount across two lines.
@@ -387,3 +402,210 @@ class SpendingPageTests(SignedInAdminTestCase):
         )
 
         self.assertContains(response, "Davr boshlanishi tugashidan keyin")
+
+
+class ProcessingTimeTests(TestCase):
+    """The four stage averages (REQ-DASH-012, DEC-025)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.manager = make_user("stage.manager", user_type=MENEJER)
+        cls.specialist = make_user("stage.specialist", user_type=KATTA_MUTAXASIS)
+        cls.department = a_department()
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.delivered = ShartnomaStatus.objects.get(name=DELIVERED)
+        self.drawn_up = ShartnomaStatus.objects.get(name=DRAWN_UP)
+
+    def a_contract_processed(
+        self,
+        *,
+        arrived: datetime,
+        raised: datetime,
+        approved: datetime | None = None,
+        delivered: datetime | None = None,
+        invoiced: date | None = None,
+    ) -> Contract:
+        """One contract with its four moments written where the code reads them.
+
+        The arrival and the raising are auto_now_add columns, so they are
+        written after the fact; the delivery is a real status move whose
+        changed_at is then set to the moment asked for.
+        """
+        application = an_assigned_application(
+            self.manager, self.specialist, department=self.department
+        )
+        Application.objects.filter(pk=application.pk).update(kelib_tushgan_sana=arrived)
+        contract = a_contract(application, self.specialist)
+        Contract.objects.filter(pk=contract.pk).update(
+            yaratilingan_sana=raised,
+            tasdiqlangan_sana=approved,
+            invoice_sanasi=invoiced,
+        )
+        if delivered is not None:
+            contract.refresh_from_db()
+            contract.set_status(self.delivered, by=self.specialist)
+            ContractStatusChange.objects.filter(
+                contract=contract, to_status=self.delivered
+            ).update(changed_at=delivered)
+
+        return contract
+
+    def stage(self, label: str) -> StageAverage:
+        """One stage of the panel, by its name."""
+        return next(stage for stage in processing_times() if stage.label == label)
+
+    def test_the_four_stages_are_listed_in_the_documents_order(self) -> None:
+        self.assertEqual(
+            [stage.label for stage in processing_times()],
+            [ORDER_ENTRY, APPROVAL, DELIVERY, INVOICE],
+        )
+
+    def test_order_entry_is_the_arrival_to_the_contract_being_raised(self) -> None:
+        self.a_contract_processed(arrived=AT_NOON, raised=AT_NOON + timedelta(days=3))
+
+        entry = self.stage(ORDER_ENTRY)
+
+        self.assertEqual((entry.days, entry.measured_from), (3, 1))
+
+    def test_approval_is_measured_from_the_raising_not_the_last_send(self) -> None:
+        """DEC-024 overwrites yuborilgan_sana on a resend; the average must not follow it."""
+        contract = self.a_contract_processed(
+            arrived=AT_NOON,
+            raised=AT_NOON,
+            approved=AT_NOON + timedelta(days=10),
+        )
+        Contract.objects.filter(pk=contract.pk).update(
+            yuborilgan_sana=AT_NOON + timedelta(days=9)
+        )
+
+        approval = self.stage(APPROVAL)
+
+        self.assertEqual((approval.days, approval.measured_from), (10, 1))
+
+    def test_delivery_is_the_approval_to_the_first_arrival_at_completed(self) -> None:
+        self.a_contract_processed(
+            arrived=AT_NOON,
+            raised=AT_NOON,
+            approved=AT_NOON + timedelta(days=1),
+            delivered=AT_NOON + timedelta(days=8),
+        )
+
+        delivery = self.stage(DELIVERY)
+
+        self.assertEqual((delivery.days, delivery.measured_from), (7, 1))
+
+    def test_a_contract_that_left_completed_and_returned_counts_its_first_arrival(self) -> None:
+        contract = self.a_contract_processed(
+            arrived=AT_NOON,
+            raised=AT_NOON,
+            approved=AT_NOON,
+            delivered=AT_NOON + timedelta(days=4),
+        )
+        contract.refresh_from_db()
+        contract.set_status(self.drawn_up, by=self.specialist)
+        contract.set_status(self.delivered, by=self.specialist)
+
+        self.assertEqual(self.stage(DELIVERY).days, 4)
+
+    def test_invoice_is_the_delivery_to_the_date_on_the_contract(self) -> None:
+        self.a_contract_processed(
+            arrived=AT_NOON,
+            raised=AT_NOON,
+            approved=AT_NOON,
+            delivered=AT_NOON,
+            invoiced=AT_NOON.date() + timedelta(days=6),
+        )
+
+        invoice = self.stage(INVOICE)
+
+        self.assertEqual((invoice.days, invoice.measured_from), (6, 1))
+
+    def test_an_average_is_the_mean_of_what_completed_the_stage(self) -> None:
+        self.a_contract_processed(arrived=AT_NOON, raised=AT_NOON + timedelta(days=2))
+        self.a_contract_processed(arrived=AT_NOON, raised=AT_NOON + timedelta(days=4))
+        self.a_contract_processed(arrived=AT_NOON, raised=AT_NOON + timedelta(days=9))
+
+        entry = self.stage(ORDER_ENTRY)
+
+        self.assertEqual((entry.days, entry.measured_from), (5, 3))
+
+    def test_a_stage_nothing_completed_has_no_average_rather_than_zero(self) -> None:
+        self.a_contract_processed(arrived=AT_NOON, raised=AT_NOON + timedelta(days=1))
+
+        approval = self.stage(APPROVAL)
+
+        self.assertIsNone(approval.days)
+        self.assertFalse(approval.was_measured)
+        self.assertEqual(approval.measured_from, 0)
+
+    def test_a_contract_missing_one_end_is_left_out_of_that_stage_only(self) -> None:
+        self.a_contract_processed(
+            arrived=AT_NOON, raised=AT_NOON + timedelta(days=2), approved=None
+        )
+        self.a_contract_processed(
+            arrived=AT_NOON,
+            raised=AT_NOON + timedelta(days=2),
+            approved=AT_NOON + timedelta(days=6),
+        )
+
+        self.assertEqual(self.stage(ORDER_ENTRY).measured_from, 2)
+        self.assertEqual(self.stage(APPROVAL).measured_from, 1)
+        self.assertEqual(self.stage(APPROVAL).days, 4)
+
+    def test_nothing_at_all_leaves_every_stage_unmeasured(self) -> None:
+        for stage in processing_times():
+            with self.subTest(stage=stage.label):
+                self.assertIsNone(stage.days)
+                self.assertEqual(stage.measured_from, 0)
+
+    def test_the_deliveries_are_read_without_listing_every_contract(self) -> None:
+        """Two queries whatever the table holds, not one variable per contract.
+
+        One to find the status marked completed and one for every move into
+        it. SQLite refuses an IN list past its own parameter limit, so a
+        department with enough contracts would have got a dashboard that did
+        not render rather than a slow one.
+        """
+        for _ in range(3):
+            self.a_contract_processed(
+                arrived=AT_NOON, raised=AT_NOON, approved=AT_NOON, delivered=AT_NOON
+            )
+
+        with self.assertNumQueries(2):
+            arrivals = completed_at()
+
+        self.assertEqual(len(arrivals), 3)
+
+    def test_a_stage_with_no_span_recorded_still_says_which_stage_it_is(self) -> None:
+        self.assertIn("Tekshiruv", span_of("Tekshiruv"))
+
+
+class ProcessingTimePageTests(SignedInAdminTestCase):
+    """The panel as the page renders it."""
+
+    def test_the_panel_names_every_stage_and_what_it_spans(self) -> None:
+        response = self.client.get(page("dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        for label in (ORDER_ENTRY, APPROVAL, DELIVERY, INVOICE):
+            with self.subTest(stage=label):
+                self.assertContains(response, label)
+                self.assertContains(response, STAGE_SPANS[label])
+
+    def test_an_unmeasured_stage_prints_a_dash_rather_than_zero(self) -> None:
+        """The stage's own cell, rather than every em dash on the page."""
+        response = self.client.get(page("dashboard"))
+        rendered = response.content.decode()
+
+        for label in (ORDER_ENTRY, APPROVAL, DELIVERY, INVOICE):
+            with self.subTest(stage=label):
+                row = rendered.split(label, 1)[1].split("</tr>", 1)[0]
+                self.assertIn("&mdash;", row)
+                self.assertNotIn("badge-primary", row)
+
+    def test_the_contract_form_offers_the_invoice_date(self) -> None:
+        response = self.client.get(page("kelishinlingan"))
+
+        self.assertContains(response, 'name="invoice_sanasi"')
