@@ -80,7 +80,14 @@ option. Ko'rish and Yuborish are still waiting for later work.
                 <button class="btn btn-outline-custom btn-xs" disabled title="Ko'rish keyingi bosqichda"><i class="bi bi-eye" aria-hidden="true"></i></button>
               </td>
               <td style="text-align:center;" rowspan="{{ lines|length }}">
-                <button class="btn btn-primary-custom btn-xs" disabled title="Yuborish keyingi bosqichda">Yuborish</button>
+                {% if may_move_status(shartnoma) %}
+                <form method="post" action="{{ url('xarid:kelishinlingan-yuborish', shartnoma.pk) }}" data-confirm="{{ shartnoma.shartnoma_raqami }} tasdiqlashga yuborilsinmi?">
+                  {{ csrf_input }}
+                  <button type="submit" class="btn btn-primary-custom btn-xs">{{ shartnoma.send_label }}</button>
+                </form>
+                {% else %}
+                <span class="muted small">—</span>
+                {% endif %}
               </td>
               <td style="font-size:11px;color:var(--color-text-muted);" rowspan="{{ lines|length }}">{{ shartnoma.inkor_izohi or "—" }}</td>
               {% endif %}

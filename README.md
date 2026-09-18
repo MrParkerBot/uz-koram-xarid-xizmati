@@ -283,6 +283,35 @@ asked through the assignment rather than through who created the contract:
 DEC-024 lets an Admin re-assign at any time, and the contract goes with the
 work. Everybody else the matrix lets onto the page may move any of them.
 
+## Sending a contract for approval
+
+`Yuborish` on the `Kelishinlingan` page sends a contract to the department
+head. Sending takes it out of the specialist's hands, which takes it off that
+page - the page is the contracts still theirs to work on - so the message
+names where the contract went rather than only that it went: a row
+disappearing with no explanation is how somebody concludes they deleted
+something.
+
+A second send is refused, and the refusal says **which** refusal it is. A
+contract awaiting approval and one already approved are different answers, and
+being told the wrong one sends whoever reads it looking for a queue the
+contract left days ago.
+
+After a rejection the control reads **Re-Send** (DEC-024), and the contract may
+be corrected before it is resent. It is the same route: a resend is the same
+act again. The rejection comment is **not** cleared by a resend - the approver
+about to look at the contract again is the person most helped by seeing why it
+came back, and the stage is what says it has moved on.
+
+`yuborilgan_sana` and `yuborgan` hold the **last** send and are overwritten by
+a resend; `yuborishlar_soni` counts them, because the log TASK-UZK-052 will
+build cannot recover what was never recorded, and how many times a contract
+came back is the question the department will actually ask.
+
+Nothing is notified. The requirement names no notification, and
+`Notification`'s constraint names two kinds of record, neither of them a
+contract - a third would be building TASK-UZK-054's table early.
+
 ## Attachments
 
 Application PDFs live under `ATTACHMENT_ROOT` (`attachments/`, gitignored),

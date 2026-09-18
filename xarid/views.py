@@ -1773,3 +1773,42 @@ def contract_set_status(request: HttpRequest, pk: int) -> HttpResponse:
         )
 
     return redirect("xarid:kelishinlingan")
+
+
+@require_POST
+def contract_send_for_approval(request: HttpRequest, pk: int) -> HttpResponse:
+    """Send one contract to the department head (REQ-SHARTNOMA-005).
+
+    The message names where the contract went, not only that it went. Sending
+    takes it off this page, and a row disappearing with no explanation is how
+    somebody concludes they deleted something.
+    """
+    contract = get_object_or_404(Contract, pk=pk)
+
+    if not held_contract(request.user, contract):
+        messages.error(
+            request,
+            f"{contract.shartnoma_raqami} yuborilmadi: bu shartnoma sizning "
+            "ishingizga tegishli emas.",
+        )
+        return redirect("xarid:kelishinlingan")
+
+    try:
+        sent = contract.send_for_approval(by=request.user)
+    except ValueError as refusal:
+        messages.error(request, str(refusal))
+        return redirect("xarid:kelishinlingan")
+
+    if sent:
+        messages.success(
+            request,
+            f"{contract.shartnoma_raqami} tasdiqlashga yuborildi va "
+            "Tuzilgan Shartnomalar sahifasiga o`tdi.",
+        )
+    else:
+        messages.info(
+            request,
+            f"{contract.shartnoma_raqami} allaqachon tasdiqlashga yuborilgan.",
+        )
+
+    return redirect("xarid:kelishinlingan")
