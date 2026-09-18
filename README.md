@@ -218,8 +218,25 @@ page.
 That report is narrowed by its `Bo'lim` drop-down and by a period over the
 date an application arrived, which is the only date every application has.
 The drop-down offers only departments the report has a row for.
-A department name links to the Mahsulotlar page carrying `?bolim=<id>`; that
-page is still the supplied prototype and ignores it until UZK-047.
+A department name links to the Mahsulotlar page carrying `?bolim=<id>`, which
+that page honours.
+
+`Hisobotlar / Mahsulotlar` (Korhona xaridi | Mahsulotlar) is a list page
+rather than a counter report: one row per ordered product line, with its
+application, department, product type, quantity, unit, comment, the
+application PDF, the acceptance date and where the work has got to. It
+filters by department and product type, narrows by the date the application
+arrived, and downloads as Excel or PDF like every other list page.
+
+Its `Holati` column shows the status of the line's contract where there is
+one, and the application's own stage otherwise. The specification's flow ends
+in three contract statuses, and nothing in this codebase sets one yet
+(TASK-UZK-037), so a row cannot reach those states today; the flow above the
+table is drawn as a legend rather than as a claim about the rows.
+
+The PDF cell follows DEC-019: a link appears only where one would work. An
+application that has no attachment, or that was rejected and so is on no
+page, shows a dash instead of a link that would answer 403.
 
 ## Attachments
 
