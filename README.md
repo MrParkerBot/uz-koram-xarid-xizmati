@@ -51,6 +51,8 @@ supplied with the assignment, on SQLite, behind Django's own authentication.
 │   ├── admin.py              every model registered in the Django admin
 │   ├── permissions.py        who may open which page; contract editing
 │   ├── navigation.py         the sidebar
+│   ├── reports.py            the Hisobotlar counting: status columns, rows
+│   │                         and totals
 │   ├── attachments.py        PDF storage outside the web root; the QR stamp
 │   ├── jinja2.py             the template environment (url, static, date...)
 │   ├── migrations/           0001 schema, 0002 seeded master data
@@ -63,6 +65,7 @@ supplied with the assignment, on SQLite, behind Django's own authentication.
 └── tests/
     ├── support.py            fixtures shared by the test modules
     ├── test_models.py
+    ├── test_reports.py
     ├── test_views.py
     ├── test_urls.py
     └── test_auth.py
@@ -157,6 +160,31 @@ shows it, filtered or whole, in the order it shows it, one row per order
 line with the table's columns as headers (`xarid/exports.py`, routes `<page>/eksport/xlsx/` and
 `<page>/eksport/pdf/` under the page's own permission). An empty list still
 downloads a valid file with headers only.
+
+## Reports
+
+`Hisobotlar / Xodimlar Yuklamasi` counts what each specialist is carrying: a
+row per account that may be assigned purchase work - including one holding
+nothing, which is what the department head is reading the report for - their
+phone number, how many applications are assigned to them, and one counter per
+contract status, with a totals row that is the sum of each column.
+
+The status columns are generated from the active `Shartnoma Status` rows in
+their configured order, so adding a status adds a column and deactivating one
+removes it, with no code change (DEC-010). The five seeded statuses are
+examples, not a fixed set.
+
+An application is counted under **every** status it has a contract in, and
+once in its owner's assignment total. An application whose first contract was
+refused and whose replacement was signed therefore appears under both, and
+the counters may add up to more than the total: they say how much work stands
+in each state, which is the question the report answers. An application with
+no contract at all is counted in the total only.
+
+The period bar narrows by the date the assignment was made and behaves
+exactly as it does on the list pages, refusals included. There is no default
+period: the report opens on all time. The counting lives in
+`xarid/reports.py` and is one query per report, not one per status.
 
 ## Attachments
 

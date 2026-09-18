@@ -91,6 +91,7 @@ from xarid.permissions import (
     may_open,
     revoke_contract_editing,
 )
+from xarid.reports import staff_workload
 
 USERS_TEMPLATE = "xarid/pages/users.html"
 INCOMING_TEMPLATE = "xarid/pages/kelib-arizalar.html"
@@ -105,7 +106,6 @@ PURCHASE_TEMPLATE = "xarid/pages/xarid-ariza.html"
 PROTOTYPE_PAGE_TEMPLATES: dict[str, str] = {
     "dashboard": "xarid/index.html",
     "tuzilgan": "xarid/pages/tuzilgan.html",
-    "xodimlar-yuklamasi": "xarid/pages/xodimlar-yuklamasi.html",
     "bolimlar": "xarid/pages/bolimlar.html",
     "mahsulot-tur": "xarid/pages/mahsulot-tur.html",
     "mahsulotlar": "xarid/pages/mahsulotlar.html",
@@ -1410,3 +1410,34 @@ def purchase_export(request: HttpRequest, file_format: str) -> HttpResponse:
     )
     export = TableExport("xarid-ariza", PURCHASE_EXPORT_COLUMNS, lines_of(table_filter.apply()))
     return export_response(export, file_format)
+
+
+# ---------------------------------------------------------------------------
+# Hisobotlar
+# ---------------------------------------------------------------------------
+WORKLOAD_TEMPLATE = "xarid/pages/xodimlar-yuklamasi.html"
+
+# The report counts an assignment on the day it was made, so the period is
+# the one the Tayinlangan page filters by (REQ-YUKLAMA-001).
+WORKLOAD_PERIOD = DateColumn("Tayinlangan sana", "tayinlangan_sana")
+
+
+def staff_workload_report(request: HttpRequest) -> HttpResponse:
+    """Xodimlar yuklamasi: what each specialist is carrying (REQ-YUKLAMA-002).
+
+    The bar offers the period and nothing else: there is one row per
+    specialist already, so there is no column to narrow by.
+    """
+    table_filter = TableFilter(
+        (),
+        all_assigned_applications(),
+        request.GET,
+        date_column=WORKLOAD_PERIOD,
+    )
+    report_invalid_filters(request, table_filter)
+
+    return render(
+        request,
+        WORKLOAD_TEMPLATE,
+        {"report": staff_workload(table_filter.period), "table_filter": table_filter},
+    )
