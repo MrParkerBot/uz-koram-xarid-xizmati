@@ -107,7 +107,6 @@ PROTOTYPE_PAGE_TEMPLATES: dict[str, str] = {
     "dashboard": "xarid/index.html",
     "tuzilgan": "xarid/pages/tuzilgan.html",
     "mahsulot-tur": "xarid/pages/mahsulot-tur.html",
-    "mahsulotlar": "xarid/pages/mahsulotlar.html",
     "integration": "xarid/pages/integration.html",
     "logs": "xarid/pages/logs.html",
 }
@@ -472,6 +471,24 @@ BY_SPECIALIST = FilterColumn(
     label_fallback_lookup="assigned_to__username",
 )
 BY_STATUS = FilterColumn("holat", "Holati", "status_id", ("status__name",))
+
+# The Mahsulotlar report filters rows that are order lines rather than
+# applications, so the same two columns are reached by a different path. The
+# parameter names are the page's contract: the Bo`limlar report already links
+# here with ?bolim=<id> (TASK-UZK-045), and UZK-046's drill-down will use
+# ?mahsulot=<id>.
+BY_LINE_DEPARTMENT = FilterColumn(
+    "bolim",
+    "Bo'lim",
+    "application__department_id",
+    ("application__department__name",),
+)
+BY_LINE_CATEGORY = FilterColumn(
+    "mahsulot",
+    "Mahsulot turi",
+    "mahsulot_turi_id",
+    ("mahsulot_turi__name",),
+)
 BY_SUPPLIER = FilterColumn("firma", "Firma", "supplier_id", ("supplier__name",))
 
 # The period each list page narrows by and the ordering its drop-down offers
@@ -486,6 +503,9 @@ ASSIGNED_SORTS = newest_and_oldest_first(ASSIGNED_PERIOD.lookup)
 CONTRACT_PERIOD = DateColumn("Yaratilgan sana", "yaratilingan_sana")
 CONTRACT_SORTS = newest_and_oldest_first(CONTRACT_PERIOD.lookup)
 PURCHASE_PERIOD = DateColumn("Yaratilgan sana", "yaratilingan_sana")
+# The Mahsulotlar report narrows by the date its line's application
+# arrived, the one date every line has.
+PRODUCTS_PERIOD = DateColumn("Kelib tushgan sana", "application__kelib_tushgan_sana")
 PURCHASE_SORTS = newest_and_oldest_first(PURCHASE_PERIOD.lookup)
 
 INCOMING_FILTERS = (BY_DEPARTMENT, BY_ORDERED_CATEGORY)
@@ -493,6 +513,7 @@ ACCEPTED_FILTERS = (BY_DEPARTMENT, BY_SPECIALIST)
 ASSIGNED_FILTERS = (BY_DEPARTMENT, BY_STATUS)
 CONTRACT_FILTERS = (BY_SUPPLIER,)
 PURCHASE_FILTERS = (BY_ORDERED_CATEGORY,)
+PRODUCTS_FILTERS = (BY_LINE_DEPARTMENT, BY_LINE_CATEGORY)
 
 
 def filled_in_rows(formset, fields: tuple[str, ...]) -> list[dict[str, object]]:
@@ -1523,3 +1544,86 @@ def department_purchasing_export(request: HttpRequest, file_format: str) -> Http
     report = department_purchasing(table_filter.period, table_filter.fields[0].selected)
     export = report_export(report, "bolimlar", "Bo`lim Nomi", "Xarid topshiriqlari")
     return export_response(export, file_format)
+
+
+# ---------------------------------------------------------------------------
+# Korhona xaridi | Mahsulotlar
+# ---------------------------------------------------------------------------
+PRODUCTS_TEMPLATE = "xarid/pages/mahsulotlar.html"
+
+PRODUCTS_EXPORT_COLUMNS = (
+    ExportColumn("Ariza raqami", lambda ariza, line: ariza.ariza_raqami),
+    ExportColumn("Bo'lim", lambda ariza, line: ariza.department.name),
+    *ORDER_LINE_EXPORT_COLUMNS,
+    ExportColumn("Izoh", lambda ariza, line: ariza.izoh),
+    ExportColumn("Qabul qilingan sana", lambda ariza, line: local_date(ariza.qabul_qilingan_sana)),
+    ExportColumn("Holati", lambda ariza, line: ariza.current_status_label),
+)
+
+
+def product_lines() -> QuerySet[ApplicationItem]:
+    """Every ordered product line, newest application first (REQ-XARID-003).
+
+    One row per line rather than per application: this report is read to find
+    a product, not to work through a queue. Lines of a rejected application
+    are included - it was still asked for, and its row says so in the status
+    column - though DEC-019 keeps its attachment unreachable.
+    """
+    return (
+        ApplicationItem.objects.select_related(
+            "application",
+            "application__department",
+            "mahsulot_turi",
+        )
+        .prefetch_related("application__contracts__status")
+        .order_by("-application__kelib_tushgan_sana", "-application_id", "id")
+    )
+
+
+def products_filter(chosen: Mapping[str, str]) -> TableFilter:
+    """The Mahsulotlar bar, built once for the page and its download."""
+    return TableFilter(
+        PRODUCTS_FILTERS,
+        product_lines(),
+        chosen,
+        date_column=PRODUCTS_PERIOD,
+    )
+
+
+def products_list(request: HttpRequest) -> HttpResponse:
+    """Korhona xaridi | Mahsulotlar: every ordered line and where it stands."""
+    table_filter = products_filter(request.GET)
+    report_invalid_filters(request, table_filter)
+
+    return render(
+        request,
+        PRODUCTS_TEMPLATE,
+        {
+            "lines": table_filter.apply(),
+            "table_filter": table_filter,
+            # The row asks before drawing a link, so it never offers one that
+            # would answer 403.
+            "pdf_is_reachable": pdf_is_reachable,
+        },
+    )
+
+
+def products_export(request: HttpRequest, file_format: str) -> HttpResponse:
+    """Download the Mahsulotlar table, narrowed as the page is."""
+    lines = products_filter(request.GET).apply()
+    export = TableExport(
+        "mahsulotlar",
+        PRODUCTS_EXPORT_COLUMNS,
+        [(line.application, line) for line in lines],
+    )
+    return export_response(export, file_format)
+
+
+def pdf_is_reachable(application: Application) -> bool:
+    """Whether this application's PDF can still be downloaded (DEC-019).
+
+    An attachment follows the record: it is reachable while some page shows
+    the application, and a rejected one is on no page. The row renders a link
+    only when there is something behind it, rather than one that answers 403.
+    """
+    return bool(application.pdf) and application.stage in PAGE_SHOWING_STAGE

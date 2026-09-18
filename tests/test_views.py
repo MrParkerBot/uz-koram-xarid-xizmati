@@ -766,7 +766,6 @@ class PrototypePageTests(SignedInAdminTestCase):
             "dashboard",
             "tuzilgan",
             "mahsulot-tur",
-            "mahsulotlar",
             "integration",
             "logs",
         ):

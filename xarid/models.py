@@ -760,6 +760,24 @@ class Application(models.Model):
         return self.ariza_raqami
 
     @property
+    def current_status_label(self) -> str:
+        """Where this application has got to, as a report prints it.
+
+        The contract's status when a contract has been raised, because that is
+        the further along of the two, and the application's own stage
+        otherwise. A display helper: it reads state, it does not decide it,
+        and it is deliberately not the "application status follows the
+        contract" behaviour of TASK-UZK-037 and 033 - which is absent from
+        this codebase, so the statuses past Tayinlangan are unreachable until
+        that work lands. The report shows what is there rather than what the
+        specification's flow promises.
+        """
+        latest = self.contracts.order_by("-yaratilingan_sana", "-id").first()
+        if latest is not None and latest.status is not None:
+            return latest.status.name
+        return self.get_stage_display()
+
+    @property
     def is_incoming(self) -> bool:
         """Whether this application is still waiting to be decided."""
         return self.stage == self.Stage.INCOMING
