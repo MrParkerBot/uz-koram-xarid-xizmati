@@ -10,6 +10,8 @@ from __future__ import annotations
 from datetime import date
 from io import BytesIO
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from openpyxl import load_workbook
 
 from tests.support import (
@@ -214,6 +216,46 @@ class ProductsStatusTests(SignedInAdminTestCase):
         response = self.client.get(page("mahsulotlar"))
 
         self.assertContains(response, status.name)
+
+
+class ProductsQueryCountTests(SignedInAdminTestCase):
+    """The page must not pay per row for the status column."""
+
+    def rows_with_contracts(self, count: int) -> None:
+        status = ShartnomaStatus.objects.active().first()
+        for _ in range(count):
+            a_contract(an_accepted_application(self.admin), self.admin, status=status)
+
+    def queries_for_the_page(self) -> int:
+        with CaptureQueriesContext(connection) as captured:
+            self.client.get(page("mahsulotlar"))
+        return len(captured)
+
+    def test_the_page_costs_the_same_whatever_the_number_of_rows(self) -> None:
+        """A fresh order_by on a prefetched manager goes back to the database.
+
+        Contract.Meta already orders newest first, so current_status_label
+        reads the cache instead. Without that, this page cost two extra
+        queries for every row it showed.
+        """
+        self.rows_with_contracts(1)
+        one_row = self.queries_for_the_page()
+
+        self.rows_with_contracts(9)
+        ten_rows = self.queries_for_the_page()
+
+        self.assertEqual(ten_rows, one_row)
+
+    def test_the_download_costs_the_same_whatever_the_number_of_rows(self) -> None:
+        self.rows_with_contracts(1)
+        with CaptureQueriesContext(connection) as one_row:
+            self.client.get(page("mahsulotlar-eksport", "xlsx"))
+
+        self.rows_with_contracts(9)
+        with CaptureQueriesContext(connection) as ten_rows:
+            self.client.get(page("mahsulotlar-eksport", "xlsx"))
+
+        self.assertEqual(len(ten_rows), len(one_row))
 
 
 class ProductsExportTests(SignedInAdminTestCase):

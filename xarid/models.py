@@ -772,7 +772,11 @@ class Application(models.Model):
         that work lands. The report shows what is there rather than what the
         specification's flow promises.
         """
-        latest = self.contracts.order_by("-yaratilingan_sana", "-id").first()
+        # contracts.all() rather than a fresh order_by: Contract.Meta already
+        # orders newest first, and a queryset built here would ignore the
+        # prefetch a list page sets up and go to the database once per row.
+        contracts = list(self.contracts.all())
+        latest = contracts[0] if contracts else None
         if latest is not None and latest.status is not None:
             return latest.status.name
         return self.get_stage_display()
