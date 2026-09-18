@@ -221,6 +221,15 @@ The drop-down offers only departments the report has a row for.
 A department name links to the Mahsulotlar page carrying `?bolim=<id>`, which
 that page honours.
 
+`Hisobotlar / Mahsulot Turi` (Korhona xaridi | Mahsulot Turi) counts the same
+statuses per product type: a row per active type with its code, how many
+purchase applications ordered something of that type, and one counter per
+contract status, under the same totals row. A type is reached through the
+order lines that name it, so the counts are distinct - an application
+ordering two things of one type counts once for that type, and one ordering
+two types counts once under each. `Ko'rish` opens the Mahsulotlar page
+filtered to that type.
+
 `Hisobotlar / Mahsulotlar` (Korhona xaridi | Mahsulotlar) is a list page
 rather than a counter report: one row per ordered product line, with its
 application, department, product type, quantity, unit, comment, the

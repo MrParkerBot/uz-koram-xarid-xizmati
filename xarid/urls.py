@@ -51,6 +51,7 @@ contracts = require_page_permission("kelishinlingan")
 workload = require_page_permission("xodimlar-yuklamasi")
 departments_report = require_page_permission("bolimlar")
 products_report = require_page_permission("mahsulotlar")
+category_report = require_page_permission("mahsulot-tur")
 purchases = require_page_permission("xarid-ariza")
 
 urlpatterns = [
@@ -175,6 +176,16 @@ urlpatterns = [
         departments_report(views.department_purchasing_export),
         name="bolimlar-eksport",
     ),
+    path(
+        "mahsulot-tur/",
+        category_report(views.category_purchasing_report),
+        name="mahsulot-tur",
+    ),
+    path(
+        "mahsulot-tur/eksport/<str:file_format>/",
+        category_report(views.category_purchasing_export),
+        name="mahsulot-tur-eksport",
+    ),
     path("mahsulotlar/", products_report(views.products_list), name="mahsulotlar"),
     path(
         "mahsulotlar/eksport/<str:file_format>/",
@@ -183,7 +194,6 @@ urlpatterns = [
     ),
     # The pages that are still the supplied prototype.
     prototype_route("tuzilgan/", "tuzilgan"),
-    prototype_route("mahsulot-tur/", "mahsulot-tur"),
     prototype_route("integration/", "integration"),
     prototype_route("logs/", "logs"),
     # Yuklab olish: each list page's table as Excel or PDF, under the page's

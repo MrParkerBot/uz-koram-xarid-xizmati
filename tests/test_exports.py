@@ -293,7 +293,7 @@ class ReportExportTests(SignedInAdminTestCase):
     and filtered data in Excel and PDF.
     """
 
-    REPORTS = ("xodimlar-yuklamasi", "bolimlar")
+    REPORTS = ("xodimlar-yuklamasi", "bolimlar", "mahsulot-tur")
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -433,6 +433,18 @@ class ReportExportTests(SignedInAdminTestCase):
 
         self.assertLessEqual(drawn_width(response), page_width(response))
         self.assertIn("Jami:", pdf_text(response))
+
+
+    def test_the_type_report_downloads_its_rows_and_totals(self) -> None:
+        category = a_category(100042, "Metallurgiya")
+        an_application(category=category)
+
+        rows = workbook_rows(self.client.get(page("mahsulot-tur-eksport", "xlsx")))
+
+        self.assertEqual(rows[0][:4], ["#", "Mahsulot Turi", "Kodi", "Xarid topshiriqlari"])
+        self.assertIn("Metallurgiya", [row[1] for row in rows])
+        self.assertEqual(rows[-1][1], "Jami:")
+        self.assertEqual(rows[-1][3], 1)
 
     def test_a_type_the_matrix_refuses_cannot_download_either(self) -> None:
         manager = make_user("export.manager", user_type=MENEJER)

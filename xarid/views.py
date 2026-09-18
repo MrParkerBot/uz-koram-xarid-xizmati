@@ -91,7 +91,12 @@ from xarid.permissions import (
     may_open,
     revoke_contract_editing,
 )
-from xarid.reports import department_purchasing, report_export, staff_workload
+from xarid.reports import (
+    category_purchasing,
+    department_purchasing,
+    report_export,
+    staff_workload,
+)
 
 USERS_TEMPLATE = "xarid/pages/users.html"
 INCOMING_TEMPLATE = "xarid/pages/kelib-arizalar.html"
@@ -106,7 +111,6 @@ PURCHASE_TEMPLATE = "xarid/pages/xarid-ariza.html"
 PROTOTYPE_PAGE_TEMPLATES: dict[str, str] = {
     "dashboard": "xarid/index.html",
     "tuzilgan": "xarid/pages/tuzilgan.html",
-    "mahsulot-tur": "xarid/pages/mahsulot-tur.html",
     "integration": "xarid/pages/integration.html",
     "logs": "xarid/pages/logs.html",
 }
@@ -1627,3 +1631,70 @@ def pdf_is_reachable(application: Application) -> bool:
     only when there is something behind it, rather than one that answers 403.
     """
     return bool(application.pdf) and application.stage in PAGE_SHOWING_STAGE
+
+# ---------------------------------------------------------------------------
+# Korhona xaridi | Mahsulot Turi
+# ---------------------------------------------------------------------------
+CATEGORY_REPORT_TEMPLATE = "xarid/pages/mahsulot-tur.html"
+
+# The type report counts an application from the day it arrived, the same
+# date the departments report uses, so the two agree over one period.
+# The path from a product type to the date its application arrived. Unlike the
+# other two reports, this bar's rows are the subject itself rather than the
+# applications being counted, so the column carries the whole path: that way
+# the bar can narrow its own rows as every other bar in the application can,
+# instead of holding a period it would raise on.
+CATEGORY_REPORT_PERIOD = DateColumn(
+    "Kelib tushgan sana", "application_items__application__kelib_tushgan_sana"
+)
+
+# The type drop-down reads the types that are actually on an order line, and
+# posts back the parameter the Mahsulotlar page filters by - the same one the
+# Ko`rish link carries.
+BY_ITEM_CATEGORY = FilterColumn(
+    "mahsulot",
+    "Mahsulot turi",
+    "pk",
+    ("name",),
+)
+
+
+def category_report_filter(chosen: Mapping[str, str]) -> TableFilter:
+    """The Mahsulot Turi bar, built once for the page and its download."""
+    return TableFilter(
+        (BY_ITEM_CATEGORY,),
+        MahsulotTuri.objects.active(),
+        chosen,
+        date_column=CATEGORY_REPORT_PERIOD,
+    )
+
+
+def category_purchasing_report(request: HttpRequest) -> HttpResponse:
+    """Korhona xaridi | Mahsulot Turi: what is bought of each product type."""
+    table_filter = category_report_filter(request.GET)
+    report_invalid_filters(request, table_filter)
+
+    return render(
+        request,
+        CATEGORY_REPORT_TEMPLATE,
+        {
+            "report": category_purchasing(
+                table_filter.period, table_filter.fields[0].selected
+            ),
+            "table_filter": table_filter,
+        },
+    )
+
+
+def category_purchasing_export(request: HttpRequest, file_format: str) -> HttpResponse:
+    """Download the Mahsulot Turi table, narrowed as the page is."""
+    table_filter = category_report_filter(request.GET)
+    report = category_purchasing(table_filter.period, table_filter.fields[0].selected)
+    export = report_export(
+        report,
+        "mahsulot-tur",
+        "Mahsulot Turi",
+        "Xarid topshiriqlari",
+        detail_label="Kodi",
+    )
+    return export_response(export, file_format)
