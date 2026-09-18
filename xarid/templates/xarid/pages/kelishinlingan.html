@@ -39,6 +39,7 @@ option. Ko'rish and Yuborish are still waiting for later work.
             <th>Kim tuzdi</th>
             <th>Yaratilgan</th>
             <th>Qiymati (UZS)</th>
+            <th style="width:210px;">Holati</th>
             <th style="text-align:center;width:60px;">Ko'rish</th>
             <th style="text-align:center;width:100px;">Yuborish</th>
             <th>Izoh</th>
@@ -61,6 +62,20 @@ option. Ko'rish and Yuborish are still waiting for later work.
               <td rowspan="{{ lines|length }}">{{ display_name(shartnoma.created_by) }}</td>
               <td class="mono-cell" rowspan="{{ lines|length }}">{{ shartnoma.yaratilingan_sana|date("Y-m-d") }}</td>
               <td style="font-weight:600;color:var(--color-primary);" rowspan="{{ lines|length }}">{{ shartnoma.qiymati_display }}</td>
+              <td rowspan="{{ lines|length }}">
+                {% if shartnoma.status %}<span class="badge {{ shartnoma.status.badge_class }}">{{ shartnoma.status.name }}</span>{% else %}<span class="muted small">Holat belgilanmagan</span>{% endif %}
+                {% set oxirgi = shartnoma.last_status_change %}
+                {% if oxirgi %}<div class="muted small" style="margin-top:4px;">{{ display_name(oxirgi.changed_by) }} · {{ oxirgi.changed_at|date("Y-m-d H:i") }}</div>{% endif %}
+                {% if may_move_status(shartnoma) and shartnoma_statuslari %}
+                <form method="post" action="{{ url('xarid:kelishinlingan-holat', shartnoma.pk) }}" style="display:flex;gap:4px;margin-top:6px;">
+                  {{ csrf_input }}
+                  <select class="form-control" name="holat" style="width:130px;" aria-label="{{ shartnoma.shartnoma_raqami }} holati">
+                    {% for holat in shartnoma_statuslari %}<option value="{{ holat.pk }}"{% if shartnoma.status_id == holat.pk %} selected{% endif %}>{{ holat.name }}</option>{% endfor %}
+                  </select>
+                  <button type="submit" class="btn btn-outline-custom btn-xs">Saqlash</button>
+                </form>
+                {% endif %}
+              </td>
               <td style="text-align:center;" rowspan="{{ lines|length }}">
                 <button class="btn btn-outline-custom btn-xs" disabled title="Ko'rish keyingi bosqichda"><i class="bi bi-eye" aria-hidden="true"></i></button>
               </td>
@@ -72,7 +87,7 @@ option. Ko'rish and Yuborish are still waiting for later work.
             </tr>
             {% endfor %}
           {% else %}
-            <tr><td colspan="12" class="muted" style="text-align:center;">Hozircha kelishinlingan shartnoma yo'q.</td></tr>
+            <tr><td colspan="13" class="muted" style="text-align:center;">Hozircha kelishinlingan shartnoma yo'q.</td></tr>
           {% endfor %}
           </tbody>
         </table>
