@@ -87,11 +87,11 @@ from xarid.models import (
 from xarid.permissions import (
     acts_on_own_work_only,
     contract_editor,
-    contract_mover,
     first_page_for,
     grant_contract_editing,
     held_contract,
     may_open,
+    own_contract_test,
     revoke_contract_editing,
 )
 from xarid.reports import (
@@ -982,7 +982,7 @@ def contract_page(
         "contracts": table_filter.apply(),
         "table_filter": table_filter,
         "shartnoma_statuslari": ShartnomaStatus.objects.active(),
-        "may_move_status": contract_mover(user),
+        "is_own_contract": own_contract_test(user),
         "form": (
             form
             if form is not None
