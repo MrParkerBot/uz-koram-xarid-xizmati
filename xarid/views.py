@@ -1639,9 +1639,14 @@ CATEGORY_REPORT_TEMPLATE = "xarid/pages/mahsulot-tur.html"
 
 # The type report counts an application from the day it arrived, the same
 # date the departments report uses, so the two agree over one period.
-# The lookup is the bare field: category_purchasing supplies the path from a
-# product type to the application, the way the departments report does.
-CATEGORY_REPORT_PERIOD = DateColumn("Kelib tushgan sana", "kelib_tushgan_sana")
+# The path from a product type to the date its application arrived. Unlike the
+# other two reports, this bar's rows are the subject itself rather than the
+# applications being counted, so the column carries the whole path: that way
+# the bar can narrow its own rows as every other bar in the application can,
+# instead of holding a period it would raise on.
+CATEGORY_REPORT_PERIOD = DateColumn(
+    "Kelib tushgan sana", "application_items__application__kelib_tushgan_sana"
+)
 
 # The type drop-down reads the types that are actually on an order line, and
 # posts back the parameter the Mahsulotlar page filters by - the same one the
