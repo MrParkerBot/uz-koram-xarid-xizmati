@@ -113,6 +113,7 @@ from xarid.reports import (
     report_export,
     spending_indicators,
     staff_workload,
+    supplier_categories,
     top_suppliers,
 )
 
@@ -152,14 +153,16 @@ def dashboard(request: HttpRequest) -> HttpResponse:
     figure a fortnight has an answer for - which is why the cards and the
     panel say what each figure covers.
 
-    The category breakdown, the charts and the activity list are still the
-    supplied prototype's own numbers, and are UZK-057 and UZK-052.
+    The spendings chart and the activity list are still the supplied
+    prototype's own numbers; the activity list is UZK-052's log, which has a
+    page of its own.
     """
     # The bar offers no column filters and no ordering, so it is built for
     # its period and its rendering alone; spending_indicators() applies that
     # period to its own query, and nothing calls table_filter.apply().
     table_filter = TableFilter((), dated_contracts(), request.GET, date_column=SPENDINGS_PERIOD)
     report_invalid_filters(request, table_filter)
+    categories = supplier_categories()
 
     return render(
         request,
@@ -169,6 +172,10 @@ def dashboard(request: HttpRequest) -> HttpResponse:
             "spendings": spending_indicators(table_filter.period),
             "stages": processing_times(),
             "top_suppliers": top_suppliers(table_filter.period, limit=DASHBOARD_TOP_SUPPLIERS),
+            "categories": categories,
+            "category_chart": [
+                {"label": row.category.name, "firms": row.firms} for row in categories.rows
+            ],
             "table_filter": table_filter,
         },
     )
