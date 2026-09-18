@@ -222,7 +222,7 @@ urlpatterns = [
         name="tuzilgan-inkor",
     ),
     prototype_route("integration/", "integration"),
-    prototype_route("logs/", "logs"),
+    path("logs/", require_page_permission("logs")(views.logs_page), name="logs"),
     # Yuklab olish: each list page's table as Excel or PDF, under the page's
     # own permission and with the page's own filters (REQ-ARIZA-002).
     path(

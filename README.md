@@ -76,9 +76,14 @@ a dash, not nought days.
   department head and then to the director (DEC-016) - gets a second entry
   rather than having the first approver overwritten, because the columns
   hold one approver. Writes made through the admin, a shell or a migration
-  are not logged. The Logs page that reads this table is UZK-053.
-- **Drafted contracts and 1C integration** are still the supplied prototype
-  pages with sample data.
+  are not logged.
+- **The Logs page** (`Tizim / Logs`) lists those entries newest first with the
+  nine columns section 10 names and a drop-down per column - user, department,
+  form, action - beside the period. An entry nobody has decided leaves its
+  four approval cells empty rather than labelling them. There is no export:
+  section 10 is the one page that does not ask for one (DEC-029).
+- **Drafted contracts and the 1C integration screen** are still the supplied
+  prototype pages with sample data.
 
 ## Project structure
 

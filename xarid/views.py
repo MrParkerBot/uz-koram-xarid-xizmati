@@ -67,6 +67,7 @@ from xarid.models import (
     Application,
     ApplicationItem,
     ArizaStatus,
+    AuditEntry,
     Contract,
     ContractItem,
     ContractStatusChange,
@@ -121,11 +122,11 @@ ASSIGNED_TEMPLATE = "xarid/pages/tayinlangan.html"
 AGREED_CONTRACTS_TEMPLATE = "xarid/pages/kelishinlingan.html"
 PURCHASE_TEMPLATE = "xarid/pages/xarid-ariza.html"
 
-# The pages that are still the supplied prototype: the two system pages. Each
-# is a template with no data behind it yet, served under its own permission.
+# The page that is still the supplied prototype: the 1C integration screen,
+# which stays mocked until an API specification is supplied. A template with
+# no data behind it, served under its own permission.
 PROTOTYPE_PAGE_TEMPLATES: dict[str, str] = {
     "integration": "xarid/pages/integration.html",
-    "logs": "xarid/pages/logs.html",
 }
 
 DASHBOARD_TEMPLATE = "xarid/index.html"
@@ -203,6 +204,78 @@ def top_suppliers_page(request: HttpRequest) -> HttpResponse:
         TOP_SUPPLIERS_TEMPLATE,
         {
             "ranking": top_suppliers(table_filter.period, table_filter.fields[0].selected),
+            "table_filter": table_filter,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# The Logs page (section 10, REQ-LOG-001)
+# ---------------------------------------------------------------------------
+
+LOGS_TEMPLATE = "xarid/pages/logs.html"
+
+# The period narrows by when the thing happened, which is the entry's own
+# Sana/Soat column.
+LOGS_PERIOD = DateColumn("Sana/Soat", "created_at")
+
+# One drop-down per column REQ-LOG-001 asks to filter by. The action's
+# options are the stored values, which are the English words section 10's
+# own column header uses: Created, Deleted, Edited.
+LOGS_FILTERS = (
+    FilterColumn(
+        parameter="foydalanuvchi",
+        label="Foydalanuvchi",
+        value_lookup="actor_id",
+        label_lookups=("actor__first_name", "actor__last_name"),
+        label_fallback_lookup="actor__username",
+    ),
+    FilterColumn(
+        parameter="bolim",
+        label="Bo`lim",
+        value_lookup="actor_department_id",
+        label_lookups=("actor_department__name",),
+    ),
+    FilterColumn(
+        parameter="forma",
+        label="Forma",
+        value_lookup="form_name",
+        label_lookups=("form_name",),
+    ),
+    FilterColumn(
+        parameter="amal",
+        label="Amal",
+        value_lookup="action",
+        label_lookups=("action",),
+    ),
+)
+
+
+def logged_events() -> QuerySet:
+    """Every entry, newest first, with the people and departments joined."""
+    return AuditEntry.objects.select_related(
+        "actor", "actor_department", "approver", "approver_department"
+    )
+
+
+def logs_page(request: HttpRequest) -> HttpResponse:
+    """The Logs page: what the application did, and who did it.
+
+    Reads the table TASK-UZK-052 writes. Nothing on this page writes to it:
+    DEC-029 keeps entries indefinitely and gives the application no way to
+    edit or delete one, and no export - section 10 is the one page that does
+    not ask for a download.
+    """
+    table_filter = TableFilter(LOGS_FILTERS, logged_events(), request.GET, date_column=LOGS_PERIOD)
+    report_invalid_filters(request, table_filter)
+    entries = table_filter.apply()
+
+    return render(
+        request,
+        LOGS_TEMPLATE,
+        {
+            "entries": entries,
+            "entry_count": entries.count(),
             "table_filter": table_filter,
         },
     )
