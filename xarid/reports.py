@@ -475,25 +475,34 @@ class DashboardIndicators:
     completed: Indicator
 
 
-def as_percentage_of(count: int, supplier_count: int) -> Indicator:
-    """One indicator: a count, and what it is as a percentage of the suppliers.
+def whole_percent(part: Decimal | int, whole: Decimal | int) -> int:
+    """`part` as a percentage of `whole`, to the nearest whole percent.
 
-    A department with no suppliers on file is not an error - it is a database
-    nobody has filled in yet - so the percentage is zero rather than a
-    division.
+    Zero when there is nothing to measure against, rather than a division: a
+    database nobody has filled in yet is not an error.
 
-    A half rounds up, which is the arithmetic somebody checking the card by
+    A half rounds up, which is the arithmetic somebody checking the figure by
     hand will have done. Python's own round() would send 12.5% down to 12 and
     13.5% up to 14, which is defensible statistics and an odd thing to have to
-    explain to the department.
+    explain to the department. Every percentage on the dashboard comes through
+    here, so there is one answer to "how does this round" rather than one per
+    panel.
     """
-    if not supplier_count:
-        return Indicator(count=count, measured_against=supplier_count, percentage=0)
+    if not whole:
+        return 0
 
-    exact = Decimal(count * 100) / Decimal(supplier_count)
-    whole = int(exact.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    exact = Decimal(part) * 100 / Decimal(whole)
 
-    return Indicator(count=count, measured_against=supplier_count, percentage=whole)
+    return int(exact.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def as_percentage_of(count: int, supplier_count: int) -> Indicator:
+    """One indicator: a count, and what it is as a percentage of the suppliers."""
+    return Indicator(
+        count=count,
+        measured_against=supplier_count,
+        percentage=whole_percent(count, supplier_count),
+    )
 
 
 def dashboard_indicators() -> DashboardIndicators:
@@ -886,6 +895,13 @@ def top_suppliers(
     with, and padding the list with zeros would push the firms the page is
     read for further down it.
 
+    A deleted firm is still ranked, unlike the dashboard's supplier count,
+    which leaves it out. The two are asking different questions: the count is
+    how many firms the department has, which a deleted one is not, and this
+    is what the department spent, which a deletion does not unspend. Deleting
+    a firma deactivates it (DEC-009), and money already paid to it stays in
+    its own row rather than vanishing from the ranking's totals.
+
     Args:
         period: the period chosen in the bar, applied to the contract's
             accounting date exactly as the dashboard's spend is. None, or a
@@ -912,8 +928,15 @@ def top_suppliers(
     if limit is not None:
         totalled = totalled[:limit]
 
-    rows = list(totalled)
-    suppliers = Supplier.objects.in_bulk([row["supplier"] for row in rows])
+    counted = list(totalled)
+    suppliers = Supplier.objects.in_bulk([row["supplier"] for row in counted])
+
+    # Every row resolves: Contract.supplier is PROTECT, so a firm holding a
+    # contract cannot be deleted from under it. One that somehow does not is
+    # dropped here rather than raising a KeyError out of a report - and
+    # dropped before the places are handed out, so the ranking cannot come
+    # back numbered 1, 3, 4.
+    rows = [row for row in counted if row["supplier"] in suppliers]
     leader = rows[0]["qiymat"] if rows else NOTHING
 
     return tuple(
@@ -922,7 +945,7 @@ def top_suppliers(
             supplier=suppliers[row["supplier"]],
             contracts=row["soni"],
             total=Money(row["qiymat"]),
-            share_of_leader=round(row["qiymat"] * 100 / leader) if leader else 0,
+            share_of_leader=whole_percent(row["qiymat"], leader),
         )
         for place, row in enumerate(rows, start=1)
     )

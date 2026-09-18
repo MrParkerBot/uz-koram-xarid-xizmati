@@ -48,6 +48,11 @@ _SECTION_11_SENIOR_SPECIALIST = frozenset({"tayinlangan", "kelishinlingan", "xar
 # the matrix was written from it. It is granted to the types that may open the
 # dashboard, because REQ-DASH-005 makes it the page the dashboard's own Top
 # suppliers panel links to - the same figures, with room for all of them.
+#
+# That leaves Bo`lim Boshlig`i out, although they read the three Korhona
+# xaridi reports: those say what the enterprise buys, and this says who it
+# buys from and for how much, which DEC-015 only ever showed to the types
+# holding the dashboard. It is the boundary most worth confirming.
 
 # The three "Korhona xaridi" reports, which DEC-015 names as a group.
 _ENTERPRISE_PURCHASE_REPORTS = frozenset({"bolimlar", "mahsulot-tur", "mahsulotlar"})
