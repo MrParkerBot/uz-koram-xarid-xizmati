@@ -190,6 +190,11 @@ def staff_workload(period: DatePeriod | None) -> Report:
     holds any: an employee with nothing to do is what the department head is
     reading the report for, not an omission.
 
+    The busiest specialist comes first, as the departments report puts the
+    busiest department first: both pages are read to find where the load is,
+    and they should answer that the same way. A tie breaks by name, so two
+    requests agree on the order.
+
     Args:
         period: the period chosen in the filter bar, which narrows by the
             date an application was assigned. None, or a period that was
@@ -209,6 +214,7 @@ def staff_workload(period: DatePeriod | None) -> Report:
                 columns, ASSIGNED_APPLICATIONS, ASSIGNED_CONTRACT_STATUS, inside_period
             ),
         )
+        .order_by("-topshiriqlar", "first_name", "last_name", "username")
     )
 
     rows = tuple(
