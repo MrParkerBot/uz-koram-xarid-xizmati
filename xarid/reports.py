@@ -19,21 +19,27 @@ report is read for, and they may sum to more than the total.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from datetime import date, datetime
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.contrib.auth.models import AbstractBaseUser
-from django.db.models import Count, Q
+from django.db.models import Count, DateField, Q, QuerySet, Sum
+from django.db.models.functions import Coalesce, TruncDate
+from django.utils import timezone
 
 from xarid.exports import ExportColumn, TableExport
-from xarid.filters import DatePeriod
+from xarid.filters import DateColumn, DatePeriod
 from xarid.models import (
     Contract,
+    ContractStatusChange,
     Department,
     MahsulotTuri,
     ShartnomaStatus,
     Supplier,
     assignable_specialists,
+    money_display,
 )
 
 # The ORM path from a specialist to one of their assigned applications, and
@@ -475,9 +481,19 @@ def as_percentage_of(count: int, supplier_count: int) -> Indicator:
     A department with no suppliers on file is not an error - it is a database
     nobody has filled in yet - so the percentage is zero rather than a
     division.
+
+    A half rounds up, which is the arithmetic somebody checking the card by
+    hand will have done. Python's own round() would send 12.5% down to 12 and
+    13.5% up to 14, which is defensible statistics and an odd thing to have to
+    explain to the department.
     """
-    percentage = round(count * 100 / supplier_count) if supplier_count else 0
-    return Indicator(count=count, measured_against=supplier_count, percentage=percentage)
+    if not supplier_count:
+        return Indicator(count=count, measured_against=supplier_count, percentage=0)
+
+    exact = Decimal(count * 100) / Decimal(supplier_count)
+    whole = int(exact.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+    return Indicator(count=count, measured_against=supplier_count, percentage=whole)
 
 
 def dashboard_indicators() -> DashboardIndicators:
@@ -506,4 +522,301 @@ def dashboard_indicators() -> DashboardIndicators:
         supplier_count=supplier_count,
         created=as_percentage_of(contracts.count(), supplier_count),
         completed=as_percentage_of(completed_count, supplier_count),
+    )
+
+
+# ---------------------------------------------------------------------------
+# The dashboard spendings (section 2, REQ-DASH-008 and REQ-DASH-010)
+# ---------------------------------------------------------------------------
+
+# The date a contract is accounted under: the date on the contract itself,
+# and where there is none the day it was raised. The entry form requires the
+# contract date, but the column allows null - a contract loaded some other
+# way must still be counted somewhere rather than falling out of every total.
+ACCOUNTING_DATE = "hisob_sanasi"
+
+# The period bar the dashboard offers, narrowing by that date.
+SPENDINGS_PERIOD = DateColumn("Shartnoma sanasi", ACCOUNTING_DATE, carries_time=False)
+
+NOTHING = Decimal("0")
+
+# What money_display() puts between the soums and the tiyin.
+DECIMAL_SEPARATOR = ","
+
+
+def dated_contracts() -> QuerySet:
+    """Every contract, carrying the date its money is accounted under."""
+    return Contract.objects.annotate(
+        **{
+            ACCOUNTING_DATE: Coalesce(
+                "shartnoma_sanasi",
+                TruncDate("yaratilingan_sana"),
+                output_field=DateField(),
+            )
+        }
+    )
+
+
+@dataclass(frozen=True)
+class Money:
+    """An amount of soums, and the two ways the dashboard prints it.
+
+    Attributes:
+        amount: the exact total, in UZS (DEC-026).
+    """
+
+    amount: Decimal
+
+    @property
+    def display(self) -> str:
+        """The exact amount, grouped: 1 240 000 000,00."""
+        return money_display(self.amount)
+
+    @property
+    def whole_display(self) -> str:
+        """The amount to the soum, for a headline with no room for tiyin.
+
+        The same grouping as `display`, with the tiyin removed - and removed
+        by taking what money_display() put before its decimal separator, or
+        the whole of it when there is none. A card whose only figure silently
+        rendered as an empty string would be the one failure nobody reports.
+        """
+        whole = self.amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        grouped = money_display(whole)
+        soums, separator, _tiyin = grouped.rpartition(DECIMAL_SEPARATOR)
+
+        return soums if separator else grouped
+
+
+@dataclass(frozen=True)
+class SpendingIndicators:
+    """What the department committed, in the chosen period and in the year.
+
+    Attributes:
+        period: the total inside the period the reader chose, or everything
+            on file when no period was chosen.
+        year: the total agreed across the current calendar year, which the
+            period never narrows.
+        year_number: the calendar year `year` covers, so the card can name it.
+    """
+
+    period: Money
+    year: Money
+    year_number: int
+
+
+def total_value_of(contracts: QuerySet) -> Money:
+    """What these contracts come to. An empty set is 0,00, not nothing."""
+    return Money(contracts.aggregate(total=Sum("qiymati"))["total"] or NOTHING)
+
+
+def spending_indicators(period: DatePeriod | None) -> SpendingIndicators:
+    """The spend inside the period and the year's agreed total.
+
+    Both are sums of Contract.qiymati, which is the value of the goods rows
+    (REQ-SHARTNOMA-006) and is held in UZS (DEC-026). Every contract counts:
+    nothing in this system records money as unspent, so a contract that was
+    rejected is still money the department committed on paper, and the
+    acceptance criterion asks for the sum of contract values in the period.
+
+    The yearly figure ignores the period deliberately - the specification
+    asks for the total agreed during the year (REQ-DASH-008) beside the
+    spend of the period being looked at (REQ-DASH-010), so narrowing to one
+    week must not move it.
+
+    Args:
+        period: the period chosen in the bar. None, or a refused period,
+            means every contract on file.
+
+    Returns:
+        The period total, the year total and the year it covers.
+    """
+    contracts = dated_contracts()
+    year = timezone.localdate().year
+
+    return SpendingIndicators(
+        period=total_value_of(period.apply(contracts) if period else contracts),
+        year=total_value_of(
+            contracts.filter(
+                **{
+                    f"{ACCOUNTING_DATE}__gte": date(year, 1, 1),
+                    f"{ACCOUNTING_DATE}__lte": date(year, 12, 31),
+                }
+            )
+        ),
+        year_number=year,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Average processing time (section 2, REQ-DASH-012)
+# ---------------------------------------------------------------------------
+
+# The specification names four stages and no events (REQ-DASH-012); only the
+# Invoice source is decided, by DEC-025. What each stage is measured between
+# is therefore chosen here, printed on the page beside the figure and written
+# into the README, so the department can argue with a definition it can see.
+#
+# Approval is measured from the contract being raised rather than from
+# Contract.yuborilgan_sana, which a resend overwrites (DEC-024): a contract
+# sent twice would otherwise report only the time since its last send, which
+# is shorter, wrong, and invisible.
+
+ORDER_ENTRY = "Buyurtma kiritish"
+APPROVAL = "Tasdiqlash"
+DELIVERY = "Yetkazib berish"
+INVOICE = "Invoice"
+
+# What each stage spans, in the words the panel prints under its name. Kept
+# beside the labels so that a stage is one entry rather than a name here and
+# a sentence somewhere else, and read through span_of() so a stage that was
+# never given one says which stage it is.
+STAGE_SPANS: dict[str, str] = {
+    ORDER_ENTRY: "Ariza kelib tushgandan shartnoma kiritilgunga qadar",
+    APPROVAL: "Shartnoma kiritilgandan tasdiqlangunga qadar",
+    DELIVERY: "Tasdiqlangandan tugallangan holatga o`tgunga qadar",
+    INVOICE: "Tugallangan holatdan invoice sanasigacha",
+}
+
+
+def span_of(label: str) -> str:
+    """What a stage is measured between, or a stated gap when it has no entry."""
+    return STAGE_SPANS.get(label, f"{label}: bosqich chegaralari ko`rsatilmagan")
+
+
+@dataclass(frozen=True)
+class StageAverage:
+    """One stage of the processing time, and how long it takes.
+
+    Attributes:
+        label: the stage's name, as the specification lists it.
+        span: what the average is measured between, for the panel to print.
+        days: the mean gap in whole days, or None when nothing completed the
+            stage. None rather than zero: no contract taking no time and no
+            contract at all are different answers.
+        measured_from: how many contracts the average is drawn from.
+    """
+
+    label: str
+    span: str
+    days: int | None
+    measured_from: int
+
+    @property
+    def was_measured(self) -> bool:
+        """Whether anything completed this stage."""
+        return self.days is not None
+
+
+def as_local_date(moment: datetime | date | None) -> date | None:
+    """One recorded moment as the calendar day it happened on, or None.
+
+    A stage may span a DateTimeField at one end and a DateField at the other
+    - delivery ends on a recorded change, invoice on the date written on the
+    supplier's paper - and "in number of days" (REQ-DASH-012) is a question
+    about days, not about hours. Reducing both ends to a local day is what
+    lets them be subtracted at all.
+    """
+    if moment is None:
+        return None
+    if isinstance(moment, datetime):
+        return timezone.localtime(moment).date()
+    return moment
+
+
+def gap_in_days(start: datetime | date | None, end: datetime | date | None) -> int | None:
+    """How many days from start to end, or None when either was not recorded.
+
+    A negative gap is returned as it is rather than clamped: it means the two
+    dates contradict each other, and an average that quietly hid it would
+    leave nobody any way of noticing.
+    """
+    first, last = as_local_date(start), as_local_date(end)
+    if first is None or last is None:
+        return None
+    return (last - first).days
+
+
+def averaged(label: str, gaps: Iterable[int | None]) -> StageAverage:
+    """One stage's average over the gaps that were measurable."""
+    measured = [gap for gap in gaps if gap is not None]
+    mean = round(sum(measured) / len(measured)) if measured else None
+
+    return StageAverage(
+        label=label,
+        span=span_of(label),
+        days=mean,
+        measured_from=len(measured),
+    )
+
+
+def completed_at() -> dict[int, datetime]:
+    """When each contract first entered the status marked completed.
+
+    The first arrival, not the last: a contract moved out of the completed
+    status and back again was delivered once, on the day it first got there.
+    Contracts that never arrived are absent from the mapping.
+
+    Every move is read in one query, rather than the contracts being handed
+    back to the database as a list of ids - one bound variable each, which
+    SQLite refuses past its own limit, on a page that would then not render
+    at all.
+    """
+    completed = ShartnomaStatus.completed_status()
+    if completed is None:
+        return {}
+
+    arrivals: dict[int, datetime] = {}
+    moves = (
+        ContractStatusChange.objects.filter(to_status=completed)
+        .order_by("changed_at")
+        .values_list("contract_id", "changed_at")
+    )
+    for contract_id, changed_at in moves:
+        arrivals.setdefault(contract_id, changed_at)
+
+    return arrivals
+
+
+def processing_times() -> tuple[StageAverage, ...]:
+    """The four stages of REQ-DASH-012, in the order the document lists them.
+
+    Each average covers only the contracts that recorded both of its ends; a
+    contract still awaiting approval is not an approval taking zero days, and
+    a stage nothing has completed has no average at all.
+
+    One consequence is worth knowing: Invoice runs from the move into the
+    completed status, so an invoice recorded against a contract nobody has
+    moved there has no start and is not counted. Invoices arriving before
+    the status is updated would therefore leave that stage reading a dash
+    while the dates pile up. It is the stage the department asked for
+    (DEC-025); if it stays empty, the status is not being kept, and that is
+    worth knowing too.
+
+    Returns:
+        Buyurtma kiritish, Tasdiqlash, Yetkazib berish and Invoice.
+    """
+    contracts = Contract.objects.values_list(
+        "id",
+        "application__kelib_tushgan_sana",
+        "yaratilingan_sana",
+        "tasdiqlangan_sana",
+        "invoice_sanasi",
+    )
+    rows = list(contracts)
+    delivered_at = completed_at()
+
+    entry, approval, delivery, invoice = [], [], [], []
+    for contract_id, arrived, raised, approved, invoiced in rows:
+        delivered = delivered_at.get(contract_id)
+        entry.append(gap_in_days(arrived, raised))
+        approval.append(gap_in_days(raised, approved))
+        delivery.append(gap_in_days(approved, delivered))
+        invoice.append(gap_in_days(delivered, invoiced))
+
+    return (
+        averaged(ORDER_ENTRY, entry),
+        averaged(APPROVAL, approval),
+        averaged(DELIVERY, delivery),
+        averaged(INVOICE, invoice),
     )

@@ -513,6 +513,14 @@ class ShartnomaStatus(OrderedStatus):
         None rather than an error: master data may be edited into a state
         where nothing is marked, and the dashboard then reports no completed
         contracts instead of failing to render.
+
+        A deleted status still answers. Deleting deactivates (DEC-009), and a
+        contract that reached the finished state stayed finished when the row
+        naming that state left the lists; dropping it from the count would
+        make the dashboard fall the moment somebody tidied the status list.
+        The marker is what is being read here, not the list of statuses still
+        on offer, which is why this does not use active() the way
+        status_columns() does.
         """
         return cls.objects.filter(is_completed=True).first()
 
@@ -1297,6 +1305,16 @@ class Contract(models.Model):
         help_text="The date on the contract itself.",
     )
     tolash_muddati = models.DateField("To`lash muddati", null=True, blank=True)
+    invoice_sanasi = models.DateField(
+        "Invoice sanasi",
+        null=True,
+        blank=True,
+        help_text=(
+            "The date on the supplier's invoice. Added by DEC-025 so that the "
+            "Invoice stage of the dashboard's processing time has a source; "
+            "the document names the stage but models no invoice anywhere."
+        ),
+    )
     muddat_talabi = models.DateField("Muddat talabi", null=True, blank=True)
     izoh = models.TextField("Izoh", blank=True)
     yaratilingan_sana = models.DateTimeField("Yaratilingan sana", auto_now_add=True)
