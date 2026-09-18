@@ -107,6 +107,10 @@ a dash, not nought days.
 ```text
 .
 ├── manage.py
+├── docs/                     the section 6.2 deliverables, generated:
+│   ├── bpmn/                 the purchase request and contract flows
+│   ├── uml/                  a class diagram of every entity
+│   └── database-schema.md    every table and column
 ├── requirements.txt          runtime dependencies
 ├── requirements-dev.txt      ruff, for the lint gate
 ├── .env.example              every environment variable, with placeholders
@@ -476,6 +480,23 @@ prototype pages.
 ```bash
 python manage.py collectstatic
 ```
+
+## Technical documents
+
+`docs/` holds the BPMN, the UML and the database schema that section 6.2 lists
+as deliverables beside the code (REQ-ACCEPT-002). They are generated from the
+models and from the flows as the code runs them, not written by hand:
+
+```bash
+python manage.py delivery_docs          # write them
+python manage.py delivery_docs --check  # fail if they are out of date
+```
+
+`tests/test_documentation.py` runs that check, so a migration that leaves the
+schema document behind fails the build rather than being noticed years later.
+The flows drawn are the ones that were built - DEC-016 put the requester's
+department head and the director in front of the purchasing department - and
+not the assignment's superseded section 4.2.
 
 ## Configuration
 
