@@ -167,9 +167,10 @@ option. Ko'rish and Yuborish are still waiting for later work.
         <button type="button" class="btn btn-outline-custom btn-xs" data-add-row data-row-template="sht-row-template" data-row-container="sht-item-rows" data-total-forms="id_form-TOTAL_FORMS">+ Qator qo'shish</button>
       </div>
 
-      <div class="form-row">
+      <div class="form-row-3">
         {{ widget(form.tolash_muddati, "To'lash Muddati") }}
         {{ widget(form.muddat_talabi, "Muddat Talabi") }}
+        {{ widget(form.invoice_sanasi, "Invoice Sanasi", hint="Invoice kelganda to'ldiriladi. Dashboard uni o'rtacha muddatda hisobga oladi.") }}
       </div>
 
       <div class="form-row">
