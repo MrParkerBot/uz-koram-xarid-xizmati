@@ -98,10 +98,14 @@ from xarid.permissions import (
     revoke_contract_editing,
 )
 from xarid.reports import (
+    SPENDINGS_PERIOD,
     category_purchasing,
     dashboard_indicators,
+    dated_contracts,
     department_purchasing,
+    processing_times,
     report_export,
+    spending_indicators,
     staff_workload,
 )
 
@@ -130,12 +134,34 @@ def prototype_page(page_name: str) -> Callable[..., HttpResponse]:
 def dashboard(request: HttpRequest) -> HttpResponse:
     """Asosiy Panel: the department's position at a glance (section 2).
 
-    Only the three contract indicators are counted here (REQ-DASH-001 to
-    REQ-DASH-004). The spendings figures, the top suppliers list, the category
-    breakdown and the activity list are still the supplied prototype's own
-    numbers, and are UZK-049, UZK-051, UZK-057 and UZK-052.
+    Counted here: the three contract indicators (REQ-DASH-001 to REQ-DASH-004),
+    the spendings (REQ-DASH-008, REQ-DASH-010) and the four processing-time
+    averages (REQ-DASH-012). The period bar narrows the spend and nothing else
+    - the contract indicators are the department's position now, not its
+    position during a week, and an average of how long a stage takes is not a
+    figure a fortnight has an answer for - which is why the cards and the
+    panel say what each figure covers.
+
+    The top suppliers list, the category breakdown, the charts and the
+    activity list are still the supplied prototype's own numbers, and are
+    UZK-051, UZK-057 and UZK-052.
     """
-    return render(request, DASHBOARD_TEMPLATE, {"indicators": dashboard_indicators()})
+    # The bar offers no column filters and no ordering, so it is built for
+    # its period and its rendering alone; spending_indicators() applies that
+    # period to its own query, and nothing calls table_filter.apply().
+    table_filter = TableFilter((), dated_contracts(), request.GET, date_column=SPENDINGS_PERIOD)
+    report_invalid_filters(request, table_filter)
+
+    return render(
+        request,
+        DASHBOARD_TEMPLATE,
+        {
+            "indicators": dashboard_indicators(),
+            "spendings": spending_indicators(table_filter.period),
+            "stages": processing_times(),
+            "table_filter": table_filter,
+        },
+    )
 
 
 @login_required

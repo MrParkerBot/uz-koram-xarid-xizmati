@@ -1305,6 +1305,16 @@ class Contract(models.Model):
         help_text="The date on the contract itself.",
     )
     tolash_muddati = models.DateField("To`lash muddati", null=True, blank=True)
+    invoice_sanasi = models.DateField(
+        "Invoice sanasi",
+        null=True,
+        blank=True,
+        help_text=(
+            "The date on the supplier's invoice. Added by DEC-025 so that the "
+            "Invoice stage of the dashboard's processing time has a source; "
+            "the document names the stage but models no invoice anywhere."
+        ),
+    )
     muddat_talabi = models.DateField("Muddat talabi", null=True, blank=True)
     izoh = models.TextField("Izoh", blank=True)
     yaratilingan_sana = models.DateTimeField("Yaratilingan sana", auto_now_add=True)
