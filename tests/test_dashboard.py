@@ -28,8 +28,10 @@ from xarid.models import (
     KATTA_MUTAXASIS,
     MENEJER,
     Application,
+    ApplicationItem,
     Contract,
     ContractStatusChange,
+    MahsulotTuri,
     ShartnomaStatus,
     Supplier,
     deactivate,
@@ -48,6 +50,7 @@ from xarid.reports import (
     processing_times,
     span_of,
     spending_indicators,
+    supplier_categories,
 )
 
 DELIVERED = "Yetkazib berilgan"
@@ -609,3 +612,176 @@ class ProcessingTimePageTests(SignedInAdminTestCase):
         response = self.client.get(page("kelishinlingan"))
 
         self.assertContains(response, 'name="invoice_sanasi"')
+
+
+class SupplierCategoryTests(TestCase):
+    """The supplier category block (REQ-DASH-007, REQ-DASH-009)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.manager = make_user("cat.manager", user_type=MENEJER)
+        cls.specialist = make_user("cat.specialist", user_type=KATTA_MUTAXASIS)
+        cls.department = a_department()
+
+    def a_category(self, number: int, name: str) -> MahsulotTuri:
+        category, _ = MahsulotTuri.objects.get_or_create(
+            category_number=number, defaults={"name": name}
+        )
+        return category
+
+    def a_supply(self, firm: Supplier, *categories: MahsulotTuri) -> None:
+        """One contract with that firm, against an application ordering those types."""
+        application = an_assigned_application(
+            self.manager, self.specialist, department=self.department
+        )
+        ApplicationItem.objects.filter(application=application).delete()
+        for category in categories:
+            ApplicationItem.objects.create(
+                application=application,
+                mahsulot_turi=category,
+                buyurtma_nomi=f"{category.name} mahsuloti",
+                buyurtma_soni=Decimal("1"),
+                olchov_birligi="ta",
+            )
+        a_contract(application, self.specialist, supplier=firm)
+
+    def a_firm(self, name: str, inn: str) -> Supplier:
+        firm, _ = Supplier.objects.get_or_create(name=name, defaults={"inn": inn})
+        return firm
+
+    def counts_by_name(self) -> dict[str, int]:
+        """The counts, by type name.
+
+        Includes the type tests/support.py seeds for an application's order
+        line, so a test reads the names it created rather than the whole
+        table.
+        """
+        return {row.category.name: row.firms for row in supplier_categories().rows}
+
+    def test_each_type_is_counted_once_with_the_firms_supplying_it(self) -> None:
+        metal = self.a_category(100001, "Metall prokat")
+        chemical = self.a_category(100002, "Kimyoviy")
+        self.a_supply(self.a_firm("MetalGrup JV", "223456789"), metal)
+        self.a_supply(self.a_firm("UzElektro", "323456789"), metal)
+        self.a_supply(self.a_firm("Kimyo Invest", "423456789"), chemical)
+
+        counts = self.counts_by_name()
+
+        self.assertEqual((counts["Metall prokat"], counts["Kimyoviy"]), (2, 1))
+
+    def test_a_firm_with_several_contracts_for_one_type_counts_once(self) -> None:
+        metal = self.a_category(100001, "Metall prokat")
+        firm = self.a_firm("MetalGrup JV", "223456789")
+        self.a_supply(firm, metal)
+        self.a_supply(firm, metal)
+        self.a_supply(firm, metal)
+
+        self.assertEqual(self.counts_by_name()["Metall prokat"], 1)
+
+    def test_a_firm_supplying_two_types_counts_under_both(self) -> None:
+        metal = self.a_category(100001, "Metall prokat")
+        chemical = self.a_category(100002, "Kimyoviy")
+        self.a_supply(self.a_firm("MetalGrup JV", "223456789"), metal, chemical)
+
+        counts = self.counts_by_name()
+
+        self.assertEqual((counts["Metall prokat"], counts["Kimyoviy"]), (1, 1))
+
+    def test_a_type_nobody_supplies_is_listed_with_zero(self) -> None:
+        metal = self.a_category(100001, "Metall prokat")
+        self.a_category(100002, "Kimyoviy")
+        self.a_supply(self.a_firm("MetalGrup JV", "223456789"), metal)
+
+        counts = self.counts_by_name()
+
+        self.assertEqual((counts["Metall prokat"], counts["Kimyoviy"]), (1, 0))
+
+    def test_a_deleted_type_stops_being_listed(self) -> None:
+        """DEC-009 deletes a type by deactivating it."""
+        metal = self.a_category(100001, "Metall prokat")
+        deactivate(self.a_category(100002, "Kimyoviy"))
+        self.a_supply(self.a_firm("MetalGrup JV", "223456789"), metal)
+
+        self.assertNotIn("Kimyoviy", self.counts_by_name())
+
+    def test_the_shares_add_up_to_a_hundred(self) -> None:
+        metal = self.a_category(100001, "Metall prokat")
+        chemical = self.a_category(100002, "Kimyoviy")
+        self.a_supply(self.a_firm("MetalGrup JV", "223456789"), metal)
+        self.a_supply(self.a_firm("UzElektro", "323456789"), metal)
+        self.a_supply(self.a_firm("Kimyo Invest", "423456789"), chemical)
+        self.a_supply(self.a_firm("Neft Trade", "523456789"), chemical)
+
+        categories = supplier_categories()
+
+        self.assertEqual(sum(row.share for row in categories.rows), 100)
+        self.assertEqual(categories.placements, 4)
+        self.assertEqual(categories.delivered_types, 2)
+
+    def test_nothing_supplied_leaves_every_share_at_zero(self) -> None:
+        self.a_category(100001, "Metall prokat")
+
+        categories = supplier_categories()
+
+        self.assertEqual({row.share for row in categories.rows}, {0})
+        self.assertEqual((categories.placements, categories.delivered_types), (0, 0))
+
+    def test_the_delivered_total_counts_only_types_with_a_firm_behind_them(self) -> None:
+        metal = self.a_category(100001, "Metall prokat")
+        self.a_category(100002, "Kimyoviy")
+        self.a_category(100003, "Qurilish")
+        self.a_supply(self.a_firm("MetalGrup JV", "223456789"), metal)
+
+        self.assertEqual(supplier_categories().delivered_types, 1)
+
+    def test_the_busiest_type_is_listed_first(self) -> None:
+        metal = self.a_category(100001, "Metall prokat")
+        chemical = self.a_category(100002, "Kimyoviy")
+        self.a_supply(self.a_firm("Kimyo Invest", "423456789"), chemical)
+        self.a_supply(self.a_firm("MetalGrup JV", "223456789"), metal)
+        self.a_supply(self.a_firm("UzElektro", "323456789"), metal)
+
+        listed = [
+            row.category.name
+            for row in supplier_categories().rows
+            if row.category.name in {"Metall prokat", "Kimyoviy"}
+        ]
+
+        self.assertEqual(listed, ["Metall prokat", "Kimyoviy"])
+
+
+class SupplierCategoryPageTests(SignedInAdminTestCase):
+    """The block as the dashboard renders it."""
+
+    def test_the_table_and_the_chart_are_given_the_same_rows(self) -> None:
+        manager = make_user("cat.page.manager", user_type=MENEJER)
+        specialist = make_user("cat.page.specialist", user_type=KATTA_MUTAXASIS)
+        category, _ = MahsulotTuri.objects.get_or_create(
+            category_number=100001, defaults={"name": "Metall prokat"}
+        )
+        application = an_assigned_application(manager, specialist, department=a_department())
+        ApplicationItem.objects.filter(application=application).delete()
+        ApplicationItem.objects.create(
+            application=application,
+            mahsulot_turi=category,
+            buyurtma_nomi="Prokat",
+            buyurtma_soni=Decimal("1"),
+            olchov_birligi="ta",
+        )
+        firm, _ = Supplier.objects.get_or_create(
+            name="MetalGrup JV", defaults={"inn": "223456789"}
+        )
+        a_contract(application, specialist, supplier=firm)
+
+        rendered = self.client.get(page("dashboard")).content.decode()
+        chart_data = rendered.split('id="category-chart-data"', 1)[1].split("</script>", 1)[0]
+
+        self.assertIn("Metall prokat", rendered)
+        self.assertIn('"label": "Metall prokat"', chart_data)
+        self.assertIn('"firms": 1', chart_data)
+
+    def test_an_empty_database_renders_the_block(self) -> None:
+        response = self.client.get(page("dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Supplier Category Taqsimoti")

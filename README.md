@@ -38,7 +38,14 @@ supplied with the assignment, on SQLite, behind Django's own authentication.
   in days. The charts, the top suppliers list, the category table and the
   activity list are still the supplied prototype's sample data. Its Top
   suppliers panel shows the first five of the Top suppliers page and links to
-  it.
+  it. The supplier category block counts how many distinct firms supply each
+  product type - a type nobody supplies is listed with zero - beside the
+  number of types actually supplied, and its bar chart draws the same rows as
+  its table. A share is that type's count as a percentage of the table, so
+  the column adds to a hundred; a firm supplying two types is counted under
+  both, which the block says under it. REQ-DASH-009 words the share as a
+  percentage of total firms instead, which is the same number only while no
+  firm supplies more than one type.
 - **Top suppliers** (`Hisobotlar / Top Yetkazib beruvchilar`): every firm
   ranked by what its contracts come to inside the chosen period (DEC-025),
   narrowed by the firm's Daraja. A firm with no contracts in the period is not

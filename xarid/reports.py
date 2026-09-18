@@ -949,3 +949,88 @@ def top_suppliers(
         )
         for place, row in enumerate(rows, start=1)
     )
+
+
+# ---------------------------------------------------------------------------
+# The supplier category block (section 2, REQ-DASH-007, REQ-DASH-009)
+# ---------------------------------------------------------------------------
+
+# The ORM path from a product type to the firms that supply it: the order
+# lines naming the type, the applications carrying those lines, and the
+# contracts raised against them.
+CATEGORY_SUPPLIERS = "application_items__application__contracts__supplier"
+
+
+@dataclass(frozen=True)
+class CategoryShare:
+    """One product type and how much of the department's supply base it is.
+
+    Attributes:
+        category: the product type.
+        firms: how many distinct firms supply it. A firm with four contracts
+            for one type is one firm.
+        share: that count as a percentage of every count in the table.
+    """
+
+    category: MahsulotTuri
+    firms: int
+    share: int
+
+
+@dataclass(frozen=True)
+class SupplierCategories:
+    """The category block: its rows, what the shares divide by, and the total.
+
+    Attributes:
+        rows: a row per active product type, busiest first.
+        placements: the sum of the rows' counts, which the shares are a share
+            of. A firm supplying two types is in that sum twice, which is
+            what lets the column add up to a hundred.
+        delivered_types: how many product types have at least one firm behind
+            them (REQ-DASH-007).
+    """
+
+    rows: tuple[CategoryShare, ...]
+    placements: int
+    delivered_types: int
+
+
+def supplier_categories() -> SupplierCategories:
+    """How the department's firms are spread across the product types.
+
+    A type nobody supplies is listed with zero rather than left out: the
+    block is read to see where the supply base is thin, and a missing row
+    answers that question with silence.
+
+    The share is each type's count as a percentage of the whole table, so the
+    column adds to a hundred (within rounding). REQ-DASH-009 words it as a
+    percentage "relative to total firms", which is the same number only while
+    every firm supplies exactly one type - a firm supplying two is counted
+    under both, and against a count of firms the column would then pass a
+    hundred. The page prints what the share divides by so the two readings
+    cannot be confused.
+
+    Returns:
+        The rows busiest first, what the shares divide by, and how many types
+        are actually supplied.
+    """
+    counted = (
+        MahsulotTuri.objects.active()
+        .annotate(firmalar=Count(CATEGORY_SUPPLIERS, distinct=True))
+        .order_by("-firmalar", "name")
+    )
+    categories = list(counted)
+    placements = sum(category.firmalar for category in categories)
+
+    return SupplierCategories(
+        rows=tuple(
+            CategoryShare(
+                category=category,
+                firms=category.firmalar,
+                share=whole_percent(category.firmalar, placements),
+            )
+            for category in categories
+        ),
+        placements=placements,
+        delivered_types=sum(1 for category in categories if category.firmalar),
+    )
