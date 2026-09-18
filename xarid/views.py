@@ -31,7 +31,13 @@ from django.views.generic import TemplateView
 
 from xarid.attachments import attachment_response
 from xarid.exports import ExportColumn, TableExport, export_response, lines_of, local_date
-from xarid.filters import FilterColumn, TableFilter, report_invalid_filters
+from xarid.filters import (
+    DateColumn,
+    FilterColumn,
+    TableFilter,
+    newest_and_oldest_first,
+    report_invalid_filters,
+)
 from xarid.forms import (
     SUGGESTED_UNITS,
     ApplicationForm,
@@ -469,6 +475,20 @@ BY_SPECIALIST = FilterColumn(
 BY_STATUS = FilterColumn("holat", "Holati", "status_id", ("status__name",))
 BY_SUPPLIER = FilterColumn("firma", "Firma", "supplier_id", ("supplier__name",))
 
+# The period each list page narrows by and the ordering its drop-down offers
+# (REQ-YUKLAMA-001). Each page names the date it already shows in a column,
+# and orders by that same date so the drop-down reorders what is on screen.
+INCOMING_PERIOD = DateColumn("Kelib tushgan sana", "kelib_tushgan_sana")
+INCOMING_SORTS = newest_and_oldest_first(INCOMING_PERIOD.lookup)
+ACCEPTED_PERIOD = DateColumn("Qabul qilingan sana", "qabul_qilingan_sana")
+ACCEPTED_SORTS = newest_and_oldest_first(ACCEPTED_PERIOD.lookup)
+ASSIGNED_PERIOD = DateColumn("Tayinlangan sana", "tayinlangan_sana")
+ASSIGNED_SORTS = newest_and_oldest_first(ASSIGNED_PERIOD.lookup)
+CONTRACT_PERIOD = DateColumn("Yaratilgan sana", "yaratilingan_sana")
+CONTRACT_SORTS = newest_and_oldest_first(CONTRACT_PERIOD.lookup)
+PURCHASE_PERIOD = DateColumn("Yaratilgan sana", "yaratilingan_sana")
+PURCHASE_SORTS = newest_and_oldest_first(PURCHASE_PERIOD.lookup)
+
 INCOMING_FILTERS = (BY_DEPARTMENT, BY_ORDERED_CATEGORY)
 ACCEPTED_FILTERS = (BY_DEPARTMENT, BY_SPECIALIST)
 ASSIGNED_FILTERS = (BY_DEPARTMENT, BY_STATUS)
@@ -546,7 +566,13 @@ def all_assigned_applications() -> QuerySet[Application]:
 
 def incoming_list(request: HttpRequest) -> HttpResponse:
     """The table of applications that have arrived and not been decided."""
-    table_filter = TableFilter(INCOMING_FILTERS, incoming_applications(), request.GET)
+    table_filter = TableFilter(
+        INCOMING_FILTERS,
+        incoming_applications(),
+        request.GET,
+        date_column=INCOMING_PERIOD,
+        sort_choices=INCOMING_SORTS,
+    )
     report_invalid_filters(request, table_filter)
 
     return render(
@@ -568,7 +594,13 @@ def accepted_page(
         form: a bound application form to re-render with its errors.
         items: the bound order lines, likewise.
     """
-    table_filter = TableFilter(ACCEPTED_FILTERS, accepted_applications(), chosen_filters)
+    table_filter = TableFilter(
+        ACCEPTED_FILTERS,
+        accepted_applications(),
+        chosen_filters,
+        date_column=ACCEPTED_PERIOD,
+        sort_choices=ACCEPTED_SORTS,
+    )
     return {
         "applications": table_filter.apply(),
         "table_filter": table_filter,
@@ -631,7 +663,13 @@ def assigned_list(request: HttpRequest) -> HttpResponse:
     """
     own_work_only = acts_on_own_work_only(request.user)
     visible = assigned_applications(request.user) if own_work_only else all_assigned_applications()
-    table_filter = TableFilter(ASSIGNED_FILTERS, visible, request.GET)
+    table_filter = TableFilter(
+        ASSIGNED_FILTERS,
+        visible,
+        request.GET,
+        date_column=ASSIGNED_PERIOD,
+        sort_choices=ASSIGNED_SORTS,
+    )
     report_invalid_filters(request, table_filter)
 
     return render(
@@ -891,7 +929,13 @@ def contract_page(
     items: ContractItemFormSet | None = None,
 ) -> dict[str, object]:
     """Everything the Kelishinlingan Shartnoma page renders."""
-    table_filter = TableFilter(CONTRACT_FILTERS, agreed_contracts(), chosen_filters)
+    table_filter = TableFilter(
+        CONTRACT_FILTERS,
+        agreed_contracts(),
+        chosen_filters,
+        date_column=CONTRACT_PERIOD,
+        sort_choices=CONTRACT_SORTS,
+    )
     return {
         "contracts": table_filter.apply(),
         "table_filter": table_filter,
@@ -1085,7 +1129,13 @@ def purchase_page(
     items: PurchaseApplicationItemFormSet | None = None,
 ) -> dict[str, object]:
     """Everything the Xarid Arizasi page renders."""
-    table_filter = TableFilter(PURCHASE_FILTERS, purchase_applications(), chosen_filters)
+    table_filter = TableFilter(
+        PURCHASE_FILTERS,
+        purchase_applications(),
+        chosen_filters,
+        date_column=PURCHASE_PERIOD,
+        sort_choices=PURCHASE_SORTS,
+    )
     return {
         "applications": table_filter.apply(),
         "table_filter": table_filter,
@@ -1292,14 +1342,26 @@ PURCHASE_EXPORT_COLUMNS = (
 
 def incoming_export(request: HttpRequest, file_format: str) -> HttpResponse:
     """Download the Kelib tushgan table, filtered as the page is."""
-    table_filter = TableFilter(INCOMING_FILTERS, incoming_applications(), request.GET)
+    table_filter = TableFilter(
+        INCOMING_FILTERS,
+        incoming_applications(),
+        request.GET,
+        date_column=INCOMING_PERIOD,
+        sort_choices=INCOMING_SORTS,
+    )
     export = TableExport("kelib-arizalar", INCOMING_EXPORT_COLUMNS, lines_of(table_filter.apply()))
     return export_response(export, file_format)
 
 
 def accepted_export(request: HttpRequest, file_format: str) -> HttpResponse:
     """Download the Qabul qilingan table, filtered as the page is."""
-    table_filter = TableFilter(ACCEPTED_FILTERS, accepted_applications(), request.GET)
+    table_filter = TableFilter(
+        ACCEPTED_FILTERS,
+        accepted_applications(),
+        request.GET,
+        date_column=ACCEPTED_PERIOD,
+        sort_choices=ACCEPTED_SORTS,
+    )
     export = TableExport("qabul-arizalar", ACCEPTED_EXPORT_COLUMNS, lines_of(table_filter.apply()))
     return export_response(export, file_format)
 
@@ -1308,7 +1370,13 @@ def assigned_export(request: HttpRequest, file_format: str) -> HttpResponse:
     """Download the Tayinlangan table as this person sees it."""
     own_work_only = acts_on_own_work_only(request.user)
     visible = assigned_applications(request.user) if own_work_only else all_assigned_applications()
-    table_filter = TableFilter(ASSIGNED_FILTERS, visible, request.GET)
+    table_filter = TableFilter(
+        ASSIGNED_FILTERS,
+        visible,
+        request.GET,
+        date_column=ASSIGNED_PERIOD,
+        sort_choices=ASSIGNED_SORTS,
+    )
     columns = (
         *ASSIGNED_EXPORT_COLUMNS,
         *(() if own_work_only else (ASSIGNED_HOLDER_COLUMN,)),
@@ -1320,13 +1388,25 @@ def assigned_export(request: HttpRequest, file_format: str) -> HttpResponse:
 
 def contracts_export(request: HttpRequest, file_format: str) -> HttpResponse:
     """Download the Kelishinlingan table, filtered as the page is."""
-    table_filter = TableFilter(CONTRACT_FILTERS, agreed_contracts(), request.GET)
+    table_filter = TableFilter(
+        CONTRACT_FILTERS,
+        agreed_contracts(),
+        request.GET,
+        date_column=CONTRACT_PERIOD,
+        sort_choices=CONTRACT_SORTS,
+    )
     export = TableExport("kelishinlingan", CONTRACT_EXPORT_COLUMNS, lines_of(table_filter.apply()))
     return export_response(export, file_format)
 
 
 def purchase_export(request: HttpRequest, file_format: str) -> HttpResponse:
     """Download the Xarid Arizasi table, filtered as the page is."""
-    table_filter = TableFilter(PURCHASE_FILTERS, purchase_applications(), request.GET)
+    table_filter = TableFilter(
+        PURCHASE_FILTERS,
+        purchase_applications(),
+        request.GET,
+        date_column=PURCHASE_PERIOD,
+        sort_choices=PURCHASE_SORTS,
+    )
     export = TableExport("xarid-ariza", PURCHASE_EXPORT_COLUMNS, lines_of(table_filter.apply()))
     return export_response(export, file_format)

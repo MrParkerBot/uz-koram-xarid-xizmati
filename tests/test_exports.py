@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from io import BytesIO
 
@@ -17,6 +18,7 @@ from tests.support import (
     a_supplier,
     an_application,
     an_assigned_application,
+    arrived_on,
     make_user,
     page,
 )
@@ -211,3 +213,43 @@ class ExportContentTests(SignedInAdminTestCase):
 
         self.assertEqual(len(rows), 1 + 1)
         self.assertEqual(rows[1][0], kimyo.xarid_raqami)
+
+
+class ExportPeriodTests(SignedInAdminTestCase):
+    """A download carries the period and the ordering of the page (TASK-UZK-043)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.january = arrived_on(date(2026, 1, 10))
+        cls.february = arrived_on(date(2026, 2, 20))
+        cls.march = arrived_on(date(2026, 3, 5))
+
+    def exported_numbers(self, chosen: dict[str, str]) -> list[str]:
+        response = self.client.get(page("kelib-arizalar-eksport", "xlsx"), chosen)
+        return [str(row[0]) for row in workbook_rows(response)[1:]]
+
+    def test_a_download_holds_only_the_rows_inside_the_period(self) -> None:
+        numbers = self.exported_numbers({"dan": "2026-02-01", "gacha": "2026-02-28"})
+
+        self.assertEqual(numbers, [self.february.ariza_raqami])
+
+    def test_a_download_follows_the_chosen_order(self) -> None:
+        descending = self.exported_numbers({})
+        ascending = self.exported_numbers({"tartib": "osish"})
+
+        self.assertEqual(descending, list(reversed(ascending)))
+        self.assertEqual(ascending[0], self.january.ariza_raqami)
+
+    def test_a_download_ignores_an_inverted_period_as_the_page_does(self) -> None:
+        numbers = self.exported_numbers({"dan": "2026-03-01", "gacha": "2026-01-01"})
+
+        self.assertEqual(len(numbers), 3)
+
+    def test_the_toolbar_links_carry_the_period_and_the_order(self) -> None:
+        response = self.client.get(
+            page("kelib-arizalar"), {"dan": "2026-02-01", "tartib": "osish"}
+        )
+
+        self.assertContains(response, "dan=2026-02-01")
+        self.assertContains(response, "tartib=osish")
