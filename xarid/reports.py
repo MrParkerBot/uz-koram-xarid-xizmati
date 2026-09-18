@@ -958,7 +958,18 @@ def top_suppliers(
 # The ORM path from a product type to the firms that supply it: the order
 # lines naming the type, the applications carrying those lines, and the
 # contracts raised against them.
+#
+# A contract is against an application, not against one of its lines, so an
+# application ordering steel and cable with a single contract credits that
+# firm with both. Nothing in the data model says which line a contract
+# covers; the block answers "which types is this firm involved in" rather
+# than "which types did it deliver", and there is no narrower question to
+# ask of these tables.
 CATEGORY_SUPPLIERS = "application_items__application__contracts__supplier"
+
+# The same path, continued to the status of those contracts, for counting the
+# types that actually reached the completed state.
+CATEGORY_CONTRACT_STATE = "application_items__application__contracts__status"
 
 
 @dataclass(frozen=True)
@@ -986,8 +997,11 @@ class SupplierCategories:
         placements: the sum of the rows' counts, which the shares are a share
             of. A firm supplying two types is in that sum twice, which is
             what lets the column add up to a hundred.
-        delivered_types: how many product types have at least one firm behind
-            them (REQ-DASH-007).
+        delivered_types: how many product types have reached the status
+            marked as completed (REQ-DASH-007). Delivered, literally: a type
+            somebody has merely contracted for is not one the department has
+            received. Zero while no status carries the completed marker
+            (DEC-010, TASK-UZK-048).
     """
 
     rows: tuple[CategoryShare, ...]
@@ -1002,6 +1016,11 @@ def supplier_categories() -> SupplierCategories:
     block is read to see where the supply base is thin, and a missing row
     answers that question with silence.
 
+    Delivered means reached the status marked as completed (DEC-010), not
+    merely contracted for: a type somebody has a contract against is not one
+    the department has received. While no status carries that marker, nothing
+    counts as delivered.
+
     The share is each type's count as a percentage of the whole table, so the
     column adds to a hundred (within rounding). REQ-DASH-009 words it as a
     percentage "relative to total firms", which is the same number only while
@@ -1014,9 +1033,16 @@ def supplier_categories() -> SupplierCategories:
         The rows busiest first, what the shares divide by, and how many types
         are actually supplied.
     """
+    completed = ShartnomaStatus.completed_status()
+    delivered = (
+        Q(**{CATEGORY_CONTRACT_STATE: completed}) if completed else Q(pk__in=())
+    )
     counted = (
         MahsulotTuri.objects.active()
-        .annotate(firmalar=Count(CATEGORY_SUPPLIERS, distinct=True))
+        .annotate(
+            firmalar=Count(CATEGORY_SUPPLIERS, distinct=True),
+            yetkazilgan=Count(CATEGORY_SUPPLIERS, filter=delivered, distinct=True),
+        )
         .order_by("-firmalar", "name")
     )
     categories = list(counted)
@@ -1032,5 +1058,5 @@ def supplier_categories() -> SupplierCategories:
             for category in categories
         ),
         placements=placements,
-        delivered_types=sum(1 for category in categories if category.firmalar),
+        delivered_types=sum(1 for category in categories if category.yetkazilgan),
     )

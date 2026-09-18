@@ -40,8 +40,11 @@ supplied with the assignment, on SQLite, behind Django's own authentication.
   suppliers panel shows the first five of the Top suppliers page and links to
   it. The supplier category block counts how many distinct firms supply each
   product type - a type nobody supplies is listed with zero - beside the
-  number of types actually supplied, and its bar chart draws the same rows as
-  its table. A share is that type's count as a percentage of the table, so
+  number of types actually delivered, meaning those that reached the status
+  marked completed rather than those somebody merely has a contract for. Its
+  bar chart draws the same rows as its table. A firm is credited with every
+  type its application ordered, because a contract is against an application
+  and not against one of its lines. A share is that type's count as a percentage of the table, so
   the column adds to a hundred; a firm supplying two types is counted under
   both, which the block says under it. REQ-DASH-009 words the share as a
   percentage of total firms instead, which is the same number only while no
