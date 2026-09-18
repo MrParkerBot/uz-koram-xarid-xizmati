@@ -38,7 +38,17 @@ supplied with the assignment, on SQLite, behind Django's own authentication.
   in days. The charts, the top suppliers list, the category table and the
   activity list are still the supplied prototype's sample data. Its Top
   suppliers panel shows the first five of the Top suppliers page and links to
-  it.
+  it. The supplier category block counts how many distinct firms supply each
+  product type - a type nobody supplies is listed with zero - beside the
+  number of types actually delivered, meaning those that reached the status
+  marked completed rather than those somebody merely has a contract for. Its
+  bar chart draws the same rows as its table. A firm is credited with every
+  type its application ordered, because a contract is against an application
+  and not against one of its lines. A share is that type's count as a percentage of the table, so
+  the column adds to a hundred; a firm supplying two types is counted under
+  both, which the block says under it. REQ-DASH-009 words the share as a
+  percentage of total firms instead, which is the same number only while no
+  firm supplies more than one type.
 - **Top suppliers** (`Hisobotlar / Top Yetkazib beruvchilar`): every firm
   ranked by what its contracts come to inside the chosen period (DEC-025),
   narrowed by the firm's Daraja. A firm with no contracts in the period is not
@@ -97,6 +107,10 @@ a dash, not nought days.
 ```text
 .
 ├── manage.py
+├── docs/                     the section 6.2 deliverables, generated:
+│   ├── bpmn/                 the purchase request and contract flows
+│   ├── uml/                  a class diagram of every entity
+│   └── database-schema.md    every table and column
 ├── requirements.txt          runtime dependencies
 ├── requirements-dev.txt      ruff, for the lint gate
 ├── .env.example              every environment variable, with placeholders
@@ -466,6 +480,23 @@ prototype pages.
 ```bash
 python manage.py collectstatic
 ```
+
+## Technical documents
+
+`docs/` holds the BPMN, the UML and the database schema that section 6.2 lists
+as deliverables beside the code (REQ-ACCEPT-002). They are generated from the
+models and from the flows as the code runs them, not written by hand:
+
+```bash
+python manage.py delivery_docs          # write them
+python manage.py delivery_docs --check  # fail if they are out of date
+```
+
+`tests/test_documentation.py` runs that check, so a migration that leaves the
+schema document behind fails the build rather than being noticed years later.
+The flows drawn are the ones that were built - DEC-016 put the requester's
+department head and the director in front of the purchasing department - and
+not the assignment's superseded section 4.2.
 
 ## Configuration
 

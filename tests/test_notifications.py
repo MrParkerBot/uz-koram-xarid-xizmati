@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from django.db import DatabaseError
+from django.db import DatabaseError, connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from tests.support import a_department, an_application, make_user, page
@@ -186,6 +187,41 @@ class NotificationsPanelTests(TestCase):
 
         self.assertNotContains(response, "Boshqaning xabari")
         self.assertContains(response, EMPTY_PANEL)
+
+    def test_it_marks_read_without_listing_every_notification(self) -> None:
+        """One statement over this person's unread rows, not one id each.
+
+        SQLite refuses an IN list past its own parameter limit, and nothing
+        deletes a notification, so an account that collects enough of them
+        would otherwise lose its own panel.
+        """
+        self.client.force_login(self.requester)
+
+        for _ in range(2):
+            self.a_notification_for(self.requester)
+        with CaptureQueriesContext(connection) as few:
+            self.client.get(page("notifications"))
+
+        for _ in range(6):
+            self.a_notification_for(self.requester)
+        with CaptureQueriesContext(connection) as many:
+            self.client.get(page("notifications"))
+
+        # Eight notifications cost what two did: the marking does not grow
+        # with them, and neither does the number of bound parameters.
+        self.assertEqual(len(many), len(few))
+        self.assertEqual(unread_for(self.requester), 0)
+
+    def test_the_entries_it_shows_still_say_they_were_new(self) -> None:
+        """Read first, marked after: you see what changed before it stops being new."""
+        self.a_notification_for(self.requester)
+        self.client.force_login(self.requester)
+
+        first = self.client.get(page("notifications"))
+        second = self.client.get(page("notifications"))
+
+        self.assertContains(first, "Yangi")
+        self.assertNotContains(second, "Yangi")
 
     def test_opening_it_marks_what_it_showed_as_read(self) -> None:
         notification = self.a_notification_for(self.requester)

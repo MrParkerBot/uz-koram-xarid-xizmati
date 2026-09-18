@@ -14,6 +14,7 @@ that it happened.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 from django.db import DatabaseError
 
@@ -22,7 +23,7 @@ from xarid.models import Application, Notification
 logger = logging.getLogger(__name__)
 
 
-def deliver(build) -> Notification | None:
+def deliver(build: Callable[[], Notification]) -> Notification | None:
     """Write one notification, or log why it could not be written.
 
     Args:
