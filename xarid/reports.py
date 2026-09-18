@@ -397,7 +397,10 @@ def category_purchasing(period: DatePeriod | None, chosen_category: str = "") ->
     Returns:
         The generated columns, a row per type and the totals row.
     """
-    inside_period = period.as_condition(f"{CATEGORY_APPLICATIONS}__") if period else Q()
+    # No prefix here, unlike the other two reports: this report's period is
+    # declared with the path from a product type already in it, so that the
+    # page's filter bar can apply the same period to its own rows.
+    inside_period = period.as_condition() if period else Q()
     columns = status_columns()
     categories = MahsulotTuri.objects.active()
     if chosen_category:

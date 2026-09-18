@@ -38,6 +38,7 @@ from xarid.reports import (
     staff_workload,
     status_columns,
 )
+from xarid.views import CATEGORY_REPORT_PERIOD, category_report_filter
 
 ASSIGNMENT_PERIOD = DateColumn("Tayinlangan sana", "tayinlangan_sana")
 ARRIVAL_PERIOD = DateColumn("Kelib tushgan sana", "kelib_tushgan_sana")
@@ -53,6 +54,15 @@ def period(**chosen: str) -> DatePeriod:
 def arrival_period(**chosen: str) -> DatePeriod:
     """The arrival period the departments report is narrowed by."""
     return DatePeriod(ARRIVAL_PERIOD, chosen)
+
+
+def category_period(**chosen: str) -> DatePeriod:
+    """The period the type report is narrowed by.
+
+    Built from the column the page itself declares, so the test exercises the
+    production path from a product type to the date rather than a copy of it.
+    """
+    return DatePeriod(CATEGORY_REPORT_PERIOD, chosen)
 
 
 class StaffWorkloadTests(TestCase):
@@ -637,7 +647,7 @@ class CategoryPurchasingTests(TestCase):
             application__in=[inside, outside]
         ).update(mahsulot_turi=self.metal)
 
-        report = category_purchasing(arrival_period(dan="2026-02-01", gacha="2026-02-28"))
+        report = category_purchasing(category_period(dan="2026-02-01", gacha="2026-02-28"))
 
         self.assertEqual(self.row_for("Metallurgiya", report).total, 1)
 
@@ -752,6 +762,22 @@ class CategoryPurchasingPageTests(SignedInAdminTestCase):
 
         self.assertEqual(followed.status_code, 200)
         self.assertContains(followed, "Mahsulot topilmadi.")
+
+    def test_the_bar_can_narrow_its_own_rows_by_the_period(self) -> None:
+        """Every other bar in the application can; this one must not be the odd one.
+
+        Its rows are product types while its period is a date on the
+        application, so the column has to carry the path between them - or
+        apply() raises FieldError on the one bar nobody happened to call.
+        """
+        inside = arrived_on(date(2026, 2, 10))
+        outside = arrived_on(date(2026, 5, 10))
+        ApplicationItem.objects.filter(application=inside).update(mahsulot_turi=self.metal)
+        ApplicationItem.objects.filter(application=outside).update(mahsulot_turi=self.kimyo)
+
+        narrowed = category_report_filter({"dan": "2026-02-01", "gacha": "2026-02-28"}).apply()
+
+        self.assertEqual([category.name for category in narrowed], ["Metallurgiya"])
 
     def test_a_type_the_matrix_refuses_cannot_open_it(self) -> None:
         manager = make_user("category.manager", user_type=MENEJER)
