@@ -104,16 +104,16 @@ def navigation_groups(user: AbstractBaseUser | AnonymousUser | None) -> list[Nav
     return permitted_groups
 
 
-def unread_for(user: AbstractBaseUser | AnonymousUser | None) -> int:
+def unread_notification_count(user: AbstractBaseUser | AnonymousUser | None) -> int:
     """How many notifications this person has not been shown (DEC-012).
 
-    Imported here rather than at the top: xarid.notifications imports the
-    models, and the templates' environment is built before the app registry
-    is ready.
+    Imported inside the function rather than at the top: xarid.notifications
+    reaches the models, and this module is imported while the template
+    environment is built, before the app registry is ready.
     """
-    from xarid.notifications import unread_for as counted
+    from xarid.notifications import unread_for
 
-    return counted(user)
+    return unread_for(user)
 
 
 def environment(**options: Any) -> Environment:
@@ -129,7 +129,7 @@ def environment(**options: Any) -> Environment:
             "user_type_name": user_type_name_of,
             "display_name": display_name,
             "profile_for": profile_for,
-            "unread_notifications": unread_for,
+            "unread_notifications": unread_notification_count,
         }
     )
     env.filters.update({"date": formatted_date, "striptags": striptags})

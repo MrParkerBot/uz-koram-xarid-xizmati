@@ -303,14 +303,25 @@ def notifications_page(request: HttpRequest) -> HttpResponse:
 
     Showing a notification is what marks it read, so the bell stops counting
     what the reader has just been shown. The page says so.
+
+    The rows are read first and marked afterwards, and the page renders what
+    was read - so this once, the entries that were new still say so while the
+    bell beside them is already empty. That is the point: somebody should see
+    what changed before it stops being new. A reload shows them unmarked.
+
+    The marking is one statement over this person's unread rows rather than a
+    list of the ids just read: an account that has collected more
+    notifications than SQLite will bind at once would otherwise lose its own
+    panel.
     """
-    mine = Notification.objects.filter(recipient=request.user).select_related(
-        "application", "purchase_application"
+    shown = list(
+        Notification.objects.filter(recipient=request.user).select_related(
+            "application", "purchase_application"
+        )
     )
-    shown = list(mine)
-    Notification.objects.filter(
-        pk__in=[notification.pk for notification in shown], read_at__isnull=True
-    ).update(read_at=timezone.now())
+    Notification.objects.filter(recipient=request.user, read_at__isnull=True).update(
+        read_at=timezone.now()
+    )
 
     return render(request, NOTIFICATIONS_TEMPLATE, {"notifications": shown})
 
