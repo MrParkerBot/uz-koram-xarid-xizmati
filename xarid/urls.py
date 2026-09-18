@@ -49,6 +49,7 @@ accepted = require_page_permission("qabul-arizalar")
 assigned = require_page_permission("tayinlangan")
 contracts = require_page_permission("kelishinlingan")
 workload = require_page_permission("xodimlar-yuklamasi")
+departments_report = require_page_permission("bolimlar")
 purchases = require_page_permission("xarid-ariza")
 
 urlpatterns = [
@@ -156,9 +157,13 @@ urlpatterns = [
         workload(views.staff_workload_report),
         name="xodimlar-yuklamasi",
     ),
+    path(
+        "bolimlar/",
+        departments_report(views.department_purchasing_report),
+        name="bolimlar",
+    ),
     # The pages that are still the supplied prototype.
     prototype_route("tuzilgan/", "tuzilgan"),
-    prototype_route("bolimlar/", "bolimlar"),
     prototype_route("mahsulot-tur/", "mahsulot-tur"),
     prototype_route("mahsulotlar/", "mahsulotlar"),
     prototype_route("integration/", "integration"),

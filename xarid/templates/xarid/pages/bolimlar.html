@@ -1,5 +1,11 @@
 {% extends "xarid/base.html" %}
-{# The Korhona Xaridi | Bo'limlar report: still the supplied prototype with sample rows. #}
+{% from "xarid/_filters.html" import filter_bar with context %}
+{#
+The Korhona Xaridi | Bo'limlar report: a row per department, a counter per
+active contract status and a totals row (REQ-XARID-001). The status columns
+are generated from the master data, so adding a status adds a column
+(DEC-010). The busiest department is first.
+#}
 {% block title %}Bo'limlar Xaridi{% endblock %}
 {% block breadcrumb %}Hisobotlar / Bo'limlar Xaridi{% endblock %}
 {% block page_heading %}Bo'limlar Xaridi{% endblock %}
@@ -7,72 +13,43 @@
 
     <div class="page-header">
       <div><h1 class="page-title">Korhona Xaridi | Bo'limlar</h1><div class="muted">Enterprise Purchase by Department</div></div>
-      <div class="page-actions"><span class="role-tag role-admin">Admin only</span></div>
+      <div class="page-actions"><span class="role-tag role-admin">Admin va Bo'lim Boshlig'i</span></div>
     </div>
 
     <div class="panel">
-      <div class="toolbar"><div class="toolbar-group">
-        <span class="toolbar-label">Sana:</span>
-        <input class="form-control" type="date" style="width:140px;"/>
-        <input class="form-control" type="date" style="width:140px;"/>
-        <select class="form-control" style="width:160px;">
-          <option value="">Bo'lim: barchasi</option>
-          <option>Texnik bo'lim</option>
-          <option>Ishlab chiqarish</option>
-          <option>Moliya bo'limi</option>
-          <option>Logistika</option>
-        </select>
-        <button class="btn btn-primary-custom btn-sm"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
-        </div><div class="toolbar-group">
-          <button class="btn btn-outline-custom btn-sm"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
-          <button class="btn btn-outline-custom btn-sm"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</button>
-        </div>
-      </div>
+      <div class="toolbar">{{ filter_bar(table_filter, url('xarid:bolimlar')) }}</div>
       <div class="table-wrap">
         <table class="table-app">
           <thead><tr>
             <th style="width:36px;">#</th>
             <th>Bo'lim Nomi</th>
-            <th class="sortable">Xarid topshiriqlari<span class="sort-icon"></span></th>
-            <th class="sortable">Boshlang'ich<span class="sort-icon"></span></th>
-            <th class="sortable">Birjaga qo'yilgan<span class="sort-icon"></span></th>
-            <th class="sortable">Shartnoma tuzilgan<span class="sort-icon"></span></th>
-            <th class="sortable">Yetkazib berilgan<span class="sort-icon"></span></th>
-            <th class="sortable">Bekor qilingan<span class="sort-icon"></span></th>
+            <th>Xarid topshiriqlari</th>
+            {% for column in report.columns %}<th>{{ column.label }}</th>{% endfor %}
           </tr></thead>
-          <tbody id="bolim-tbody">
+          <tbody>
+            {% for row in report.rows %}
             <tr>
-              <td>1</td>
-              <td><a href="{{ url('xarid:mahsulotlar') }}" style="font-weight:700;color:var(--color-primary);">Texnik bo'lim</a></td>
-              <td style="color:var(--color-primary);font-weight:700;">24</td><td>4</td><td>6</td><td>10</td>
-              <td style="color:var(--color-success);font-weight:600;">3</td><td style="color:var(--color-danger);">1</td>
+              <td>{{ loop.index }}</td>
+              <td><a href="{{ url('xarid:mahsulotlar') }}?bolim={{ row.subject_id }}" style="font-weight:700;color:var(--color-primary);">{{ row.subject_label }}</a></td>
+              <td style="font-weight:700;{% if row.total and row.total == report.busiest %}color:var(--color-primary);{% endif %}">{{ row.total }}</td>
+              {% for counter in row.counters %}<td>{{ counter }}</td>{% endfor %}
             </tr>
-            <tr>
-              <td>2</td>
-              <td><a href="{{ url('xarid:mahsulotlar') }}" style="font-weight:700;color:var(--color-primary);">Ishlab chiqarish</a></td>
-              <td style="color:var(--color-primary);font-weight:700;">18</td><td>2</td><td>4</td><td>8</td>
-              <td style="color:var(--color-success);font-weight:600;">3</td><td style="color:var(--color-danger);">1</td>
-            </tr>
-            <tr>
-              <td>3</td>
-              <td><a href="{{ url('xarid:mahsulotlar') }}" style="font-weight:700;color:var(--color-primary);">Moliya bo'limi</a></td>
-              <td style="color:var(--color-primary);font-weight:700;">12</td><td>1</td><td>3</td><td>6</td>
-              <td style="color:var(--color-success);font-weight:600;">2</td><td style="color:var(--color-danger);">0</td>
-            </tr>
-            <tr>
-              <td>4</td>
-              <td><a href="{{ url('xarid:mahsulotlar') }}" style="font-weight:700;color:var(--color-primary);">Logistika</a></td>
-              <td style="color:var(--color-primary);font-weight:700;">8</td><td>1</td><td>2</td><td>4</td>
-              <td style="color:var(--color-success);font-weight:600;">1</td><td style="color:var(--color-danger);">0</td>
-            </tr>
-            <tr class="total-row">
+            {% else %}
+            <tr><td colspan="{{ 3 + report.columns|length }}" class="muted" style="text-align:center;padding:24px;">Bo'lim topilmadi.</td></tr>
+            {% endfor %}
+            {% if report.has_rows %}
+            <tr class="total-row" data-jami="{{ report.totals.total }}">
               <td colspan="2" style="font-weight:700;"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Jami:</td>
-              <td style="font-weight:800;">62</td><td style="font-weight:700;">8</td><td style="font-weight:700;">15</td><td style="font-weight:700;">28</td>
-              <td style="font-weight:700;color:var(--color-success);">9</td><td style="font-weight:700;color:var(--color-danger);">2</td>
+              <td style="font-weight:800;">{{ report.totals.total }}</td>
+              {% for counter in report.totals.counters %}<td style="font-weight:700;">{{ counter }}</td>{% endfor %}
             </tr>
+            {% endif %}
           </tbody>
         </table>
       </div>
+      {% if not report.columns %}
+      <div class="muted" style="padding:12px 16px;">Shartnoma statuslari belgilanmagan, shuning uchun holat ustunlari yo'q.</div>
+      {% endif %}
     </div>
 
     <div class="alert alert-info" style="margin-top:16px;">

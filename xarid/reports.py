@@ -25,12 +25,17 @@ from django.contrib.auth.models import AbstractBaseUser
 from django.db.models import Count, Q
 
 from xarid.filters import DatePeriod
-from xarid.models import ShartnomaStatus, assignable_specialists
+from xarid.models import Department, ShartnomaStatus, assignable_specialists
 
 # The ORM path from a specialist to one of their assigned applications, and
 # from there to the status of a contract raised against it.
 ASSIGNED_APPLICATIONS = "assigned_applications"
 ASSIGNED_CONTRACT_STATUS = "assigned_applications__contracts__status"
+
+# The same two paths read from a department, which owns the applications it
+# raised rather than the ones it was given.
+DEPARTMENT_APPLICATIONS = "applications"
+DEPARTMENT_CONTRACT_STATUS = "applications__contracts__status"
 
 
 @dataclass(frozen=True)
@@ -68,12 +73,15 @@ class ReportRow:
         total: how many purchase applications the subject holds in the
             period, however far they have got.
         counters: one count per StatusColumn, in the columns' order.
+        subject_id: the primary key of what the row reports on, for a page
+            that links its rows somewhere. None when the row links nowhere.
     """
 
     subject_label: str
     detail: str
     total: int
     counters: tuple[int, ...]
+    subject_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -211,5 +219,53 @@ def staff_workload(period: DatePeriod | None) -> Report:
             counters=tuple(getattr(specialist, column.alias) for column in columns),
         )
         for specialist in specialists
+    )
+    return Report(columns=columns, rows=rows, totals=totals_of(columns, rows))
+
+
+def department_purchasing(period: DatePeriod | None, chosen_department: str = "") -> Report:
+    """The Korhona xaridi | Bo`limlar report (REQ-XARID-001).
+
+    A row per active department: how many purchase applications it raised,
+    and how many of them stand in each contract status. A department that
+    raised nothing still has a row of zeros - the department head is reading
+    the report to compare departments, and a missing one is not a comparison.
+
+    The busiest department comes first, because which department consumes the
+    most purchasing effort is the question the page answers; a tie breaks by
+    name so two requests agree on the order.
+
+    Args:
+        period: the period chosen in the filter bar, which narrows by the
+            date an application arrived. None, or a period that was refused,
+            means all time.
+        chosen_department: the department chosen in the bar, as its primary
+            key; empty means every department.
+
+    Returns:
+        The generated columns, a row per department and the totals row.
+    """
+    inside_period = period.as_condition(f"{DEPARTMENT_APPLICATIONS}__") if period else Q()
+    columns = status_columns()
+    departments = Department.objects.active()
+    if chosen_department:
+        departments = departments.filter(pk=chosen_department)
+
+    counted = departments.annotate(
+        arizalar=Count(DEPARTMENT_APPLICATIONS, filter=inside_period, distinct=True),
+        **status_counters(
+            columns, DEPARTMENT_APPLICATIONS, DEPARTMENT_CONTRACT_STATUS, inside_period
+        ),
+    ).order_by("-arizalar", "name")
+
+    rows = tuple(
+        ReportRow(
+            subject_label=department.name,
+            detail="",
+            total=department.arizalar,
+            counters=tuple(getattr(department, column.alias) for column in columns),
+            subject_id=department.pk,
+        )
+        for department in counted
     )
     return Report(columns=columns, rows=rows, totals=totals_of(columns, rows))

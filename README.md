@@ -191,6 +191,19 @@ exactly as it does on the list pages, refusals included. There is no default
 period: the report opens on all time. The counting lives in
 `xarid/reports.py` and is one query per report, not one per status.
 
+`Hisobotlar / Bo'limlar Xaridi` (Korhona xaridi | Bo`limlar) counts the same
+statuses per department instead of per employee: a row per active department,
+how many purchase applications it raised, and how many of them stand in each
+contract status, with the same totals row. The busiest department is first,
+because which department consumes the most purchasing effort is the question
+the page answers; a tie breaks by name. A department that raised nothing
+still has a row of zeros, and a deactivated department has none.
+
+That report is narrowed by its `Bo'lim` drop-down and by a period over the
+date an application arrived, which is the only date every application has.
+A department name links to the Mahsulotlar page carrying `?bolim=<id>`; that
+page is still the supplied prototype and ignores it until UZK-047.
+
 ## Attachments
 
 Application PDFs live under `ATTACHMENT_ROOT` (`attachments/`, gitignored),

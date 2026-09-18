@@ -91,7 +91,7 @@ from xarid.permissions import (
     may_open,
     revoke_contract_editing,
 )
-from xarid.reports import staff_workload
+from xarid.reports import department_purchasing, staff_workload
 
 USERS_TEMPLATE = "xarid/pages/users.html"
 INCOMING_TEMPLATE = "xarid/pages/kelib-arizalar.html"
@@ -106,7 +106,6 @@ PURCHASE_TEMPLATE = "xarid/pages/xarid-ariza.html"
 PROTOTYPE_PAGE_TEMPLATES: dict[str, str] = {
     "dashboard": "xarid/index.html",
     "tuzilgan": "xarid/pages/tuzilgan.html",
-    "bolimlar": "xarid/pages/bolimlar.html",
     "mahsulot-tur": "xarid/pages/mahsulot-tur.html",
     "mahsulotlar": "xarid/pages/mahsulotlar.html",
     "integration": "xarid/pages/integration.html",
@@ -1451,4 +1450,37 @@ def staff_workload_report(request: HttpRequest) -> HttpResponse:
         request,
         WORKLOAD_TEMPLATE,
         {"report": staff_workload(table_filter.period), "table_filter": table_filter},
+    )
+
+
+DEPARTMENTS_REPORT_TEMPLATE = "xarid/pages/bolimlar.html"
+
+# A department's purchasing is counted from the day its application arrived,
+# which is the only date every application has (REQ-XARID-001).
+DEPARTMENT_REPORT_PERIOD = DateColumn("Kelib tushgan sana", "kelib_tushgan_sana")
+
+
+def department_purchasing_report(request: HttpRequest) -> HttpResponse:
+    """Korhona xaridi | Bo`limlar: what each department is buying.
+
+    The bar offers the department drop-down the prototype promised and the
+    period; the chosen department comes from the bar itself, so its options
+    are the departments the applications actually name.
+    """
+    table_filter = TableFilter(
+        (BY_DEPARTMENT,),
+        Application.objects.all(),
+        request.GET,
+        date_column=DEPARTMENT_REPORT_PERIOD,
+    )
+    report_invalid_filters(request, table_filter)
+    chosen_department = table_filter.fields[0].selected
+
+    return render(
+        request,
+        DEPARTMENTS_REPORT_TEMPLATE,
+        {
+            "report": department_purchasing(table_filter.period, chosen_department),
+            "table_filter": table_filter,
+        },
     )
