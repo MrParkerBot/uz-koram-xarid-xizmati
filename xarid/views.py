@@ -1412,7 +1412,18 @@ PURCHASE_EXPORT_COLUMNS = (
     ExportColumn("Buyurtma nomi", lambda ariza, line: line.buyurtma_nomi),
     ExportColumn("Soni", lambda ariza, line: line.soni_display),
     ExportColumn("O'lchov", lambda ariza, line: line.olchov_birligi),
-    ExportColumn("Holati", lambda ariza, line: ariza.status.name if ariza.status else ""),
+    # shown_status, not status: the page shows the contract's state once there
+    # is one (TASK-UZK-033), and a download that held the raised-as status
+    # instead would be a well-formed file that quietly disagreed with the
+    # screen it came from.
+    ExportColumn(
+        "Holati",
+        lambda ariza, line: ariza.shown_status.name if ariza.shown_status else "",
+    ),
+    ExportColumn(
+        "Holat manbasi",
+        lambda ariza, line: "Shartnoma" if ariza.status_follows_contract else "Ariza",
+    ),
     ExportColumn("Mahsulot turi", lambda ariza, line: category_label(line)),
     ExportColumn("Izoh", lambda ariza, line: ariza.izoh),
     ExportColumn("Yaratilgan", lambda ariza, line: local_date(ariza.yaratilingan_sana)),

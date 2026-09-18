@@ -1970,7 +1970,7 @@ class PurchaseApplication(models.Model):
         return contract is not None and contract.status_id is not None
 
     @property
-    def shown_status(self):
+    def shown_status(self) -> OrderedStatus | None:
         """The state this request is currently in (REQ-ARIZA-017).
 
         Section 4.9 has the current status change according to the contract's
