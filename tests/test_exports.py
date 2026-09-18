@@ -26,11 +26,14 @@ from tests.support import (
 )
 from xarid.exports import EXCEL_CONTENT_TYPE, PDF_CONTENT_TYPE
 from xarid.models import (
+    BOLIM_BOSHLIGI,
+    DIREKTOR,
     KATTA_MUTAXASIS,
     MENEJER,
     USERS,
     Application,
     Contract,
+    PurchaseApplication,
     ShartnomaStatus,
 )
 
@@ -284,6 +287,63 @@ class ExportPeriodTests(SignedInAdminTestCase):
 
         self.assertContains(response, "dan=2026-02-01")
         self.assertContains(response, "tartib=osish")
+
+
+class PurchaseStatusExportTests(SignedInAdminTestCase):
+    """The Xarid Arizasi download holds the status the page shows (TASK-UZK-033)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.texnik = a_department("Texnik bo`lim")
+        cls.head = make_user("exp.head", user_type=BOLIM_BOSHLIGI, department=cls.texnik)
+        cls.direktor = make_user("exp.direktor", user_type=DIREKTOR)
+        cls.specialist = make_user("exp.specialist", user_type=KATTA_MUTAXASIS)
+        cls.requester = make_user("exp.requester", user_type=USERS, department=cls.texnik)
+
+    def a_contracted_request(self, status):
+        request = a_purchase_application(self.requester, self.texnik, with_pdf=False)
+        request.approve(by=self.head)
+        request.refresh_from_db()
+        request.approve(by=self.direktor)
+        request.refresh_from_db()
+        application = request.raised_application
+        application.accept(by=self.admin)
+        application.refresh_from_db()
+        application.assign(by=self.admin, specialist=self.specialist)
+        a_contract(application, self.specialist, status=status)
+        return PurchaseApplication.objects.get(pk=request.pk)
+
+    def exported(self) -> list[list[object]]:
+        return workbook_rows(self.client.get(page("xarid-ariza-eksport", "xlsx")))
+
+    def test_the_file_holds_the_contract_status_the_page_shows(self) -> None:
+        status = ShartnomaStatus.objects.active().first()
+        self.a_contracted_request(status)
+
+        rows = self.exported()
+
+        holat = rows[0].index("Holati")
+        self.assertEqual(rows[1][holat], status.name)
+
+    def test_the_file_says_which_status_it_is(self) -> None:
+        status = ShartnomaStatus.objects.active().first()
+        self.a_contracted_request(status)
+
+        rows = self.exported()
+
+        manba = rows[0].index("Holat manbasi")
+        self.assertEqual(rows[1][manba], "Shartnoma")
+
+    def test_a_request_with_no_contract_exports_its_own_status(self) -> None:
+        request = a_purchase_application(self.requester, self.texnik, with_pdf=False)
+
+        rows = self.exported()
+
+        holat = rows[0].index("Holati")
+        manba = rows[0].index("Holat manbasi")
+        self.assertEqual(rows[1][holat], request.status.name)
+        self.assertEqual(rows[1][manba], "Ariza")
 
 
 class ReportExportTests(SignedInAdminTestCase):

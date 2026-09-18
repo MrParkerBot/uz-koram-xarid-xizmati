@@ -348,6 +348,36 @@ must not change underneath the person making it. Which is why the status
 control lives on both pages, and why the status route returns to whichever one
 it was used from.
 
+## A purchase request and its contract
+
+The `Xarid Arizasi` list shows a request the state of the contract formed from
+it. The chain is three hops - request, the department application it raised on
+approval, the newest contract against that - and **any hop may be missing**:
+a request that has not been approved raised no application, and one that has
+may have no contract yet. Each missing hop is an ordinary state, and the
+request then shows what it always showed.
+
+**There is no mapping, and that is the mapping.** DEC-010 makes `Ariza Status`
+and `Shartnoma Status` independent tables an administrator extends separately,
+and defines no correspondence between them. A translation table written here
+would be invented in the code and invalidated by the next row somebody adds on
+either page. So the contract's status is shown **as it is** - and because the
+two tables need not even look related, the row says the state came from the
+contract, or a requester would have no way to tell why the word changed.
+
+**Derived, never copied.** A column kept in step by a hook is out of step the
+first time something writes around the hook, and this record needs no column:
+the contract knows its status and the request knows its contract. The
+request's own `status` is left exactly as it was, so the record still knows
+what it was raised as.
+
+The contract's **number** appears in that explanation only for somebody who may
+open the page the contract is currently on — `Contract.page_showing` answers
+where that is. DEC-015 gives Users this page and no contract page at all, so
+naming the contract to them would hand over a fact from a page they cannot
+open, and the list is deliberately not filtered by requester. It is the rule
+the attachment download already follows.
+
 ## Attachments
 
 Application PDFs live under `ATTACHMENT_ROOT` (`attachments/`, gitignored),
