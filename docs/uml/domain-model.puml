@@ -85,6 +85,7 @@ class Contract <<xarid_contract>> {
   invoice_sanasi : DateField
   muddat_talabi : DateField
   izoh : TextField
+  pdf : FileField
   yaratilingan_sana : DateTimeField
 }
 

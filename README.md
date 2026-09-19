@@ -325,6 +325,13 @@ The PDF cell follows DEC-019: a link appears only where one would work. An
 application that has no attachment, or that was rejected and so is on no
 page, shows a dash instead of a link that would answer 403.
 
+A contract carries its own PDF on the same terms (REQ-SHARTNOMA-010). The
+`Shartnoma Kiritish` form will not save without one: a contract is a document
+before it is a row, and a row without the document it records is a claim
+nobody can check. The column itself is optional, as the Ariza one is, so a
+contract raised before the column existed stays readable and the admin can
+still key one in.
+
 ## Contract statuses
 
 A contract's status is moved from the `Kelishinlingan` page, by the specialist

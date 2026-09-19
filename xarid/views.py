@@ -1242,7 +1242,7 @@ def contract_create(request: HttpRequest) -> HttpResponse:
     it from the rows.
     """
     applications = contractable_applications(request.user)
-    form = ContractForm(request.POST, applications=applications)
+    form = ContractForm(request.POST, request.FILES, applications=applications)
     items = ContractItemFormSet(request.POST, queryset=ContractItem.objects.none())
 
     if not (form.is_valid() and items.is_valid()):
@@ -1265,6 +1265,7 @@ def contract_create(request: HttpRequest) -> HttpResponse:
             tolash_muddati=form.cleaned_data["tolash_muddati"],
             muddat_talabi=form.cleaned_data["muddat_talabi"],
             izoh=form.cleaned_data["izoh"],
+            pdf=form.cleaned_data["pdf"],
         )
 
     record_created(request.user, contract)

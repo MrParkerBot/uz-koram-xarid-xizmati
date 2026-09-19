@@ -35,7 +35,7 @@ from django.db import models, transaction
 from django.db.models import QuerySet
 from django.utils import timezone
 
-from xarid.attachments import application_pdf_field, attachment_storage
+from xarid.attachments import application_pdf_field, attachment_storage, contract_pdf_field
 
 # ---------------------------------------------------------------------------
 # Roles (DEC-013). The spellings are the department's own and are what the
@@ -1317,6 +1317,7 @@ class Contract(models.Model):
     )
     muddat_talabi = models.DateField("Muddat talabi", null=True, blank=True)
     izoh = models.TextField("Izoh", blank=True)
+    pdf = contract_pdf_field()
     yaratilingan_sana = models.DateTimeField("Yaratilingan sana", auto_now_add=True)
 
     class Meta:

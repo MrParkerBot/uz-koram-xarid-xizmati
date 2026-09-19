@@ -109,7 +109,7 @@ option. Ko'rish and Yuborish are still waiting for later work.
 
 <div id="sht-modal" class="modal-overlay{% if not open_form %} hidden{% endif %}">
   <div class="modal-box modal-lg" style="max-width:860px;">
-    <form method="post" action="{{ url('xarid:shartnoma-yaratish') }}" data-contract-form>
+    <form method="post" action="{{ url('xarid:shartnoma-yaratish') }}" enctype="multipart/form-data" data-contract-form>
       {{ csrf_input }}
       <div class="modal-title"><i class="bi bi-file-earmark-text" aria-hidden="true"></i> Shartnoma Kiritish</div>
 
@@ -181,6 +181,8 @@ option. Ko'rish and Yuborish are still waiting for later work.
           <div class="form-hint">Qatorlar yig'indisi; saqlashda server hisoblaydi.</div>
         </div>
       </div>
+
+      <div style="margin-top:16px;">{{ widget(form.pdf, "Ilova (PDF)", required=true, hint="PDF, eng ko'pi bilan 10 MB (DEC-019).") }}</div>
 
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-custom" data-close-modal="sht-modal"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</button>

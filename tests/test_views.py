@@ -6,6 +6,7 @@ from datetime import date
 
 from django.contrib.auth import get_user_model
 from django.contrib.staticfiles import finders
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils.crypto import get_random_string
 
@@ -560,6 +561,7 @@ class ContractsTests(SignedInAdminTestCase):
             "form-1-buyurtma_soni": "500",
             "form-1-olchov_birligi": "ta",
             "form-1-narxi": "1000.50",
+            "pdf": a_pdf("shartnoma.pdf"),
         }
         fields.update(overrides)
         return fields
@@ -587,6 +589,34 @@ class ContractsTests(SignedInAdminTestCase):
 
         self.assertContains(response, rejected.shartnoma_raqami)
         self.assertContains(response, "Narx qayta ko&#39;rilsin")
+
+    def test_a_contract_entered_without_its_pdf_is_refused(self) -> None:
+        """REQ-SHARTNOMA-010: the document comes with the row, or neither does."""
+        response = self.client.post(
+            page("shartnoma-yaratish"), self.contract_fields(pdf="")
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Shartnoma uchun PDF ilova yuklanishi shart.")
+        self.assertFalse(Contract.objects.exists())
+
+    def test_the_attachment_is_kept_against_the_contract(self) -> None:
+        self.client.post(page("shartnoma-yaratish"), self.contract_fields())
+
+        contract = Contract.objects.get()
+
+        self.assertTrue(contract.pdf)
+        self.assertIn("shartnomalar/", contract.pdf.name)
+
+    def test_a_contract_attachment_that_is_not_a_pdf_is_refused(self) -> None:
+        not_a_pdf = SimpleUploadedFile("shartnoma.txt", b"not a pdf", content_type="text/plain")
+
+        response = self.client.post(
+            page("shartnoma-yaratish"), self.contract_fields(pdf=not_a_pdf)
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Contract.objects.exists())
 
     def test_a_contract_needs_a_supplier_a_date_and_at_least_one_row(self) -> None:
         response = self.client.post(

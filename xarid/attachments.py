@@ -111,6 +111,24 @@ def application_pdf_field() -> models.FileField:
     )
 
 
+def contract_pdf_field() -> models.FileField:
+    """The Shartnoma PDF column (REQ-SHARTNOMA-010).
+
+    Optional on the record for the same reason the Ariza one is: a contract
+    entered through the admin, or one raised before this column existed, has
+    no attachment and must stay readable. The entry form makes it compulsory
+    instead, which is where the rule belongs.
+    """
+    return models.FileField(
+        "Shartnoma (PDF)",
+        upload_to="shartnomalar/%Y/%m",
+        storage=attachment_storage,
+        blank=True,
+        validators=[validate_pdf],
+        help_text="PDF, eng ko`pi bilan 10 MB (DEC-019).",
+    )
+
+
 def attachment_response(attachment, download_name: str) -> FileResponse:
     """Hand a stored attachment back as a download.
 

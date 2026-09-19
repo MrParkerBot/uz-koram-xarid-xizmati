@@ -393,14 +393,26 @@ SUGGESTED_UNITS = ("ta", "kg", "m")
 CONTROL = {"class": "form-control"}
 
 
-def pdf_upload_field() -> forms.FileField:
-    """The compulsory PDF attachment of the two application creation forms."""
+def pdf_upload_field(
+    missing: str = "Ariza uchun PDF ilova yuklanishi shart.",
+) -> forms.FileField:
+    """The compulsory PDF attachment of a creation form.
+
+    Compulsory here rather than on the column: the record stays readable
+    without one, because a contract raised before the column existed has
+    none, while every form that creates one asks for it.
+
+    Args:
+        missing: what to say when nobody attached a file. It names the thing
+            being created, so the contract form does not tell its user that
+            an Ariza needs an attachment.
+    """
     return forms.FileField(
         label="Ilova (PDF)",
         required=True,
         validators=[validate_pdf],
         help_text="PDF, eng ko`pi bilan 10 MB (DEC-019).",
-        error_messages={"required": "Ariza uchun PDF ilova yuklanishi shart."},
+        error_messages={"required": missing},
         widget=forms.ClearableFileInput(attrs={"class": "form-control", "accept": ".pdf"}),
     )
 
@@ -594,7 +606,13 @@ class ContractForm(forms.ModelForm):
     Shartnoma qiymati is not a field: it is the sum of the rows. The
     applications that may be chosen are passed in, because which ones this
     person may contract against is a question about who is asking.
+
+    A PDF is compulsory here (REQ-SHARTNOMA-010): a contract is a document
+    before it is a row, and the row without the document it records is a
+    claim nobody can check.
     """
+
+    pdf = pdf_upload_field("Shartnoma uchun PDF ilova yuklanishi shart.")
 
     class Meta:
         model = Contract
@@ -608,6 +626,7 @@ class ContractForm(forms.ModelForm):
             "muddat_talabi",
             "invoice_sanasi",
             "izoh",
+            "pdf",
         )
         field_classes = {"application": ApplicationChoiceField}
         labels = {

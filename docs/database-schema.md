@@ -100,6 +100,7 @@ removed by the application.
 | `invoice_sanasi` | DateField | null |  |
 | `muddat_talabi` | DateField | null |  |
 | `izoh` | TextField |  |  |
+| `pdf` | FileField |  |  |
 | `yaratilingan_sana` | DateTimeField |  |  |
 
 ## `xarid_contractitem` - Shartnoma qatori
