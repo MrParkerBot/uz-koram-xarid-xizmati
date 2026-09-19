@@ -114,7 +114,8 @@ a dash, not nought days.
 ├── docs/                     the section 6.2 deliverables, generated:
 │   ├── bpmn/                 the purchase request and contract flows
 │   ├── uml/                  a class diagram of every entity
-│   └── database-schema.md    every table and column
+│   ├── database-schema.md    every table and column
+│   └── database-schema.sql   the same schema as SQLite DDL
 ├── requirements.txt          runtime dependencies
 ├── requirements-dev.txt      ruff, for the lint gate
 ├── .env.example              every environment variable, with placeholders
@@ -504,6 +505,14 @@ models and from the flows as the code runs them, not written by hand:
 python manage.py delivery_docs          # write them
 python manage.py delivery_docs --check  # fail if they are out of date
 ```
+
+The `DB SQL` the assignment also lists is `database-schema.sql`, emitted by the
+same schema editor that applies the migrations rather than kept beside them by
+hand (DEC-040): one source of truth, and a second copy that cannot drift
+because the same check guards it. It is SQLite DDL and documents the schema; it
+is not a script meant for another database or another server. Writing it needs
+a database connection, because the backend opens a cursor before it will
+describe a table.
 
 `tests/test_documentation.py` runs that check, so a migration that leaves the
 schema document behind fails the build rather than being noticed years later.
