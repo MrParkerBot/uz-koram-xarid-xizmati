@@ -131,6 +131,8 @@ a dash, not nought days.
 │   ├── navigation.py         the sidebar
 │   ├── reports.py            the Hisobotlar counting: status columns, rows
 │   │                         and totals
+│   ├── dashboard.py          the Boshqaruv paneli counting: indicators,
+│   │                         spendings, processing times, top suppliers
 │   ├── attachments.py        PDF storage outside the web root; the QR stamp
 │   ├── jinja2.py             the template environment (url, static, date...)
 │   ├── migrations/           0001 schema, 0002 seeded master data

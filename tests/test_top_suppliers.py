@@ -21,6 +21,11 @@ from tests.support import (
     make_user,
     page,
 )
+from xarid.dashboard import (
+    SPENDINGS_PERIOD,
+    daraja_options,
+    top_suppliers,
+)
 from xarid.filters import DatePeriod
 from xarid.models import (
     DIREKTOR,
@@ -30,7 +35,6 @@ from xarid.models import (
     Supplier,
     deactivate,
 )
-from xarid.reports import SPENDINGS_PERIOD, daraja_options, top_suppliers
 
 # What the page and the panel both say when nothing is ranked. Template text,
 # so it renders as written rather than HTML-escaped.
