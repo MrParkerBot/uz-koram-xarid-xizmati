@@ -488,23 +488,36 @@ class ShartnomaStatus(OrderedStatus):
         ),
     )
 
+    is_signed = models.BooleanField(
+        "Tuzilgan holat",
+        default=False,
+        help_text=(
+            "A contract in this status has been signed, and the dashboard "
+            "counts it under Tuzilgan Shartnomalar. Marked here rather than "
+            "named in the code, for the same reason the completed marker is "
+            "(DEC-010). Only one status may hold the marker."
+        ),
+    )
+
     class Meta:
         ordering = ("position", "name")
         verbose_name = "Shartnoma Status"
         verbose_name_plural = "Shartnoma Statuslari"
 
     def save(self, *args, **kwargs) -> None:
-        """Save, keeping the completed marker on at most one status.
+        """Save, keeping each marker on at most one status.
 
-        Marking this row completed takes the marker off whichever row held it,
-        so the dashboard's completed figure always has one definition however
-        the page is used.
+        Marking this row takes that marker off whichever row held it, so each
+        dashboard figure always has one definition however the page is used.
+        The two markers are independent: a department whose workflow ends at
+        signature may put both on the same row.
         """
         super().save(*args, **kwargs)
-        if self.is_completed:
-            type(self).objects.exclude(pk=self.pk).filter(is_completed=True).update(
-                is_completed=False
-            )
+        for marker in ("is_completed", "is_signed"):
+            if getattr(self, marker):
+                type(self).objects.exclude(pk=self.pk).filter(**{marker: True}).update(
+                    **{marker: False}
+                )
 
     @classmethod
     def completed_status(cls) -> ShartnomaStatus | None:
@@ -523,6 +536,17 @@ class ShartnomaStatus(OrderedStatus):
         status_columns() does.
         """
         return cls.objects.filter(is_completed=True).first()
+
+    @classmethod
+    def signed_status(cls) -> ShartnomaStatus | None:
+        """The status marked as the signed state, or None when none is.
+
+        Answers on the same terms as completed_status(): None rather than an
+        error when nothing is marked, and a deactivated row still answers,
+        because a contract that was signed stayed signed when the row naming
+        that state left the lists.
+        """
+        return cls.objects.filter(is_signed=True).first()
 
 
 class MahsulotTuri(MasterDataRecord):

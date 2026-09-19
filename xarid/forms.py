@@ -180,7 +180,14 @@ class ShartnomaStatusForm(MasterDataForm):
 
     class Meta:
         model = ShartnomaStatus
-        fields = ("name", "badge_colour", "position", "category_number", "is_completed")
+        fields = (
+            "name",
+            "badge_colour",
+            "position",
+            "category_number",
+            "is_completed",
+            "is_signed",
+        )
 
 
 class MahsulotTuriForm(MasterDataForm):
