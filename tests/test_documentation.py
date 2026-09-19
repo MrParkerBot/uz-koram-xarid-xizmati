@@ -21,6 +21,7 @@ from xarid.management.commands.delivery_docs import (
     DOCS,
     PURCHASE_BPMN,
     SCHEMA_FILE,
+    SQL_FILE,
     UML_FILE,
     documents,
     domain_models,
@@ -29,6 +30,11 @@ from xarid.management.commands.delivery_docs import (
 
 class TheDocumentsMatchTheCodeTests(SimpleTestCase):
     """The check the build runs, and what it is checking."""
+
+    # Writing the documents now needs the database: the SQL one is emitted by
+    # the backend's own schema editor, which opens a cursor to turn constraint
+    # checking off before it will describe a table. Nothing here writes rows.
+    databases = {"default"}
 
     def test_every_document_on_disk_is_what_the_command_would_write(self) -> None:
         """The whole point: a migration that leaves them behind fails here."""
@@ -79,6 +85,31 @@ class TheSchemaDocumentTests(SimpleTestCase):
             with self.subTest(model=model.__name__):
                 column = model._meta.concrete_fields[0].column
                 self.assertIn(f"`{column}`", written)
+
+
+class TheSchemaSqlDocumentTests(SimpleTestCase):
+    """The DB SQL deliverable (DEC-040), generated rather than transcribed."""
+
+    def written(self) -> str:
+        return (DOCS / SQL_FILE).read_text(encoding="utf-8")
+
+    def test_it_creates_every_table_the_models_declare(self) -> None:
+        written = self.written()
+
+        for model in domain_models():
+            with self.subTest(model=model.__name__):
+                self.assertIn(f'CREATE TABLE "{model._meta.db_table}"', written)
+
+    def test_it_says_it_is_generated_and_which_dialect_it_is(self) -> None:
+        """A reader who opens it alone must not take it for a portable script."""
+        written = self.written()
+
+        self.assertIn("delivery_docs", written)
+        self.assertIn("SQLite DDL", written)
+
+    def test_it_carries_a_column_added_by_a_later_migration(self) -> None:
+        """The proof it follows the migrations rather than the first of them."""
+        self.assertIn("is_signed", self.written())
 
 
 class TheClassDiagramTests(SimpleTestCase):

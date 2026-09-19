@@ -24,7 +24,7 @@ from pathlib import Path
 from django.apps import apps
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.db import models
+from django.db import connection, models
 
 APPLICATION = "xarid"
 
@@ -37,6 +37,7 @@ DOCS = Path(settings.BASE_DIR) / "docs"
 # written somewhere else - a test needs to make a document stale without
 # touching what is committed.
 SCHEMA_FILE = Path("database-schema.md")
+SQL_FILE = Path("database-schema.sql")
 UML_FILE = Path("uml") / "domain-model.puml"
 PURCHASE_BPMN = Path("bpmn") / "xarid-arizasi.bpmn"
 CONTRACT_BPMN = Path("bpmn") / "shartnoma.bpmn"
@@ -193,6 +194,43 @@ def schema_document() -> str:
         lines.append("")
 
     return "\n".join(lines)
+
+
+def schema_sql_document() -> str:
+    """The schema as SQL, emitted by the same code that applies the migrations.
+
+    DEC-040: the assignment lists a DB SQL deliverable, and a copy written by
+    hand would be the one to go stale. Django's schema editor is asked what it
+    would run to create each table and is told to collect the statements
+    instead of executing them, so this file cannot drift from the migrations
+    without the check noticing.
+
+    SQLite DDL, because that is what this system runs on, and documentation of
+    the schema rather than a script meant for another database or server.
+
+    The statements create the tables in alphabetical order, so a table is
+    sometimes named by a foreign key before its own CREATE appears. SQLite
+    resolves references when a statement runs rather than when it is parsed,
+    and the file is read rather than run, so the order costs nothing and keeps
+    the output stable between runs.
+    """
+    with connection.schema_editor(collect_sql=True, atomic=False) as editor:
+        for model in domain_models():
+            editor.create_model(model)
+
+    header = [
+        "-- Database schema",
+        "--",
+        "-- Generated from the models by `python manage.py delivery_docs`. Do not edit",
+        "-- by hand: `python manage.py delivery_docs --check` fails when this file and",
+        "-- the code disagree, and the test suite runs that check.",
+        "--",
+        "-- SQLite DDL (DEC-040). This describes the schema the migrations produce; it",
+        "-- is not a script for another database or another server.",
+        "",
+    ]
+
+    return "\n".join(header + editor.collected_sql) + "\n"
 
 
 def uml_document() -> str:
@@ -378,6 +416,8 @@ def index_document() -> str:
             "entity, its fields and its relations. |",
             f"| [`{SCHEMA_FILE.name}`]({SCHEMA_FILE.name}) | Every table and column, "
             "with its type, its rules and what it refers to. |",
+            f"| [`{SQL_FILE.name}`]({SQL_FILE.name}) | The same schema as SQLite "
+            "DDL, emitted by the code that applies the migrations. |",
             "",
             "## They are generated, not written",
             "",
@@ -400,9 +440,11 @@ def index_document() -> str:
             "the `.puml` renders with PlantUML.",
             "",
             "The assignment also lists `DB SQL` among the deliverables. The schema is owned",
-            "by the migrations in `xarid/migrations/`, which are the executable definition;",
-            "`database-schema.md` describes what they produce rather than repeating them in",
-            "a second dialect that would be the one to go stale.",
+            "by the migrations in `xarid/migrations/`, which are the executable definition,",
+            "so `database-schema.sql` is generated from them rather than written beside",
+            "them: a hand-kept second copy would be the one to go stale, and this one",
+            "cannot, because the same check guards it. It is SQLite DDL and documents the",
+            "schema (DEC-040); it is not meant to be run against another database.",
             "",
         ]
     )
@@ -419,6 +461,7 @@ def documents(root: Path | None = None) -> dict[Path, str]:
     written = {
         inside / "README.md": index_document(),
         inside / SCHEMA_FILE: schema_document(),
+        inside / SQL_FILE: schema_sql_document(),
         inside / UML_FILE: uml_document(),
     }
     for flow, path in FLOWS:
