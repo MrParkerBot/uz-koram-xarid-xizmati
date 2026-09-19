@@ -23,20 +23,7 @@ from tests.support import (
     make_user,
     page,
 )
-from xarid.filters import DatePeriod
-from xarid.models import (
-    KATTA_MUTAXASIS,
-    MENEJER,
-    Application,
-    ApplicationItem,
-    Contract,
-    ContractStatusChange,
-    MahsulotTuri,
-    ShartnomaStatus,
-    Supplier,
-    deactivate,
-)
-from xarid.reports import (
+from xarid.dashboard import (
     APPROVAL,
     DELIVERY,
     INVOICE,
@@ -51,6 +38,19 @@ from xarid.reports import (
     span_of,
     spending_indicators,
     supplier_categories,
+)
+from xarid.filters import DatePeriod
+from xarid.models import (
+    KATTA_MUTAXASIS,
+    MENEJER,
+    Application,
+    ApplicationItem,
+    Contract,
+    ContractStatusChange,
+    MahsulotTuri,
+    ShartnomaStatus,
+    Supplier,
+    deactivate,
 )
 
 DELIVERED = "Yetkazib berilgan"

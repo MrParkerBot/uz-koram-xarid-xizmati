@@ -32,6 +32,18 @@ from django.views.generic import TemplateView
 
 from xarid.attachments import attachment_response
 from xarid.audit import record_created, record_decision, record_deleted, record_edited
+from xarid.dashboard import (
+    BY_DARAJA,
+    DASHBOARD_TOP_SUPPLIERS,
+    SPENDINGS_PERIOD,
+    daraja_options,
+    dashboard_indicators,
+    dated_contracts,
+    processing_times,
+    spending_indicators,
+    supplier_categories,
+    top_suppliers,
+)
 from xarid.exports import ExportColumn, TableExport, export_response, lines_of, local_date
 from xarid.filters import (
     DateColumn,
@@ -101,20 +113,10 @@ from xarid.permissions import (
     revoke_contract_editing,
 )
 from xarid.reports import (
-    BY_DARAJA,
-    DASHBOARD_TOP_SUPPLIERS,
-    SPENDINGS_PERIOD,
     category_purchasing,
-    daraja_options,
-    dashboard_indicators,
-    dated_contracts,
     department_purchasing,
-    processing_times,
     report_export,
-    spending_indicators,
     staff_workload,
-    supplier_categories,
-    top_suppliers,
 )
 
 USERS_TEMPLATE = "xarid/pages/users.html"
