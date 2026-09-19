@@ -188,12 +188,40 @@ class NotificationsPanelTests(TestCase):
         self.assertNotContains(response, "Boshqaning xabari")
         self.assertContains(response, EMPTY_PANEL)
 
+    def marking_predicate(self, queries: CaptureQueriesContext) -> str:
+        """Which rows the panel's one marking statement chose, as SQL.
+
+        The statement is picked out by the table it writes to rather than by
+        position: the session has its own writes, and which of them run
+        depends on how the test client signed this person in.
+
+        Only the predicate is returned. The value half sets read_at to the
+        moment it ran, which is different on every request and is not what
+        this is asking about - the question is whether choosing the rows
+        costs a bound parameter each.
+        """
+        written = [
+            query["sql"]
+            for query in queries
+            if query["sql"].lstrip().upper().startswith("UPDATE")
+            and Notification._meta.db_table in query["sql"]
+        ]
+
+        self.assertEqual(len(written), 1, "the panel should mark read in one statement")
+
+        return written[0].split(" WHERE ", 1)[-1]
+
     def test_it_marks_read_without_listing_every_notification(self) -> None:
         """One statement over this person's unread rows, not one id each.
 
         SQLite refuses an IN list past its own parameter limit, and nothing
         deletes a notification, so an account that collects enough of them
         would otherwise lose its own panel.
+
+        The assertion is on the statement's own text, not on how many
+        statements ran. An IN list naming eight thousand ids is still a
+        single query, so counting queries cannot see this fault - which is
+        how it survived one review and came back in the next.
         """
         self.client.force_login(self.requester)
 
@@ -207,9 +235,10 @@ class NotificationsPanelTests(TestCase):
         with CaptureQueriesContext(connection) as many:
             self.client.get(page("notifications"))
 
-        # Eight notifications cost what two did: the marking does not grow
-        # with them, and neither does the number of bound parameters.
+        # Eight notifications cost what two did, and the statement that marks
+        # them is the same text either way: it names the reader, not the rows.
         self.assertEqual(len(many), len(few))
+        self.assertEqual(self.marking_predicate(many), self.marking_predicate(few))
         self.assertEqual(unread_for(self.requester), 0)
 
     def test_the_entries_it_shows_still_say_they_were_new(self) -> None:
