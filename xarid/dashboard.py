@@ -106,7 +106,7 @@ def as_percentage_of(count: int, supplier_count: int) -> Indicator:
 def dashboard_indicators() -> DashboardIndicators:
     """How many suppliers there are, and how much of that has contracts.
 
-    The specification asks for the created and the completed contracts as
+    The specification asks for the signed and the completed contracts as
     percentages of the supplier count (REQ-DASH-003, REQ-DASH-004), which is
     a ratio rather than a share: one supplier may hold several contracts, so
     a figure above 100% means exactly that and is not clamped.
@@ -114,20 +114,29 @@ def dashboard_indicators() -> DashboardIndicators:
     Deleted suppliers are left out. DEC-009 deletes a master data row by
     deactivating it, so an active row is a supplier the department still has.
 
-    Completed means the status marked as the completed state on the Shartnoma
-    Status page; when no status is marked, nothing counts as completed.
+    Tuzilgan Shartnomalar counts the contracts in the status marked as the
+    signed state, not every contract raised (DEC-039). The indicator shares
+    its name with that status, so counting anything wider made the label and
+    the number say different things: a contract raised and then refused was
+    being counted as a contract the department had signed.
+
+    Both figures read their state from a marker on the Shartnoma Status page
+    rather than naming a status in code (DEC-010), and when no status carries
+    a marker nothing counts under it.
 
     Returns:
         The supplier count and the two indicators measured against it.
     """
     supplier_count = Supplier.objects.active().count()
+    signed_status = ShartnomaStatus.signed_status()
     completed_status = ShartnomaStatus.completed_status()
     contracts = Contract.objects.all()
+    signed_count = contracts.filter(status=signed_status).count() if signed_status else 0
     completed_count = contracts.filter(status=completed_status).count() if completed_status else 0
 
     return DashboardIndicators(
         supplier_count=supplier_count,
-        created=as_percentage_of(contracts.count(), supplier_count),
+        created=as_percentage_of(signed_count, supplier_count),
         completed=as_percentage_of(completed_count, supplier_count),
     )
 

@@ -25,10 +25,14 @@ supplied with the assignment, on SQLite, behind Django's own authentication.
 - **Purchase applications**: a requester raises one against their own
   department, the department head approves, then the director approves - which
   stamps a QR code onto the PDF and raises the department's own application.
-- **Dashboard**: the supplier count and the created and completed contract
+- **Dashboard**: the supplier count and the signed and completed contract
   percentages measured against it are counted from the database. Which
-  contract status means completed is marked on the Shartnoma Status page,
-  because the statuses are editable master data. The spendings card adds up
+  contract status means signed, and which means completed, are both marked on
+  the Shartnoma Status page, because the statuses are editable master data.
+  `Tuzilgan Shartnomalar %` counts the contracts that reached the signed
+  status, not every contract raised (DEC-039): the indicator shares its name
+  with that status, and a contract raised and later refused is not one the
+  department signed. The spendings card adds up
   contract values: the total inside the period chosen in the bar, with the
   calendar year's agreed total under it, both in UZS. The period narrows that
   card alone - the other three report where the department stands now - and a

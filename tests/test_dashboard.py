@@ -131,7 +131,7 @@ class IndicatorTests(TestCase):
 
         self.assertEqual(dashboard_indicators().supplier_count, 1)
 
-    def test_created_is_every_contract_as_a_percentage_of_the_suppliers(self) -> None:
+    def test_signed_contracts_are_a_percentage_of_the_suppliers(self) -> None:
         a_supplier(name="MetalGrup JV", inn="223456789")
         a_supplier(name="UzElektro", inn="323456789")
         a_supplier(name="GazTrade", inn="423456789")
@@ -143,6 +143,40 @@ class IndicatorTests(TestCase):
         # Five suppliers: the four above and the one a_contract() raises with.
         self.assertEqual((created.count, created.measured_against, created.percentage), (1, 5, 20))
 
+    def test_it_counts_only_the_status_marked_signed(self) -> None:
+        """DEC-039: the figure counts signed contracts, not every one raised."""
+        self.a_contract_in(self.drawn_up)
+        self.a_contract_in(self.delivered)
+        self.a_contract_in(None)
+
+        self.assertEqual(dashboard_indicators().created.count, 1)
+
+    def test_the_signed_figure_follows_the_marker(self) -> None:
+        """Move the marker and the same contracts are counted differently."""
+        self.a_contract_in(self.drawn_up)
+        self.a_contract_in(self.delivered)
+        self.delivered.is_signed = True
+        self.delivered.save()
+
+        self.assertEqual(dashboard_indicators().created.count, 1)
+        self.assertEqual(
+            dashboard_indicators().created.count,
+            ShartnomaStatus.objects.get(name=DELIVERED).contracts.count(),
+        )
+
+    def test_marking_one_status_signed_takes_the_marker_off_the_other(self) -> None:
+        self.delivered.is_signed = True
+        self.delivered.save()
+
+        self.assertFalse(ShartnomaStatus.objects.get(name=DRAWN_UP).is_signed)
+        self.assertEqual(ShartnomaStatus.objects.filter(is_signed=True).count(), 1)
+
+    def test_nothing_is_signed_when_no_status_carries_the_marker(self) -> None:
+        self.a_contract_in(self.drawn_up)
+        ShartnomaStatus.objects.update(is_signed=False)
+
+        self.assertEqual(dashboard_indicators().created.count, 0)
+
     def test_completed_counts_only_the_status_marked_completed(self) -> None:
         self.a_contract_in(self.delivered)
         self.a_contract_in(self.drawn_up)
@@ -150,7 +184,7 @@ class IndicatorTests(TestCase):
 
         indicators = dashboard_indicators()
 
-        self.assertEqual(indicators.created.count, 3)
+        self.assertEqual(indicators.created.count, 1)
         self.assertEqual(indicators.completed.count, 1)
 
     def test_the_completed_figure_follows_the_marker(self) -> None:

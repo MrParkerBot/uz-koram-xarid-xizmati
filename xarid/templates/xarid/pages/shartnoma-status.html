@@ -36,7 +36,9 @@
                 <td>{{ status.name }}</td>
                 <td style="text-align:center;"><span class="badge {{ status.badge_class }}">{{ status.name }}</span></td>
                 <td style="text-align:center;">
-                  {% if status.is_completed %}<span class="badge badge-approved">Tugallangan</span>{% else %}<span class="muted">—</span>{% endif %}
+                  {% if status.is_completed %}<span class="badge badge-approved">Tugallangan</span>{% endif %}
+                  {% if status.is_signed %}<span class="badge badge-approved">Tuzilgan</span>{% endif %}
+                  {% if not status.is_completed and not status.is_signed %}<span class="muted">—</span>{% endif %}
                 </td>
                 <td style="text-align:center;white-space:nowrap;">
                   <a class="btn btn-outline-custom btn-xs" href="{{ url('xarid:shartnoma-status') }}?edit={{ status.pk }}"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</a>
@@ -62,6 +64,7 @@
           {{ text_input(form.position, "Tartib", placeholder="10", type="number", hint="Ro'yhatdagi tartib. Bo'sh qoldirilsa, oxiriga qo'shiladi.") }}
           {{ text_input(form.category_number, "Category Number", placeholder="100123", type="number", hint="6 xonali son. Majburiy emas.") }}
           {{ widget(form.is_completed, "Tugallangan holat", hint="Bu holatdagi shartnoma tugallangan hisoblanadi va Dashboard uni shunday sanaydi. Faqat bitta status belgilanadi.") }}
+          {{ widget(form.is_signed, "Tuzilgan holat", hint="Bu holatdagi shartnoma tuzilgan hisoblanadi va Dashboard uni Tuzilgan Shartnomalar sifatida sanaydi. Faqat bitta status belgilanadi.") }}
           {{ save_and_cancel(url('xarid:shartnoma-status')) }}
           <div class="alert alert-info" style="margin-top:20px;">
             <span>ℹ</span>

@@ -177,6 +177,7 @@ class ShartnomaStatus <<xarid_shartnomastatus>> {
   position : PositiveIntegerField
   name : CharField
   is_completed : BooleanField
+  is_signed : BooleanField
 }
 
 class ShartnomaTuri <<xarid_shartnomaturi>> {

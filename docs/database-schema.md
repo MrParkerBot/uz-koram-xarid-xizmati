@@ -208,6 +208,7 @@ removed by the application.
 | `position` | PositiveIntegerField |  |  |
 | `name` | CharField | unique |  |
 | `is_completed` | BooleanField |  |  |
+| `is_signed` | BooleanField |  |  |
 
 ## `xarid_shartnomaturi` - Shartnoma Turi
 
