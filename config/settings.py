@@ -172,6 +172,25 @@ LOGIN_REDIRECT_URL = "xarid:landing"
 SESSION_COOKIE_SECURE = read_boolean_setting("DJANGO_SECURE_COOKIES", default=False)
 CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
 
+# Behind a reverse proxy that terminates TLS, Django is handed a plain HTTP
+# request, so request.is_secure() is False and the CSRF middleware expects an
+# Origin of http://the-host while the browser sends https://the-host. Nothing
+# about that looks like a settings problem from the outside: every POST - the
+# sign-in form included - simply answers 403, "Origin checking failed". Listing
+# the origins here is what settles it. Each is written with its scheme, which
+# CSRF_TRUSTED_ORIGINS requires and ALLOWED_HOSTS forbids, so the two variables
+# are deliberately separate rather than one derived from the other.
+CSRF_TRUSTED_ORIGINS = read_list_setting("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
+
+# The other half of the same problem: with this set, request.is_secure() tells
+# the truth behind the proxy, so secure-only cookies are actually sent and a
+# redirect does not drop back to http. It is off unless asked for because it is
+# only safe when the proxy in front of this application sets X-Forwarded-Proto
+# itself and overwrites whatever the client sent; trusting the header without
+# that guarantee lets any client claim https and defeat every secure cookie.
+if read_boolean_setting("DJANGO_TRUST_PROXY_SSL_HEADER", default=False):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},

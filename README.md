@@ -967,10 +967,20 @@ is reported on stderr and read as unset, rather than being guessed at.
 | --- | --- | --- |
 | `DJANGO_SECRET_KEY` | a key generated at startup | ⚠️ **Set this for any real deployment.** The generated fallback changes on every restart, which invalidates sessions. |
 | `DJANGO_DEBUG` | off | Accepts `1`, `true`, `yes`, `on`; `0`, `false`, `no`, `off` turn it off. **Turn it on for local development** — without it `runserver` serves no static files and every page arrives unstyled. |
-| `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Comma separated. |
+| `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Comma separated. Host names only — no scheme and no port. |
 | `DJANGO_SECURE_COOKIES` | off | ⚠️ **Turn this on for any deployment reachable over HTTPS.** Marks the session and CSRF cookies https-only. |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | empty | ⚠️ **Set this for any deployment behind a proxy that terminates HTTPS.** Comma separated, each written **with** its scheme (`https://example.org`), unlike `DJANGO_ALLOWED_HOSTS`. |
+| `DJANGO_TRUST_PROXY_SSL_HEADER` | off | ⚠️ **Turn this on behind such a proxy**, and only there. Makes Django read `X-Forwarded-Proto`. Safe only when the proxy sets that header itself and overwrites what the client sent. |
 
 Debug is off by default so that an unconfigured deployment is the safe one.
+
+The last two go together, and their absence is not a subtle failure. Behind a
+reverse proxy Django is handed a plain HTTP request, so it expects an `Origin`
+of `http://the-host` while the browser sends `https://the-host`, and **every
+form POST — the sign-in form included — answers 403, "CSRF verification failed.
+Origin checking failed."** Nothing about that looks like a settings problem from
+the outside. `python manage.py check --deploy` names the rest of the production
+settings by hand before they bite.
 
 `.env` is read by every `manage.py` command, `python manage.py test` included.
 The suite pins `DJANGO_DEBUG` off for itself so that a run means the same thing
