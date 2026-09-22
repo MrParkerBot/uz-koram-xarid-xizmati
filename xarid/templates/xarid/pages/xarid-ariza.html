@@ -1,74 +1,29 @@
 {% extends "xarid/base.html" %}
 {% from "xarid/_filters.html" import filter_bar, export_links with context %}
 {% from "xarid/_forms.html" import widget, pdf_badge, required_mark with context %}
+{% from "xarid/_pagination.html" import pagination_bar with context %}
 {#
 The Xarid Arizasi page (section 4.9): the other way into the department. The
 queue above the list is DEC-016's approval chain and shows only what is
 waiting for whoever is looking. Bo`lim nomi is filled from the requester's
 own account (DEC-018), never typed.
 #}
-{% block title %}Xarid Arizasi{% endblock %}
-{% block breadcrumb %}Xaridlar / Xarid Arizasi{% endblock %}
-{% block page_heading %}Xarid Arizasi{% endblock %}
+{% block title %}{{ _("Xarid Arizasi") }}{% endblock %}
+{% block breadcrumb %}{{ _("Xaridlar / Xarid Arizasi") }}{% endblock %}
+{% block page_heading %}{{ _("Xarid Arizasi") }}{% endblock %}
 {% block content %}
 
     <div class="page-header">
-      <div><h1 class="page-title">Xarid Arizasi</h1><div class="muted">Purchase Requests</div></div>
+      <div><h1 class="page-title">{{ _("Xarid Arizasi") }}</h1><div class="muted">{{ _("Purchase Requests") }}</div></div>
       <div class="page-actions">
-        <span class="role-tag role-user">Users</span>
-        <span class="role-tag role-admin">Admin</span>
+        <span class="role-tag role-user">{{ _("Users") }}</span>
+        <span class="role-tag role-admin">{{ _("Admin") }}</span>
       </div>
     </div>
-
-    {% if approvals %}
-    <div class="panel" style="margin-bottom:24px;">
-      <div class="page-header" style="margin-bottom:12px;">
-        <div><h2 class="page-title" style="font-size:18px;">Tasdiqlashni kutayotgan arizalar</h2><div class="muted">DEC-016: bo'lim boshlig'i, so'ngra direktor</div></div>
-      </div>
-      <div class="table-wrap">
-        <table class="table-app" id="xa-approvals">
-          <thead><tr>
-            <th style="width:36px;">#</th>
-            <th>Ariza №</th>
-            <th>Shartnoma nomi</th>
-            <th>Bo'lim</th>
-            <th>Buyurtmachi</th>
-            <th>Izoh</th>
-            <th>PDF</th>
-            <th>Yaratilgan</th>
-            <th style="text-align:center;width:170px;">Amallar</th>
-          </tr></thead>
-          <tbody id="xa-approvals-tbody">
-          {% for ariza in approvals %}
-            <tr data-id="{{ ariza.pk }}">
-              <td>{{ loop.index }}</td>
-              <td class="mono-cell">{{ ariza.xarid_raqami }}</td>
-              <td style="font-weight:500;">{{ ariza.shartnoma_nomi }}</td>
-              <td>{{ ariza.department.name }}</td>
-              <td>{{ display_name(ariza.created_by) }}</td>
-              <td style="font-size:11px;color:var(--color-text-muted);">{{ ariza.izoh or "—" }}</td>
-              <td>
-                {% if ariza.pdf %}{{ pdf_badge(url('xarid:xarid-ariza-pdf', ariza.pk), ariza.xarid_raqami ~ ".pdf") }}{% else %}<span class="muted small">—</span>{% endif %}
-              </td>
-              <td class="mono-cell">{{ ariza.yaratilingan_sana|date("Y-m-d") }}</td>
-              <td style="text-align:center;white-space:nowrap;">
-                <form method="post" action="{{ url('xarid:xarid-ariza-tasdiqlash', ariza.pk) }}" style="display:inline;" data-confirm="{{ ariza.xarid_raqami }} tasdiqlansinmi?">
-                  {{ csrf_input }}
-                  <button type="submit" class="btn btn-outline-custom text-success btn-xs"><i class="bi bi-check-lg" aria-hidden="true"></i> Tasdiqlash</button>
-                </form>
-                <button type="button" class="btn btn-outline-custom text-danger btn-xs" data-modal-form="xa-reject-modal" data-action-url="{{ url('xarid:xarid-ariza-inkor', ariza.pk) }}" data-fill-ariza="{{ ariza.xarid_raqami }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Inkor</button>
-              </td>
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-    {% endif %}
 
     <div class="panel">
       <div class="toolbar">{{ filter_bar(table_filter, url('xarid:xarid-ariza')) }}<div class="toolbar-group">
-          <button class="btn btn-primary-custom btn-sm" type="button" data-open-modal="xa-modal"><i class="bi bi-plus-lg" aria-hidden="true"></i> Ariza Yaratish</button>
+          <button class="btn btn-primary-custom btn-sm" type="button" data-open-modal="xa-modal"><i class="bi bi-plus-lg" aria-hidden="true"></i> {{ _("Ariza Yaratish") }}</button>
           {{ export_links('xarid-ariza', table_filter) }}
         </div>
       </div>
@@ -77,17 +32,18 @@ own account (DEC-018), never typed.
         <table class="table-app" id="xa-table">
           <thead><tr>
             <th style="width:36px;">#</th>
-            <th>Ariza №</th>
-            <th>Shartnoma nomi</th>
-            <th>Bo'lim</th>
-            <th>Buyurtma nomi</th>
-            <th>Soni</th>
-            <th>O'lchov</th>
-            <th>Holati</th>
-            <th>Mahsulot Turi</th>
-            <th>Izoh</th>
-            <th>PDF</th>
-            <th>Yaratilgan</th>
+            <th>{{ _("Ariza №") }}</th>
+            <th>{{ _("Shartnoma nomi") }}</th>
+            <th>{{ _("Bo'lim") }}</th>
+            <th>{{ _("Buyurtma nomi") }}</th>
+            <th>{{ _("Soni") }}</th>
+            <th>{{ _("O'lchov") }}</th>
+            <th>{{ _("Holati") }}</th>
+            <th>{{ _("Mahsulot Turi") }}</th>
+            <th>{{ _("Izoh") }}</th>
+            <th>{{ _("Ariza PDF") }}</th>
+            <th>{{ _("Ilova PDF") }}</th>
+            <th>{{ _("Yaratilgan") }}</th>
           </tr></thead>
           <tbody id="xa-tbody">
           {% for ariza in applications %}
@@ -96,7 +52,7 @@ own account (DEC-018), never typed.
             {% for qator in lines %}
             <tr data-id="{{ ariza.pk }}">
               {% if loop.first %}
-              <td rowspan="{{ lines|length }}">{{ application_row.index }}</td>
+              <td rowspan="{{ lines|length }}">{{ table_page.start_index + application_row.index0 }}</td>
               <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.xarid_raqami }}</td>
               <td rowspan="{{ lines|length }}" style="font-weight:500;">{{ ariza.shartnoma_nomi }}</td>
               <td rowspan="{{ lines|length }}">{{ ariza.department.name }}</td>
@@ -107,7 +63,7 @@ own account (DEC-018), never typed.
               {% if loop.first %}
               <td rowspan="{{ lines|length }}">
                 {% set holat = ariza.shown_status %}
-                {% if holat %}<span class="badge {{ holat.badge_class }}">{{ holat.name }}</span>{% else %}<span class="muted small">—</span>{% endif %}
+                {% if holat %}<span class="badge {{ holat.badge_class }}">{{ holat.name }}</span>{% else %}<span class="muted small">—"</span>{% endif %}
                 {% if ariza.status_follows_contract %}
                 <div class="muted small" style="margin-top:4px;">
                   Shartnoma holati{% if may_name_contract(ariza.contract) %}: {{ ariza.contract.shartnoma_raqami }}{% endif %}
@@ -117,20 +73,33 @@ own account (DEC-018), never typed.
               {% endif %}
               <td style="font-size:11px;" class="mono-cell">{{ qator.mahsulot_turi.category_number }} — {{ qator.mahsulot_turi.name }}</td>
               {% if loop.first %}
-              <td style="font-size:11px;color:var(--color-text-muted);" rowspan="{{ lines|length }}">{{ ariza.izoh or "—" }}</td>
-              <td rowspan="{{ lines|length }}">
-                {% if ariza.pdf %}{{ pdf_badge(url('xarid:xarid-ariza-pdf', ariza.pk), ariza.xarid_raqami ~ ".pdf") }}{% else %}<span class="muted small">—</span>{% endif %}
+              <td style="font-size:11px;color:var(--color-text-muted);" rowspan="{{ lines|length }}">
+                {{ ariza.izoh }}
+                {% set qarorlar = decisions[ariza.pk] %}
+                <button type="button" class="comment-open" data-open-drawer="xa-izoh-{{ ariza.pk }}"
+                        title="Qaror izohlari" aria-label="{{ ariza.xarid_raqami }} bo'yicha qaror izohlari">
+                  <i class="bi bi-chat-left-text" aria-hidden="true"></i>
+                  {% if qarorlar %}<span class="comment-count">{{ qarorlar|length }}</span>{% endif %}
+                </button>
               </td>
-              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.yaratilingan_sana|date("Y-m-d") }}</td>
+              {# Drawn from the record, so it is always there to download. #}
+              <td rowspan="{{ lines|length }}">
+                {{ pdf_badge(url('xarid:xarid-ariza-hujjat-pdf', ariza.pk), ariza.xarid_raqami ~ "-ariza.pdf") }}
+              </td>
+              <td rowspan="{{ lines|length }}">
+                {% if ariza.pdf %}{{ pdf_badge(url('xarid:xarid-ariza-pdf', ariza.pk), ariza.xarid_raqami ~ "-Ilova.pdf") }}{% else %}<span class="muted small">—"</span>{% endif %}
+              </td>
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.yaratilingan_sana|date("d/m/Y") }}</td>
               {% endif %}
             </tr>
             {% endfor %}
           {% else %}
-            <tr><td colspan="12" class="muted" style="text-align:center;">Hozircha xarid arizasi yo'q.</td></tr>
+            <tr><td colspan="13" class="muted" style="text-align:center;">{{ _("Hozircha xarid arizasi yo'q.") }}</td></tr>
           {% endfor %}
           </tbody>
         </table>
       </div>
+      {{ pagination_bar(table_page, url('xarid:xarid-ariza')) }}
     </div>
 
 {% endblock %}
@@ -143,25 +112,25 @@ own account (DEC-018), never typed.
   <div class="modal-box modal-lg" style="max-width:720px;">
     <form method="post" action="{{ url('xarid:xarid-ariza-yaratish') }}" enctype="multipart/form-data">
       {{ csrf_input }}
-      <div class="modal-title"><i class="bi bi-cart3" aria-hidden="true"></i> Xarid Arizasi Yaratish</div>
+      <div class="modal-title"><i class="bi bi-cart3" aria-hidden="true"></i> {{ _("Xarid Arizasi Yaratish") }}</div>
 
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Ariza Raqami</label>
+          <label class="form-label">{{ _("Ariza Raqami") }}</label>
           <input type="text" class="form-control mono" value="Saqlashda beriladi" disabled/>
         </div>
         <div class="form-group">
-          <label class="form-label">Yaratilingan Sana</label>
-          <input type="text" class="form-control" value="{{ now('Y-m-d') }}" disabled/>
+          <label class="form-label">{{ _("Yaratilingan Sana") }}</label>
+          <input type="text" class="form-control" value="{{ now('d/m/Y') }}" disabled/>
         </div>
       </div>
 
       <div class="form-row">
-        {{ widget(form.shartnoma_nomi, "Shartnoma Nomi", required=true) }}
+        {{ widget(form.shartnoma_nomi, "Ariza Nomi", required=true) }}
         <div class="form-group">
-          <label class="form-label">Bo'lim Nomi</label>
+          <label class="form-label">{{ _("Bo'lim Nomi") }}</label>
           <input type="text" class="form-control" value="{{ signed_in_department.name if signed_in_department else 'Hisobingizga biriktirilgan bo`lim' }}" disabled/>
-          <div class="form-hint">Hisobingizdan olinadi (DEC-018).</div>
+          <div class="form-hint">{{ _("Hisobingizdan olinadi (DEC-018).") }}</div>
         </div>
       </div>
 
@@ -180,19 +149,19 @@ own account (DEC-018), never typed.
           </div>
           {% endfor %}
         </div>
-        <button type="button" class="btn btn-outline-custom btn-xs" data-add-row data-row-template="xa-row-template" data-row-container="xa-item-rows" data-total-forms="id_form-TOTAL_FORMS">+ Qator qo'shish</button>
+        <button type="button" class="btn btn-outline-custom btn-xs" data-add-row data-row-template="xa-row-template" data-row-container="xa-item-rows" data-total-forms="id_form-TOTAL_FORMS">{{ _("+ Qator qo'shish") }}</button>
       </div>
 
       <div class="form-row">
         {{ widget(form.muddat_talabi, "Muddat Talabi") }}
         {{ widget(form.izoh, "Izoh") }}
       </div>
-
-      {{ widget(form.pdf, "Ilova (PDF)", required=true, hint="PDF, eng ko'pi bilan 10 MB (DEC-019).") }}
+      <!--If they ask the pdf attachment mendatory apply required=true to the following-->
+      {{ widget(form.pdf, "Ilova (PDF)", hint="PDF, eng ko'pi bilan 10 MB (DEC-019).") }}
 
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline-custom" data-close-modal="xa-modal"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</button>
-        <button type="submit" class="btn btn-primary-custom"><i class="bi bi-check-lg" aria-hidden="true"></i> Yaratish</button>
+        <button type="button" class="btn btn-outline-custom" data-close-modal="xa-modal"><i class="bi bi-x-lg" aria-hidden="true"></i> {{ _("Bekor") }}</button>
+        <button type="submit" class="btn btn-primary-custom"><i class="bi bi-check-lg" aria-hidden="true"></i> {{ _("Yaratish") }}</button>
       </div>
     </form>
   </div>
@@ -201,28 +170,51 @@ own account (DEC-018), never typed.
 <template id="xa-row-template">
   <div class="form-row-items-4" style="margin-bottom:10px;">
     {{ item_formset.empty_form.id }}
-    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Mahsulot Turi</label>{{ item_formset.empty_form.mahsulot_turi }}</div>
-    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Buyurtma Nomi</label>{{ item_formset.empty_form.buyurtma_nomi }}</div>
-    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Soni</label>{{ item_formset.empty_form.buyurtma_soni }}</div>
-    <div class="form-group" style="margin-bottom:0;"><label class="form-label">O'lchov</label>{{ item_formset.empty_form.olchov_birligi }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">{{ _("Mahsulot Turi") }}</label>{{ item_formset.empty_form.mahsulot_turi }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">{{ _("Buyurtma Nomi") }}</label>{{ item_formset.empty_form.buyurtma_nomi }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">{{ _("Soni") }}</label>{{ item_formset.empty_form.buyurtma_soni }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">{{ _("O'lchov") }}</label>{{ item_formset.empty_form.olchov_birligi }}</div>
   </div>
 </template>
-
-<div id="xa-reject-modal" class="modal-overlay hidden">
-  <div class="modal-box">
-    <form method="post" id="xa-reject-form">
-      {{ csrf_input }}
-      <div class="modal-title"><i class="bi bi-x-circle" aria-hidden="true"></i> Xarid arizasini inkor etish</div>
-      <p class="modal-desc muted">Ariza <span data-fill="ariza" class="mono-cell"></span> inkor etiladi. Sababi buyurtmachiga yetkaziladi.</p>
-      <div class="form-group">
-        <label class="form-label" for="xa-reject-izoh">Izoh {{ required_mark() }}</label>
-        <textarea class="form-control" id="xa-reject-izoh" name="inkor_izohi" rows="4" placeholder="Nima uchun inkor etilmoqda?" required></textarea>
+{#
+One panel per row of the table, rendered here rather than built in the browser:
+the rows are already the ones this reader may see, and an izoh written by
+somebody else is text nobody has vetted - handing it to innerHTML is how a
+comment becomes markup.
+#}
+{% for ariza in applications %}
+<div id="xa-izoh-{{ ariza.pk }}-overlay" class="drawer-overlay hidden">
+  <div class="drawer-panel" role="dialog" aria-modal="true" aria-label="{{ ariza.xarid_raqami }} qaror izohlari">
+    <div class="drawer-header">
+      <div class="drawer-title"><i class="bi bi-chat-left-text" aria-hidden="true"></i> {{ _("Qaror izohlari") }}</div>
+      <button type="button" class="drawer-close" data-close-drawer="xa-izoh-{{ ariza.pk }}" aria-label="Yopish">
+        <i class="bi bi-x-lg" aria-hidden="true"></i>
+      </button>
+    </div>
+    <div class="drawer-body">
+      <div class="muted small" style="margin-bottom:16px;">
+        <span class="mono-cell">{{ ariza.xarid_raqami }}</span> — {{ ariza.shartnoma_nomi }}
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline-custom" data-close-modal="xa-reject-modal">Bekor qilish</button>
-        <button type="submit" class="btn btn-outline-custom text-danger">OK</button>
+      {% for qaror in decisions[ariza.pk] %}
+      <div class="comment-entry">
+        <div class="comment-entry-head">
+          <span class="comment-author">{{ display_name(qaror.by) }}</span>
+          <span class="badge {{ 'badge-approved' if qaror.approved else 'badge-danger' }}">
+            {{ "Tasdiqladi" if qaror.approved else "Inkor etdi" }}
+          </span>
+        </div>
+        {% if qaror.comment %}
+        <div class="comment-text">{{ qaror.comment }}</div>
+        {% else %}
+        <div class="comment-text muted">{{ _("Izoh qoldirilmagan.") }}</div>
+        {% endif %}
+        <div class="comment-date mono-cell">{{ qaror.at|date("d/m/Y H:i") }}</div>
       </div>
-    </form>
+      {% else %}
+      <div class="muted small">{{ _("Bu ariza bo'yicha hali qaror qabul qilinmagan.") }}</div>
+      {% endfor %}
+    </div>
   </div>
 </div>
+{% endfor %}
 {% endblock %}

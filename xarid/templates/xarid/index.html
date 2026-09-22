@@ -17,9 +17,9 @@ The 12-month spendings chart and the activity list are still the supplied
 prototype's own sample data; the activity list is the log TASK-UZK-052
 writes, which has a page of its own.
 #}
-{% block title %}Dashboard{% endblock %}
-{% block breadcrumb %}Umumiy / Dashboard{% endblock %}
-{% block page_heading %}Xarid faoliyati bo'yicha umumiy ko'rinish{% endblock %}
+{% block title %}{{ _("Dashboard") }}{% endblock %}
+{% block breadcrumb %}{{ _("Umumiy / Dashboard") }}{% endblock %}
+{% block page_heading %}{{ _("Xarid faoliyati bo'yicha umumiy ko'rinish") }}{% endblock %}
 {% block styles %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
 {% endblock %}
@@ -27,12 +27,12 @@ writes, which has a page of its own.
 
     <div class="page-header">
       <div>
-        <h1 class="page-title">Asosiy Panel</h1>
-        <div class="muted">Yetkazib beruvchilar, shartnomalar va xarajatlar bo'yicha joriy holat.</div>
+        <h1 class="page-title">{{ _("Asosiy Panel") }}</h1>
+        <div class="muted">{{ _("Yetkazib beruvchilar, shartnomalar va xarajatlar bo'yicha joriy holat.") }}</div>
       </div>
       <div class="page-actions">
-        <button class="btn btn-outline-custom" data-generate-export><i class="bi bi-download" aria-hidden="true"></i> <span class="label-text">Hisobotni yuklash</span></button>
-        <a class="btn btn-primary-custom" href="{{ url('xarid:kelib-arizalar') }}"><i class="bi bi-inbox" aria-hidden="true"></i> <span class="label-text">Arizalarni ko'rish</span></a>
+        <button class="btn btn-outline-custom" data-generate-export><i class="bi bi-download" aria-hidden="true"></i> <span class="label-text">{{ _("Hisobotni yuklash") }}</span></button>
+        <a class="btn btn-primary-custom" href="{{ url('xarid:kelib-arizalar') }}"><i class="bi bi-inbox" aria-hidden="true"></i> <span class="label-text">{{ _("Arizalarni ko'rish") }}</span></a>
       </div>
     </div>
 
@@ -46,20 +46,20 @@ writes, which has a page of its own.
     <div class="grid-4 mb-4">
       <div class="panel stat-card">
         <div class="stat-icon"><i class="bi bi-buildings text-primary" aria-hidden="true"></i></div>
-        <div class="stat-label">Jami Yetkazib beruvchilar</div>
+        <div class="stat-label">{{ _("Jami Yetkazib beruvchilar") }}</div>
         <div class="kpi-value">{{ indicators.supplier_count }}</div>
-        <div class="stat-sub muted">Ro'yhatdagi faol firmalar</div>
+        <div class="stat-sub muted">{{ _("Ro'yhatdagi faol firmalar") }}</div>
       </div>
       <div class="panel stat-card">
         <div class="stat-icon"><i class="bi bi-file-earmark-text text-info" aria-hidden="true"></i></div>
-        <div class="stat-label">Tuzilgan Shartnomalar %</div>
+        <div class="stat-label">{{ _("Tuzilgan Shartnomalar") }} %</div>
         <div class="kpi-value">{{ indicators.created.percentage }}%</div>
         <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:{{ indicators.created.bar_width }}%"></div></div>
         <div class="stat-sub">{{ indicators.created.count }} / {{ indicators.created.measured_against }} jami</div>
       </div>
       <div class="panel stat-card">
         <div class="stat-icon"><i class="bi bi-check2-circle text-success" aria-hidden="true"></i></div>
-        <div class="stat-label">Tugallangan %</div>
+        <div class="stat-label">{{ _("Tugallangan") }} %</div>
         <div class="kpi-value">{{ indicators.completed.percentage }}%</div>
         <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:{{ indicators.completed.bar_width }}%"></div></div>
         <div class="stat-sub">{{ indicators.completed.count }} / {{ indicators.completed.measured_against }} jami</div>
@@ -69,23 +69,23 @@ writes, which has a page of its own.
         <div class="stat-label">Sariflangan{% if table_filter.period.is_active %} (tanlangan davr){% else %} (jami){% endif %}</div>
         <div class="kpi-value" style="font-size:20px;" title="{{ spendings.period.display }} UZS">{{ spendings.period.whole_display }} UZS</div>
         <div class="stat-sub">{{ spendings.year_number }}-yilda kelishilgan: {{ spendings.year.whole_display }} UZS</div>
-        <div class="stat-sub">Tejaldi: formulasi kutilmoqda (DEC-025)</div>
+        <div class="stat-sub">{{ _("Tejaldi: formulasi kutilmoqda (DEC-025)") }}</div>
       </div>
     </div>
 
     <!-- PROCESSING TIME -->
     <div class="panel mb-4">
       <div class="panel-header">
-        <div class="panel-title">O'rtacha ma'lumotni qayta ishlash</div>
+        <div class="panel-title">{{ _("O'rtacha ma'lumotni qayta ishlash") }}</div>
         <span class="badge badge-soft">kunlar kesimida</span>
       </div>
       <div class="table-wrap">
         <table class="table-app">
           <thead><tr>
-            <th style="width:200px;">Bosqich</th>
-            <th style="width:120px;text-align:center;">O'rtacha (kun)</th>
-            <th style="width:140px;text-align:center;">Nechta shartnoma</th>
-            <th>Nimadan nimagacha</th>
+            <th style="width:200px;">{{ _("Bosqich") }}</th>
+            <th style="width:120px;text-align:center;">{{ _("O'rtacha (kun)") }}</th>
+            <th style="width:140px;text-align:center;">{{ _("Nechta shartnoma") }}</th>
+            <th>{{ _("Nimadan nimagacha") }}</th>
           </tr></thead>
           <tbody>
           {% for stage in stages %}
@@ -102,7 +102,7 @@ writes, which has a page of its own.
         </table>
       </div>
       <div class="panel-body footer-note">
-        Bosqich chegaralari texnik topshiriqda ko'rsatilmagan; joriy ta'riflar shu yerda keltirilgan (DEC-025 faqat Invoice manbasini belgilaydi).
+        {{ _("Bosqich chegaralari texnik topshiriqda ko'rsatilmagan; joriy ta'riflar shu yerda keltirilgan (DEC-025 faqat Invoice manbasini belgilaydi).") }}
       </div>
     </div>
 
@@ -110,10 +110,10 @@ writes, which has a page of its own.
     <div class="grid-2 mb-4">
       <div class="panel chart-card">
         <div class="panel-header">
-          <div class="panel-title">Xarajatlar (12 oy)</div>
+          <div class="panel-title">{{ _("Xarajatlar (12 oy)") }}</div>
           <div class="d-flex gap-2">
-            <span class="badge badge-primary">Sarf</span>
-            <span class="badge badge-approved">Tejaldi</span>
+            <span class="badge badge-primary">{{ _("Sarf") }}</span>
+            <span class="badge badge-approved">{{ _("Tejaldi") }}</span>
           </div>
         </div>
         <div class="panel-body"><canvas id="spending-chart"></canvas></div>
@@ -121,8 +121,8 @@ writes, which has a page of its own.
 
       <div class="panel">
         <div class="panel-header">
-          <div class="panel-title">Top Yetkazib beruvchilar</div>
-          <a class="badge badge-primary" href="{{ url('xarid:top-suppliers') }}">Barchasi</a>
+          <div class="panel-title">{{ _("Top Yetkazib beruvchilar") }}</div>
+          <a class="badge badge-primary" href="{{ url('xarid:top-suppliers') }}">{{ _("Barchasi") }}</a>
         </div>
         <div class="panel-body">
           <div id="top-suppliers">
@@ -133,7 +133,7 @@ writes, which has a page of its own.
             </div>
             <div class="progress-bar-wrap{% if not loop.last %} mb-3{% endif %}"><div class="progress-bar-fill" style="width:{{ row.share_of_leader }}%"></div></div>
           {% else %}
-            <div class="muted small">Tanlangan davrda shartnomasi bo'lgan firma topilmadi.</div>
+            <div class="muted small">{{ _("Tanlangan davrda shartnomasi bo'lgan firma topilmadi.") }}</div>
           {% endfor %}
           </div>
         </div>
@@ -144,13 +144,13 @@ writes, which has a page of its own.
     <div class="grid-2 mb-4">
       <div class="panel">
         <div class="panel-header">
-          <div class="panel-title">Supplier Category Taqsimoti</div>
+          <div class="panel-title">{{ _("Supplier Category Taqsimoti") }}</div>
           <span class="badge badge-soft" title="Tugallangan holatga yetgan mahsulot turlari">Yetkazib berilgan turlar: {{ categories.delivered_types }}</span>
         </div>
         <div class="table-wrap">
           <table class="table-app">
             <thead><tr>
-              <th style="width:40px;">#</th><th>Kategoriya</th><th style="width:120px;text-align:center;">Supplier soni</th><th style="width:110px;text-align:center;">Ulush %</th>
+              <th style="width:40px;">#</th><th>{{ _("Kategoriya") }}</th><th style="width:120px;text-align:center;">{{ _("Supplier soni") }}</th><th style="width:110px;text-align:center;">{{ _("Ulush") }} %</th>
             </tr></thead>
             <tbody>
             {% for row in categories.rows %}
@@ -161,7 +161,7 @@ writes, which has a page of its own.
                 <td style="text-align:center;"><span class="badge {% if row.firms %}badge-primary{% else %}badge-soft{% endif %}">{{ row.share }}%</span></td>
               </tr>
             {% else %}
-              <tr><td colspan="4" class="muted" style="text-align:center;">Mahsulot turlari kiritilmagan.</td></tr>
+              <tr><td colspan="4" class="muted" style="text-align:center;">{{ _("Mahsulot turlari kiritilmagan.") }}</td></tr>
             {% endfor %}
             </tbody>
           </table>
@@ -171,7 +171,7 @@ writes, which has a page of its own.
         </div>
       </div>
       <div class="panel chart-card">
-        <div class="panel-header"><div class="panel-title">Category Bar Chart</div></div>
+        <div class="panel-header"><div class="panel-title">{{ _("Category Bar Chart") }}</div></div>
         <div class="panel-body"><canvas id="category-chart"></canvas></div>
         {# The same rows the table shows, so the two cannot drift apart. #}
         <script type="application/json" id="category-chart-data">{{ category_chart|tojson }}</script>
@@ -180,7 +180,7 @@ writes, which has a page of its own.
 
     <!-- QUICK LINKS -->
     <div class="panel mb-4">
-      <div class="panel-header"><div class="panel-title">Tezkor havolalar</div></div>
+      <div class="panel-header"><div class="panel-title">{{ _("Tezkor havolalar") }}</div></div>
       <div class="panel-body">
         <div class="quick-grid">
           <a href="{{ url('xarid:kelib-arizalar') }}" class="quick-tile"><div class="icon"><i class="bi bi-inbox" aria-hidden="true"></i></div><div class="fw-semibold small">Kelib Tushgan</div></a>
@@ -196,8 +196,8 @@ writes, which has a page of its own.
     <!-- RECENT ACTIVITY -->
     <div class="panel">
       <div class="panel-header">
-        <div class="panel-title">So'nggi Faollik</div>
-        <span class="badge badge-primary">Bugun</span>
+        <div class="panel-title">{{ _("So'nggi Faollik") }}</div>
+        <span class="badge badge-primary">{{ _("Bugun") }}</span>
       </div>
       <div class="panel-body">
         <div class="mini-list">
@@ -214,12 +214,12 @@ writes, which has a page of its own.
             <div class="footer-note text-nowrap">Kecha, 17:30</div>
           </div>
           <div class="mini-list-item">
-            <div><span class="fw-semibold">ARZ-2025-015</span> inkor etildi — <span class="text-danger">Narx noto'g'ri</span></div>
+            <div><span class="fw-semibold">ARZ-2025-015</span> inkor etildi — <span class="text-danger">{{ _("Narx noto'g'ri") }}</span></div>
             <div class="footer-note text-nowrap">Kecha, 14:05</div>
           </div>
           <div class="mini-list-item">
             <div><span class="fw-semibold">SHT-2025-041</span> admin tomonidan tasdiqlandi</div>
-            <div class="footer-note text-nowrap">2025-03-12, 11:00</div>
+            <div class="footer-note text-nowrap">12/03/2025, 11:00</div>
           </div>
         </div>
       </div>

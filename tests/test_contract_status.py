@@ -17,15 +17,20 @@ from django.test.utils import CaptureQueriesContext
 from tests.support import (
     SignedInAdminTestCase,
     a_contract,
+    a_department,
     an_assigned_application,
     make_user,
     page,
+    send_form_of,
 )
 from xarid.models import (
     ADMIN,
+    BOLIM_BOSHLIGI,
     KATTA_MUTAXASIS,
+    MENEJER,
     Contract,
     ContractStatusChange,
+    Notification,
     ShartnomaStatus,
 )
 from xarid.permissions import held_contract
@@ -208,12 +213,21 @@ class ContractStatusPageTests(SignedInAdminTestCase):
         return a_contract(application, self.specialist, status=status or self.first)
 
     def test_the_page_shows_the_status_and_the_drop_down(self) -> None:
+        """The drop-down and its Saqlash each have a column of their own.
+
+        The select carries no action: it belongs to the row's form, which
+        Saqlash and Yuborish both submit, so what says the control is drawn
+        is that form's id rather than an action on the select itself.
+        """
         contract = self.a_contract_on_the_page()
 
         response = self.client.get(page("kelishinlingan"))
 
         self.assertContains(response, "Holati")
+        self.assertContains(response, ">Status<")
+        self.assertContains(response, ">Saqlash<")
         self.assertContains(response, self.first.name)
+        self.assertContains(response, send_form_of(contract))
         self.assertContains(response, page("kelishinlingan-holat", contract.pk))
 
     def test_the_drop_down_offers_only_statuses_in_use(self) -> None:
@@ -340,3 +354,168 @@ class StatusCountersTests(SignedInAdminTestCase):
         counted = [row for row in report.rows if row.total]
         self.assertTrue(counted, "the department should have a row")
         self.assertEqual(counted[0].counters[0], 1)
+
+
+class SaveTellsTheHeadTests(SignedInAdminTestCase):
+    """Saqlash tells Xarid Bo`limi's head that a contract moved on.
+
+    The head alone: they handed the work out, and a step forward is theirs
+    to hear about. The Menejer hears when a contract is sent, which is a
+    different message about a different event.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.purchasing = a_department("Xarid bo`limi")
+        cls.purchasing.is_purchasing = True
+        cls.purchasing.save(update_fields=["is_purchasing"])
+        cls.xarid_head = make_user(
+            "save.xarid.head", user_type=BOLIM_BOSHLIGI, department=cls.purchasing
+        )
+        cls.xarid_menejer = make_user(
+            "save.xarid.menejer", user_type=MENEJER, department=cls.purchasing
+        )
+        cls.specialist = make_user(
+            "save.told.specialist", user_type=KATTA_MUTAXASIS, department=cls.purchasing
+        )
+        cls.first, cls.second = tuple(ShartnomaStatus.objects.active())[:2]
+
+    def a_contract_on_the_page(self) -> Contract:
+        return a_contract(
+            an_assigned_application(self.admin, self.specialist),
+            self.specialist,
+            status=self.first,
+        )
+
+    def told_about(self, contract: Contract):
+        return Notification.objects.filter(
+            kind=Notification.Kind.CONTRACT_STATUS_CHANGED,
+            application=contract.application,
+        )
+
+    def save_status(self, contract: Contract, status, **extra):
+        return self.client.post(
+            page("kelishinlingan-holat", contract.pk), {"holat": status.pk}, **extra
+        )
+
+    def test_the_head_is_told_and_the_menejer_is_not(self) -> None:
+        contract = self.a_contract_on_the_page()
+
+        self.save_status(contract, self.second)
+
+        self.assertCountEqual(
+            [note.recipient for note in self.told_about(contract)], [self.xarid_head]
+        )
+
+    def test_the_message_names_the_contract_the_firma_and_the_new_status(self) -> None:
+        contract = self.a_contract_on_the_page()
+
+        self.save_status(contract, self.second)
+
+        note = self.told_about(contract).first()
+        self.assertIn(contract.shartnoma_raqami, note.izoh)
+        self.assertIn(contract.supplier.name, note.izoh)
+        self.assertIn(self.second.name, note.izoh)
+
+    def test_a_press_that_moved_nothing_tells_nobody(self) -> None:
+        """The drop-down left where it was is not a move to report."""
+        contract = self.a_contract_on_the_page()
+
+        self.save_status(contract, self.first)
+
+        self.assertFalse(self.told_about(contract).exists())
+
+    def test_a_refused_move_tells_nobody(self) -> None:
+        contract = self.a_contract_on_the_page()
+        Contract.objects.filter(pk=contract.pk).update(stage=Contract.Stage.SENT)
+
+        self.save_status(contract, self.second)
+
+        self.assertFalse(self.told_about(contract).exists())
+
+    def test_the_head_is_not_told_about_their_own_move(self) -> None:
+        contract = self.a_contract_on_the_page()
+        self.client.force_login(self.xarid_head)
+
+        self.save_status(contract, self.second)
+
+        self.assertFalse(self.told_about(contract).exists())
+
+    def test_a_move_from_the_other_contract_page_tells_the_head_too(self) -> None:
+        """One rule for the action, whichever page it was used from.
+
+        Tuzilgan keeps its own Saqlash, and a signed contract still moves
+        there - a step forward is the same event wherever it was pressed.
+        """
+        contract = self.a_contract_on_the_page()
+        contract.send_for_approval(by=self.specialist)
+        contract.accept(by=self.admin)
+
+        self.save_status(contract, self.second, HTTP_REFERER=page("tuzilgan"))
+
+        self.assertCountEqual(
+            [note.recipient for note in self.told_about(contract)], [self.xarid_head]
+        )
+
+    def test_the_notification_reaches_the_panel(self) -> None:
+        contract = self.a_contract_on_the_page()
+        self.save_status(contract, self.second)
+        self.client.force_login(self.xarid_head)
+
+        response = self.client.get(page("notifications"))
+
+        self.assertContains(response, "Shartnoma holati o`zgartirildi")
+        self.assertContains(response, contract.shartnoma_raqami)
+
+
+class SaveFromThePageTests(SignedInAdminTestCase):
+    """The button itself: a column of its own, sharing the row's form."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.specialist = make_user("save.button", user_type=KATTA_MUTAXASIS)
+
+    def a_contract_on_the_page(self) -> Contract:
+        return a_contract(
+            an_assigned_application(self.admin, self.specialist), self.specialist
+        )
+
+    def test_the_rows_controls_submit_the_same_form(self) -> None:
+        """They share the drop-down, and a select belongs to one form only.
+
+        So Saqlash is the form's own action and the other two override it
+        with formaction. A row drawing a form per button would leave all but
+        one of them posting no status at all.
+        """
+        contract = self.a_contract_on_the_page()
+
+        response = self.client.get(page("kelishinlingan"))
+
+        self.assertContains(response, f'id="sht-qator-{contract.pk}"')
+        for route in ("kelishinlingan-yuborish", "shartnoma-ochirish"):
+            with self.subTest(route=route):
+                self.assertContains(
+                    response, f'formaction="{page(route, contract.pk)}"'
+                )
+
+        # One form for the row: its id, and the three buttons naming it.
+        self.assertEqual(response.content.count(b"sht-qator-%d" % contract.pk), 4)
+
+    def test_somebody_elses_contract_draws_its_controls_disabled(self) -> None:
+        """Drawn but dead: the row is read, and says why nothing happens.
+
+        The form itself is not there, so the action a disabled button names
+        cannot be reached by a hand-made request either - the route asks the
+        same question again regardless.
+        """
+        other = make_user("save.button.other", user_type=KATTA_MUTAXASIS)
+        theirs = a_contract(an_assigned_application(self.admin, other), other)
+        self.client.force_login(self.specialist)
+
+        response = self.client.get(page("kelishinlingan"))
+
+        self.assertNotContains(response, f'id="sht-qator-{theirs.pk}"')
+        self.assertNotContains(response, page("kelishinlingan-holat", theirs.pk))
+        self.assertContains(response, "disabled")

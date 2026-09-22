@@ -1,50 +1,52 @@
 {% extends "xarid/base.html" %}
 {% from "xarid/_forms.html" import text_input, textarea, delete_form, save_and_cancel with context %}
+{% from "xarid/_pagination.html" import pagination_bar with context %}
 {# The Mahsulot Turlari master data page (section 3.6). Ships empty. #}
-{% block title %}Mahsulot Turlari{% endblock %}
-{% block breadcrumb %}Ma'lumotlar / Mahsulot Turlari{% endblock %}
-{% block page_heading %}Mahsulot Turlari{% endblock %}
+{% block title %}{{ _("Mahsulot Turlari") }}{% endblock %}
+{% block breadcrumb %}{{ _("Ma'lumotlar / Mahsulot Turlari") }}{% endblock %}
+{% block page_heading %}{{ _("Mahsulot Turlari") }}{% endblock %}
 {% block content %}
 
     <div class="page-header">
-      <div><h1 class="page-title">Mahsulot Turlari</h1><div class="muted">Product Categories boshqaruvi</div></div>
-      <div class="page-actions"><span class="role-tag role-admin">Admin only</span></div>
+      <div><h1 class="page-title">{{ _("Mahsulot Turlari") }}</h1><div class="muted">{{ _("Product Categories boshqaruvi") }}</div></div>
+      <div class="page-actions"><span class="role-tag role-admin">{{ _("Admin only") }}</span></div>
     </div>
 
     <div class="split-layout" style="grid-template-columns:1fr 360px;">
       <div class="split-table-side">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-          <div style="font-size:14px;font-weight:700;">Mahsulot Turlari Ro'yhati</div>
-          <a class="btn btn-primary-custom btn-sm" href="{{ url('xarid:mahsulot-turlari') }}">+ Yangi qo'shish</a>
+          <div style="font-size:14px;font-weight:700;">{{ _("Mahsulot Turlari Ro'yhati") }}</div>
+          <a class="btn btn-primary-custom btn-sm" href="{{ url('xarid:mahsulot-turlari') }}">{{ _("+ Yangi qo'shish") }}</a>
         </div>
         <div class="search-box" style="margin-bottom:14px;"><i class="bi bi-search search-icon" aria-hidden="true"></i><input type="text" class="form-control" id="search-input" data-table-search="#cat-table" placeholder="Qidirish…"/></div>
         <div class="table-wrap">
           <table class="table-app" id="cat-table">
             <thead><tr>
               <th style="width:40px;">#</th>
-              <th class="sortable">Category №<span class="sort-icon"></span></th>
-              <th>Category Nomi</th>
-              <th style="max-width:200px;">Tavsif</th>
-              <th style="width:120px;text-align:center;">Amallar</th>
+              <th class="sortable">{{ _("Category №") }}<span class="sort-icon"></span></th>
+              <th>{{ _("Category Nomi") }}</th>
+              <th style="max-width:200px;">{{ _("Tavsif") }}</th>
+              <th style="width:120px;text-align:center;">{{ _("Amallar") }}</th>
             </tr></thead>
             <tbody id="cat-tbody">
             {% for category in categories %}
               <tr data-id="{{ category.pk }}">
-                <td>{{ loop.index }}</td>
+                <td>{{ table_page.start_index + loop.index0 }}</td>
                 <td class="mono-cell">{{ category.category_number }}</td>
                 <td>{{ category.name }}</td>
                 <td style="max-width:200px;font-size:11px;color:var(--color-text-muted);">{{ category.description or "—" }}</td>
                 <td style="text-align:center;white-space:nowrap;">
-                  <a class="btn btn-outline-custom btn-xs" href="{{ url('xarid:mahsulot-turlari') }}?edit={{ category.pk }}"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</a>
+                  <a class="btn btn-outline-custom btn-xs" href="{{ url('xarid:mahsulot-turlari') }}?edit={{ category.pk }}"><i class="bi bi-pencil" aria-hidden="true"></i> {{ _("Edit") }}</a>
                   {{ delete_form(url('xarid:mahsulot-turlari-delete', category.pk), category.name ~ " o'chirilsinmi?") }}
                 </td>
               </tr>
             {% else %}
-              <tr><td colspan="5" class="muted" style="text-align:center;">Hozircha kategoriya yo'q. Birinchisini o'ng tomondagi shakl orqali qo'shing.</td></tr>
+              <tr><td colspan="5" class="muted" style="text-align:center;">{{ _("Hozircha kategoriya yo'q. Birinchisini o'ng tomondagi shakl orqali qo'shing.") }}</td></tr>
             {% endfor %}
             </tbody>
           </table>
         </div>
+        {{ pagination_bar(table_page, url('xarid:mahsulot-turlari')) }}
       </div>
 
       <div class="split-form-side">
@@ -53,13 +55,19 @@
           <div class="split-form-title" id="form-title">
             {% if edited_record %}<i class="bi bi-pencil" aria-hidden="true"></i> Kategoriya tahrirlash{% else %}<i class="bi bi-plus-lg" aria-hidden="true"></i> Yangi Kategoriya qo'shish{% endif %}
           </div>
-          {{ text_input(form.category_number, "Category Raqami", placeholder="100042", type="number", required=true, extra_class="mono", hint="6 raqamli kod (masalan: 100042)") }}
+          {#
+          Not required: a category left unnumbered is given the next number
+          by MahsulotTuri.save(), which is what the hint says. The box still
+          takes a particular number when the department knows the code it
+          wants, and a typed one is held to the same six-digit rule.
+          #}
+          {{ text_input(form.category_number, "Category Raqami", placeholder="Avtomatik", type="number", extra_class="mono", hint="6 raqamli kod (masalan: 100042). Bo'sh qoldirilsa, keyingi raqam avtomatik beriladi.") }}
           {{ text_input(form.name, "Category Nomi", placeholder="Kategoriya nomini kiriting", required=true) }}
           {{ textarea(form.description, "Tavsif (ixtiyoriy)", placeholder="Qo'shimcha tavsif…") }}
           {{ save_and_cancel(url('xarid:mahsulot-turlari')) }}
           <div class="alert alert-info" style="margin-top:20px;">
             <span>ℹ</span>
-            <div>Category raqami 6 xonali va takrorlanmas bo'lishi kerak. O'chirilgan kategoriya ro'yhatdan chiqadi, lekin unga bog'langan arizalar va shartnomalar saqlanib qoladi.</div>
+            <div>{{ _("Category raqami 6 xonali va takrorlanmas bo'lishi kerak. O'chirilgan kategoriya ro'yhatdan chiqadi, lekin unga bog'langan arizalar va shartnomalar saqlanib qoladi.") }}</div>
           </div>
         </form>
       </div>

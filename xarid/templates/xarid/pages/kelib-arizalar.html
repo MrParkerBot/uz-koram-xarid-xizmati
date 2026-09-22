@@ -1,22 +1,41 @@
 {% extends "xarid/base.html" %}
 {% from "xarid/_filters.html" import filter_bar, export_links with context %}
-{% from "xarid/_forms.html" import pdf_badge with context %}
+{% from "xarid/_forms.html" import pdf_badge, required_mark with context %}
+{% from "xarid/_pagination.html" import pagination_bar with context %}
 {#
-The Kelib tushgan Arizalar page (section 4.1): what has arrived and not been
-decided, with Qabul and Inkor on each row. Inkor opens one comment modal for
-the page; the row it is about travels on the button as data attributes. The
-filter bar is inert until filtering is built for every table at once.
+The Kelib tushgan Arizalar page (section 4.1). One table, holding every
+purchase request standing at whoever is reading it: DEC-016's chain runs from
+the department head to the Direktor to the purchasing department, and a
+request moves along this table rather than off the page.
+
+The Amallar cell is what differs step by step. A request still to be approved
+carries Tasdiqlash and Inkor, which decide the request itself; one that has
+been approved carries Qabul and Inkor, which decide the application it raised
+- the two buttons this page has always had, on the rows that have got that
+far. Each Inkor opens one comment modal for the page, and the row it is about
+travels on the button as data attributes.
+
+The Izoh cell carries a panel of the steps already taken, and Ariza PDF the
+request drawn from the record, so whoever decides next reads why it got this
+far and what it says without leaving the page.
+
+A row is one order line, as on Xarid Arizasi: what was asked for is what a
+request is approved or refused over, so it is read here rather than fetched
+from the PDF. The request's own cells span its lines, which is why the
+headers are not sortable - the browser sorter moves rows, and a spanning cell
+cannot be moved without tearing its lines off it. Saralash in the filter bar
+sorts whole requests instead.
 #}
-{% block title %}Kelib Tushgan Arizalar{% endblock %}
-{% block breadcrumb %}Arizalar / Kelib Tushgan{% endblock %}
-{% block page_heading %}Kelib Tushgan{% endblock %}
+{% block title %}{{ _("Kelib Tushgan Arizalar") }}{% endblock %}
+{% block breadcrumb %}{{ _("Arizalar / Kelib Tushgan") }}{% endblock %}
+{% block page_heading %}{{ _("Kelib Tushgan") }}{% endblock %}
 {% block content %}
 
     <div class="page-header">
-      <div><h1 class="page-title">Kelib Tushgan Arizalar</h1><div class="muted">Incoming Applications — qabul yoki inkor qilish</div></div>
+      <div><h1 class="page-title">{{ _("Tasdiqlashni kutayotgan arizalar") }}</h1><div class="muted">{{ _("DEC-016: bo'lim boshlig'i, so'ngra direktor, so'ngra xarid bo'limi") }}</div></div>
       <div class="page-actions">
-        <span class="role-tag role-admin">Admin</span>
-        <span class="role-tag role-manager">Manager</span>
+        <span class="role-tag role-admin">{{ _("Admin") }}</span>
+        <span class="role-tag role-manager">{{ _("Manager") }}</span>
       </div>
     </div>
 
@@ -30,71 +49,157 @@ filter bar is inert until filtering is built for every table at once.
         <table class="table-app" id="ariza-table">
           <thead><tr>
             <th style="width:36px;">#</th>
-            <th class="sortable">Ariza №<span class="sort-icon"></span></th>
-            <th>Bo'lim</th>
-            <th>Mahsulot Turi</th>
-            <th>Buyurtma nomi</th>
-            <th class="sortable">Soni<span class="sort-icon"></span></th>
-            <th>O'lchov</th>
-            <th>Izoh</th>
-            <th>PDF</th>
-            <th class="sortable">Kelib tushgan<span class="sort-icon"></span></th>
-            <th style="text-align:center;width:140px;">Amallar</th>
+            <th>{{ _("Ariza №") }}</th>
+            <th>{{ _("Ariza nomi") }}</th>
+            <th>{{ _("Bo'lim") }}</th>
+            <th>{{ _("Buyurtmachi") }}</th>
+            <th>{{ _("Buyurtma nomi") }}</th>
+            <th>{{ _("Soni") }}</th>
+            <th>{{ _("O'lchov") }}</th>
+            <th>{{ _("Bosqich") }}</th>
+            <th>{{ _("Izoh") }}</th>
+            <th>{{ _("Ariza PDF") }}</th>
+            <th>{{ _("Ilova PDF") }}</th>
+            <th>{{ _("Yaratilgan") }}</th>
+            <th style="text-align:center;width:170px;">{{ _("Amallar") }}</th>
           </tr></thead>
           <tbody id="ariza-tbody">
-          {% for ariza in applications %}
+          {% for ariza in queue %}
             {% set application_row = loop %}
             {% set lines = ariza.items.all()|list %}
             {% for qator in lines %}
             <tr data-id="{{ ariza.pk }}">
               {% if loop.first %}
-              <td rowspan="{{ lines|length }}">{{ application_row.index }}</td>
-              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.ariza_raqami }}</td>
+              <td rowspan="{{ lines|length }}">{{ table_page.start_index + application_row.index0 }}</td>
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.xarid_raqami }}</td>
+              <td rowspan="{{ lines|length }}" style="font-weight:500;">{{ ariza.shartnoma_nomi }}</td>
               <td rowspan="{{ lines|length }}">{{ ariza.department.name }}</td>
+              <td rowspan="{{ lines|length }}">{{ display_name(ariza.created_by) }}</td>
               {% endif %}
-              <td style="font-size:11px;" class="mono-cell">{{ qator.mahsulot_turi.category_number }} — {{ qator.mahsulot_turi.name }}</td>
-              <td>{{ qator.buyurtma_nomi }}</td>
+              <td style="font-weight:500;">{{ qator.buyurtma_nomi }}</td>
               <td style="font-weight:600;color:var(--color-primary);">{{ qator.soni_display }}</td>
               <td>{{ qator.olchov_birligi }}</td>
               {% if loop.first %}
-              <td style="font-size:11px;color:var(--color-text-muted);" rowspan="{{ lines|length }}">{{ ariza.izoh or "—" }}</td>
-              <td rowspan="{{ lines|length }}">
-                {% if ariza.pdf %}{{ pdf_badge(url('xarid:ariza-pdf', ariza.pk), ariza.ariza_raqami ~ ".pdf") }}{% else %}<span class="muted small">—</span>{% endif %}
+              <td rowspan="{{ lines|length }}"><span class="badge badge-soft">{{ step_of(ariza) }}</span></td>
+              <td style="font-size:11px;color:var(--color-text-muted);" rowspan="{{ lines|length }}">
+                {{ ariza.izoh }}
+                {% set qarorlar = decisions[ariza.pk] %}
+                <button type="button" class="comment-open" data-open-drawer="ka-izoh-{{ ariza.pk }}"
+                        title="Qaror izohlari" aria-label="{{ ariza.xarid_raqami }} bo'yicha qaror izohlari">
+                  <i class="bi bi-chat-left-text" aria-hidden="true"></i>
+                  {% if qarorlar %}<span class="comment-count">{{ qarorlar|length }}</span>{% endif %}
+                </button>
               </td>
-              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.kelib_tushgan_sana|date("Y-m-d") }}</td>
+              {# Drawn from the record, so it is always there to read. #}
+              <td rowspan="{{ lines|length }}">
+                {{ pdf_badge(url('xarid:xarid-ariza-hujjat-pdf', ariza.pk), ariza.xarid_raqami ~ "-ariza.pdf") }}
+              </td>
+              <td rowspan="{{ lines|length }}">
+                {% if ariza.pdf %}{{ pdf_badge(url('xarid:xarid-ariza-pdf', ariza.pk), ariza.xarid_raqami ~ "-Ilova.pdf") }}{% else %}<span class="muted small">—"</span>{% endif %}
+              </td>
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.yaratilingan_sana|date("d/m/Y") }}</td>
               <td style="text-align:center;white-space:nowrap;" rowspan="{{ lines|length }}">
-                <form method="post" action="{{ url('xarid:ariza-qabul', ariza.pk) }}" style="display:inline;" data-confirm="{{ ariza.ariza_raqami }} qabul qilinsinmi?">
+                {% if ariza.raised_application %}
+                {# Approved: what is decided here is the application it raised. #}
+                <form method="post" action="{{ url('xarid:ariza-qabul', ariza.raised_application.pk) }}" style="display:inline;" data-confirm="{{ ariza.raised_application.ariza_raqami }} qabul qilinsinmi?">
                   {{ csrf_input }}
-                  <button type="submit" class="btn btn-outline-custom text-success btn-xs"><i class="bi bi-check-lg" aria-hidden="true"></i> Qabul</button>
+                  <button type="submit" class="btn btn-outline-custom text-success btn-xs"><i class="bi bi-check-lg" aria-hidden="true"></i> {{ _("Qabul") }}</button>
                 </form>
-                <button type="button" class="btn btn-outline-custom text-danger btn-xs" data-modal-form="reject-modal" data-action-url="{{ url('xarid:ariza-inkor', ariza.pk) }}" data-fill-ariza="{{ ariza.ariza_raqami }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Inkor</button>
+                <button type="button" class="btn btn-outline-custom text-danger btn-xs" data-modal-form="reject-modal" data-action-url="{{ url('xarid:ariza-inkor', ariza.raised_application.pk) }}" data-fill-ariza="{{ ariza.raised_application.ariza_raqami }}"><i class="bi bi-x-lg" aria-hidden="true"></i> {{ _("Inkor") }}</button>
+                {% else %}
+                <form method="post" action="{{ url('xarid:xarid-ariza-tasdiqlash', ariza.pk) }}" style="display:inline;" data-confirm="{{ ariza.xarid_raqami }} tasdiqlansinmi?">
+                  {{ csrf_input }}
+                  <button type="submit" class="btn btn-outline-custom text-success btn-xs"><i class="bi bi-check-lg" aria-hidden="true"></i> {{ _("Tasdiqlash") }}</button>
+                </form>
+                <button type="button" class="btn btn-outline-custom text-danger btn-xs" data-modal-form="xa-reject-modal" data-action-url="{{ url('xarid:xarid-ariza-inkor', ariza.pk) }}" data-fill-ariza="{{ ariza.xarid_raqami }}"><i class="bi bi-x-lg" aria-hidden="true"></i> {{ _("Inkor") }}</button>
+                {% endif %}
               </td>
               {% endif %}
             </tr>
             {% endfor %}
           {% else %}
-            <tr><td colspan="11" class="muted" style="text-align:center;">Hozircha kelib tushgan ariza yo'q.</td></tr>
+            <tr><td colspan="14" class="muted" style="text-align:center;">{{ _("Sizni kutayotgan ariza yo'q.") }}</td></tr>
           {% endfor %}
           </tbody>
         </table>
       </div>
+      {{ pagination_bar(table_page, url('xarid:kelib-arizalar')) }}
     </div>
 
 {% endblock %}
 {% block scripts %}
+{#
+One panel per row of the table, rendered server-side: the rows are already
+the ones this reader may see, and an izoh written by somebody else is text
+nobody has vetted - handing it to innerHTML is how a comment becomes markup.
+#}
+{% for ariza in queue %}
+<div id="ka-izoh-{{ ariza.pk }}-overlay" class="drawer-overlay hidden">
+  <div class="drawer-panel" role="dialog" aria-modal="true" aria-label="{{ ariza.xarid_raqami }} qaror izohlari">
+    <div class="drawer-header">
+      <div class="drawer-title"><i class="bi bi-chat-left-text" aria-hidden="true"></i> {{ _("Qaror izohlari") }}</div>
+      <button type="button" class="drawer-close" data-close-drawer="ka-izoh-{{ ariza.pk }}" aria-label="Yopish">
+        <i class="bi bi-x-lg" aria-hidden="true"></i>
+      </button>
+    </div>
+    <div class="drawer-body">
+      <div class="muted small" style="margin-bottom:16px;">
+        <span class="mono-cell">{{ ariza.xarid_raqami }}</span> — {{ ariza.shartnoma_nomi }}
+      </div>
+      {% for qaror in decisions[ariza.pk] %}
+      <div class="comment-entry">
+        <div class="comment-entry-head">
+          <span class="comment-author">{{ display_name(qaror.by) }}</span>
+          <span class="badge {{ 'badge-approved' if qaror.approved else 'badge-danger' }}">
+            {{ "Tasdiqladi" if qaror.approved else "Inkor etdi" }}
+          </span>
+        </div>
+        {% if qaror.comment %}
+        <div class="comment-text">{{ qaror.comment }}</div>
+        {% else %}
+        <div class="comment-text muted">{{ _("Izoh qoldirilmagan.") }}</div>
+        {% endif %}
+        <div class="comment-date mono-cell">{{ qaror.at|date("d/m/Y H:i") }}</div>
+      </div>
+      {% else %}
+      <div class="muted small">{{ _("Bu ariza bo'yicha hali qaror qabul qilinmagan.") }}</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+<div id="xa-reject-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <form method="post" id="xa-reject-form">
+      {{ csrf_input }}
+      <div class="modal-title"><i class="bi bi-x-circle" aria-hidden="true"></i> {{ _("Xarid arizasini inkor etish") }}</div>
+      <p class="modal-desc muted">{{ _("Ariza") }} <span data-fill="ariza" class="mono-cell"></span> inkor etiladi. Sababi buyurtmachiga yetkaziladi.</p>
+      <div class="form-group">
+        <label class="form-label" for="xa-reject-izoh">Izoh {{ required_mark() }}</label>
+        <textarea class="form-control" id="xa-reject-izoh" name="inkor_izohi" rows="4" placeholder="Nima uchun inkor etilmoqda?" required></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-custom" data-close-modal="xa-reject-modal">{{ _("Bekor qilish") }}</button>
+        <button type="submit" class="btn btn-outline-custom text-danger">{{ _("OK") }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div id="reject-modal" class="modal-overlay hidden">
   <div class="modal-box">
     <form method="post" id="reject-form">
       {{ csrf_input }}
-      <div class="modal-title"><i class="bi bi-x-circle" aria-hidden="true"></i> Arizani inkor etish</div>
-      <p class="modal-desc muted">Ariza <span data-fill="ariza" class="mono-cell"></span> inkor etiladi. Sababi jo'natuvchiga yetkaziladi.</p>
+      <div class="modal-title"><i class="bi bi-x-circle" aria-hidden="true"></i> {{ _("Arizani inkor etish") }}</div>
+      <p class="modal-desc muted">{{ _("Ariza") }} <span data-fill="ariza" class="mono-cell"></span> inkor etiladi. Sababi jo'natuvchiga yetkaziladi.</p>
       <div class="form-group">
-        <label class="form-label" for="reject-izoh">Izoh <span style="color:var(--color-danger)">*</span></label>
+        <label class="form-label" for="reject-izoh">Izoh {{ required_mark() }}</label>
         <textarea class="form-control" id="reject-izoh" name="inkor_izohi" rows="4" placeholder="Nima uchun inkor etilmoqda?" required></textarea>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline-custom" data-close-modal="reject-modal">Bekor qilish</button>
-        <button type="submit" class="btn btn-outline-custom text-danger">OK</button>
+        <button type="button" class="btn btn-outline-custom" data-close-modal="reject-modal">{{ _("Bekor qilish") }}</button>
+        <button type="submit" class="btn btn-outline-custom text-danger">{{ _("OK") }}</button>
       </div>
     </form>
   </div>

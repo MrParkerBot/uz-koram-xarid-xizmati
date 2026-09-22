@@ -25,6 +25,9 @@ from pypdf import PdfWriter
 
 from xarid.models import (
     ADMIN,
+    BOLIM_BOSHLIGI,
+    DIREKTOR,
+    USERS,
     Application,
     ArizaStatus,
     Contract,
@@ -65,6 +68,17 @@ def a_pdf(name: str = "ariza.pdf", pages: int = 1) -> SimpleUploadedFile:
 def page(name: str, *args) -> str:
     """The URL of one application page or action, by its bare page name."""
     return reverse(f"xarid:{name}", args=args)
+
+
+def send_form_of(contract) -> str:
+    """What marks a row's controls on Kelishinlingan in the page's HTML.
+
+    Saqlash and Yuborish share one form per row, because they share the
+    status drop-down and a select can only belong to one form. Both buttons
+    name it by id, so that id is what a test asking whether the row's
+    controls are drawn looks for.
+    """
+    return f'form="sht-qator-{contract.pk}"'
 
 
 def make_user(
@@ -188,8 +202,23 @@ def a_contract(
     *,
     status: ShartnomaStatus | None = None,
     supplier: Supplier | None = None,
+    with_pdf: bool = False,
+    **columns,
 ) -> Contract:
-    """One contract of one priced row, raised against an application."""
+    """One contract of one priced row, raised against an application.
+
+    Without an attachment unless one is asked for. The form has required one
+    since TASK-UZK-036A, but the model does not, and the contracts entered
+    before it have none - so a test about the attachment says so, and every
+    other test is spared writing a file. A class asking for one needs
+    TemporaryAttachmentsMixin, which is where the file goes.
+
+    Any other column - izoh, the dates - is passed straight through.
+    """
+    fields = {}
+    if with_pdf:
+        fields["pdf"] = a_pdf("shartnoma.pdf")
+
     return Contract.raise_contract(
         items=[
             {
@@ -204,6 +233,8 @@ def a_contract(
         application=application,
         supplier=supplier or a_supplier(),
         status=status,
+        **fields,
+        **columns,
     )
 
 
@@ -235,6 +266,48 @@ def a_purchase_application(
     )
 
 
+def an_arrived_purchase_request(
+    *,
+    department: Department | None = None,
+    category: MahsulotTuri | None = None,
+    with_pdf: bool = False,
+) -> PurchaseApplication:
+    """A purchase request that has been the whole way along DEC-016's chain.
+
+    Both approvals taken, so it has raised the department's own application
+    and stands at the purchasing department's step - the rows Kelib Tushgan
+    Arizalar holds. Its approvers are made here and given names nothing else
+    uses, because what a caller cares about is the request, not the chain.
+    """
+    department = department or a_department()
+    suffix = get_random_string(8).lower()
+    requester = make_user(f"arrived.requester.{suffix}", user_type=USERS, department=department)
+    head = make_user(f"arrived.head.{suffix}", user_type=BOLIM_BOSHLIGI, department=department)
+    direktor = make_user(f"arrived.direktor.{suffix}", user_type=DIREKTOR)
+
+    request = a_purchase_application(
+        requester, department, category=category, with_pdf=with_pdf
+    )
+    request.approve(by=head)
+    request.approve(by=direktor)
+    request.refresh_from_db()
+
+    return request
+
+
+def raised_on(day: date, hour: int = 12, **fields) -> PurchaseApplication:
+    """An arrived purchase request raised on a chosen local day, not the test run.
+
+    yaratilingan_sana is written on insert, so it is rewritten in the database
+    rather than passed to the builder.
+    """
+    request = an_arrived_purchase_request(**fields)
+    moment = timezone.make_aware(datetime.combine(day, time(hour, 0)))
+    PurchaseApplication.objects.filter(pk=request.pk).update(yaratilingan_sana=moment)
+    request.refresh_from_db()
+    return request
+
+
 def formset_management(total: int = 1) -> dict[str, str]:
     """The management form fields a model formset POST must carry."""
     return {
@@ -255,6 +328,7 @@ class TemporaryAttachmentsMixin:
 
     attachment_fields = (
         Application._meta.get_field("pdf"),
+        Contract._meta.get_field("pdf"),
         PurchaseApplication._meta.get_field("pdf"),
         PurchaseApplication._meta.get_field("asl_pdf"),
     )

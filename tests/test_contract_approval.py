@@ -125,9 +125,15 @@ class RejectTests(TestCase):
         self.assertEqual(contract.stage, Contract.Stage.SENT)
 
     def test_a_rejected_contract_is_back_with_its_specialist(self) -> None:
-        """Returned back is not a stage: it is the Kelishinlingan page again."""
+        """Returned back is not a stage: it is the Kelishinlingan page again.
+
+        Rejected through the route rather than the model, because the reason
+        reaches the specialist through the Izoh drawer, which reads the
+        decision log - and only the route writes to it.
+        """
         contract = self.a_sent_contract()
-        contract.reject(by=self.head, comment="Narxi baland.")
+        self.client.force_login(self.head)
+        self.client.post(page("tuzilgan-inkor", contract.pk), {"izoh": "Narxi baland."})
 
         self.client.force_login(self.specialist)
         response = self.client.get(page("kelishinlingan"))
@@ -183,7 +189,7 @@ class TuzilganPageTests(SignedInAdminTestCase):
 
         contract.refresh_from_db()
         self.assertEqual(contract.stage, Contract.Stage.SIGNED)
-        self.assertContains(response, "tasdiqlandi")
+        self.assertContains(response, "qabul qilindi")
 
     def test_rejecting_from_the_page_returns_it_with_the_comment(self) -> None:
         contract = self.a_sent_contract()
@@ -245,12 +251,13 @@ class TuzilganPageTests(SignedInAdminTestCase):
 
         self.assertContains(response, page("kelishinlingan-holat", contract.pk))
 
-    def test_a_specialist_is_offered_the_status_control_only_on_their_own(self) -> None:
-        """A control that always answers 'not your work' should not be drawn.
+    def test_a_specialist_is_offered_no_status_control_here(self) -> None:
+        """A Katta Mutaxasis reads this page (TASK-UZK-068).
 
-        The matrix lets a Katta Mutaxasis open this page, and the status route
-        still asks whose contract it is - so the page has to ask the same
-        question the other contract page does.
+        The contract is out of their hands once it is here - waiting on a
+        decision, or decided - and Kelishinlingan is where they report
+        progress on the ones still in them. Not even on their own, which is
+        the part that changed: the control used to be drawn for those.
         """
         other = make_user("tuzilgan.other", user_type=KATTA_MUTAXASIS)
         mine = self.a_sent_contract()
@@ -262,8 +269,19 @@ class TuzilganPageTests(SignedInAdminTestCase):
 
         response = self.client.get(page("tuzilgan"))
 
-        self.assertContains(response, page("kelishinlingan-holat", mine.pk))
+        self.assertContains(response, mine.shartnoma_raqami)
+        self.assertNotContains(response, page("kelishinlingan-holat", mine.pk))
         self.assertNotContains(response, page("kelishinlingan-holat", theirs.pk))
+        self.assertNotContains(response, ">Saqlash</button>")
+
+    def test_whoever_is_not_a_specialist_still_moves_it(self) -> None:
+        """The control went for one user type, not for the page."""
+        contract = self.a_sent_contract()
+        contract.accept(by=self.admin)
+
+        response = self.client.get(page("tuzilgan"))
+
+        self.assertContains(response, page("kelishinlingan-holat", contract.pk))
 
     def test_the_status_route_returns_to_the_page_it_came_from(self) -> None:
         status = ShartnomaStatus.objects.active().last()

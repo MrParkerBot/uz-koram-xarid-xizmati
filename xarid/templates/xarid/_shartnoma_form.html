@@ -1,0 +1,110 @@
+{% from "xarid/_forms.html" import combo, widget, required_mark with context %}
+{#
+The body of the contract form (section 4.8): entering a contract and
+editing one are the same dialog on the same page (TASK-UZK-065).
+
+The fields only. The <form> around them and the buttons under them belong
+to the page, which points the one at the create action or the edit action
+and labels the other to match.
+
+`shartnoma` is the contract being edited, or undefined while one is being
+entered. A contract being entered has no number and no date until it is
+saved, and one being edited has had both since it was; it also decides
+whether the attachment is compulsory and whether a row may be removed.
+#}
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">{{ _("Shartnoma Raqami") }}</label>
+          {% if shartnoma %}
+          <input type="text" class="form-control mono" value="{{ shartnoma.shartnoma_raqami }}" disabled/>
+          <div class="form-hint">{{ _("Raqam berilgan, o'zgarmaydi (DEC-022).") }}</div>
+          {% else %}
+          <input type="text" class="form-control mono" value="Saqlashda beriladi" disabled/>
+          <div class="form-hint">DEC-022: SHT-{{ now('Y') }}-00001.</div>
+          {% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ _("Yaratilingan Sana") }}</label>
+          <input type="text" class="form-control" value="{{ shartnoma.yaratilingan_sana|date('d/m/Y') if shartnoma else now('d/m/Y') }}" disabled/>
+        </div>
+      </div>
+
+      <div class="form-row">
+        {{ combo(form.application, "Ariza Raqami", ariza_suggestions, required=true, hint="Tayinlangan arizalar (REQ-ROLE-007).") }}
+        {{ widget(form.shartnoma_sanasi, "Shartnoma Sanasi", required=true) }}
+      </div>
+
+      <div class="form-row">
+        {# data-inn-source marks the box the INN beside it is copied from. #}
+        <div data-inn-source>{{ combo(form.supplier, "Firma Nomi", firma_suggestions, required=true, detail="inn") }}</div>
+        <div class="form-group">
+          <label class="form-label" for="sht-firma-inn">{{ _("Firma INN Raqami") }}</label>
+          <input type="text" class="form-control mono" id="sht-firma-inn" value="{{ shartnoma.supplier.inn if shartnoma else '' }}" readonly data-inn-target/>
+          <div class="form-hint">{{ _("Tanlangan firmadan olinadi (DEC-011).") }}</div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        {{ widget(form.shartnoma_turi, "Shartnoma Turi", hint="Shartnoma turi ma'lumotnomasidan (DEC-023).") }}
+        {{ widget(form.status, "Status") }}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Buyurtma tovarlari {{ required_mark() }}</label>
+        <div class="form-error">{{ item_formset.non_form_errors()|striptags }}</div>
+        {{ item_formset.management_form }}
+        <div id="sht-item-rows" data-contract-rows>
+          {% for qator_form in item_formset %}
+          <div class="form-row-items-4 js-sht-qator" style="margin-bottom:10px;">
+            {{ qator_form.id }}
+            {{ widget(qator_form.buyurtma_nomi, "Buyurtma Nomi", compact=true) }}
+            {{ widget(qator_form.part_number, "Part Number", compact=true) }}
+            {{ widget(qator_form.buyurtma_soni, "Miqdori", compact=true) }}
+            {{ widget(qator_form.olchov_birligi, "Birligi", compact=true) }}
+            {{ widget(qator_form.narxi, "Narxi", compact=true) }}
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label">{{ _("Umumiy Narx") }}</label>
+              <input type="text" class="form-control mono js-qator-jami" value="0,00" readonly/>
+            </div>
+            {#
+            The tick that removes this row, and the button that ticks it.
+            The tick itself is what the server reads - a row taken out of
+            the document would break the formset's count of them - so it is
+            hidden rather than absent, and the row is hidden with it.
+            #}
+            {% if item_formset.can_delete %}
+            <div class="form-group qator-ochirish" style="margin-bottom:0;">
+              <span class="form-label">&nbsp;</span>
+              <button type="button" class="qator-ochirish-btn" data-remove-row aria-label="Qatorni o'chirish" title="Qatorni o'chirish"><i class="bi bi-trash" aria-hidden="true"></i></button>
+              {{ qator_form.DELETE }}
+            </div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        <button type="button" class="btn btn-outline-custom btn-xs" data-add-row data-row-template="sht-row-template" data-row-container="sht-item-rows" data-total-forms="id_form-TOTAL_FORMS">{{ _("+ Qator qo'shish") }}</button>
+      </div>
+
+      <div class="form-row-3">
+        {{ widget(form.tolash_muddati, "To'lash Muddati") }}
+        {{ widget(form.muddat_talabi, "Muddat Talabi") }}
+        {{ widget(form.invoice_sanasi, "Invoice Sanasi", hint="Invoice kelganda to'ldiriladi. Dashboard uni o'rtacha muddatda hisobga oladi.") }}
+      </div>
+
+      <div class="form-row">
+        {{ widget(form.izoh, "Izoh") }}
+        <div class="form-group">
+          <label class="form-label">{{ _("Shartnoma Qiymati (UZS)") }}</label>
+          <input type="text" class="form-control mono" id="sht-qiymati" value="{{ shartnoma.qiymati_display if shartnoma else '0,00' }}" readonly data-contract-value/>
+          <div class="form-hint">{{ _("Qatorlar yig'indisi; saqlashda server hisoblaydi.") }}</div>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;">
+        {% if shartnoma %}
+        {{ widget(form.pdf, "Shartnoma Ilova (PDF)", hint="Bo'sh qoldirilsa, avvalgi fayl saqlanib qoladi.") }}
+        {% if shartnoma.pdf %}<div class="form-hint"><a href="{{ url('xarid:shartnoma-pdf', shartnoma.pk) }}"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> {{ _("Hozirgi fayl") }}</a></div>{% endif %}
+        {% else %}
+        {{ widget(form.pdf, "Shartnoma Ilova (PDF)", required=true, hint="PDF, eng ko'pi bilan 10 MB (DEC-019).") }}
+        {% endif %}
+      </div>

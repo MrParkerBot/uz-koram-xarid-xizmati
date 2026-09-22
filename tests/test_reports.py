@@ -216,15 +216,16 @@ class StaffWorkloadTests(TestCase):
         self.assertEqual(report.rows[0].total, 2)
 
     def test_the_query_count_does_not_grow_with_the_statuses(self) -> None:
+        """Three, whatever the statuses: the columns, Xarid Bo`limi, the rows."""
         an_assigned_application(self.head, self.busy)
 
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
             staff_workload(None)
 
         ShartnomaStatus.objects.create(name="Tekshiruvda", badge_colour="blue")
         ShartnomaStatus.objects.create(name="Kutilmoqda", badge_colour="grey")
 
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
             staff_workload(None)
 
 

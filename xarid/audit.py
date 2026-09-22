@@ -18,6 +18,10 @@ see a write made around the outside of the pages.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from dataclasses import dataclass
+from datetime import datetime
+
 from django.contrib.auth.models import AbstractBaseUser
 from django.db import models
 from django.utils import timezone
@@ -180,3 +184,66 @@ def record_decision(
     )
 
     return entry
+
+
+@dataclass(frozen=True)
+class Decision:
+    """One decision somebody took about a record, as a page shows it.
+
+    Read out of the log rather than off the record itself, because the record
+    keeps only the last word - who approved it and who refused it - while the
+    log kept every step of DEC-016's chain in the order it happened.
+
+    Attributes:
+        by: who decided. None for a decision taken before the log recorded
+            the approver, which the page prints rather than hides.
+        approved: True for an approval, False for a refusal.
+        comment: what they wrote. A refusal always carries one; an approval
+            is taken with a button and no comment box, so it rarely does.
+        at: when they decided.
+    """
+
+    by: AbstractBaseUser | None
+    approved: bool
+    comment: str
+    at: datetime
+
+
+def decisions_for(records: Iterable[models.Model]) -> dict[int, list[Decision]]:
+    """Every decision taken about these records, oldest first, by record id.
+
+    One query for the whole page, so a table of a hundred rows costs the same
+    as a table of one. Every record given is in the answer, those with no
+    decision yet mapping to an empty list, so a caller never has to ask
+    whether a key is there.
+
+    Args:
+        records: records of one and the same model - a page's table holds one
+            kind - of which the first names the type the log is asked about.
+    """
+    records = list(records)
+    if not records:
+        return {}
+
+    entries = (
+        AuditEntry.objects.filter(
+            record_type=record_type_of(records[0]),
+            record_id__in=[record.pk for record in records],
+            approved_at__isnull=False,
+        )
+        .select_related("approver")
+        .order_by("approved_at", "id")
+    )
+
+    decisions: dict[int, list[Decision]] = {record.pk: [] for record in records}
+    for entry in entries:
+        decisions[entry.record_id].append(
+            Decision(
+                by=entry.approver,
+                approved=entry.approval_outcome == APPROVED,
+                comment=entry.approval_comment,
+                at=entry.approved_at,
+            )
+        )
+
+    return decisions

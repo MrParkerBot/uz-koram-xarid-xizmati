@@ -1,28 +1,38 @@
 {% extends "xarid/base.html" %}
 {% from "xarid/_filters.html" import filter_bar, export_links with context %}
-{% from "xarid/_forms.html" import widget, required_mark with context %}
+{% from "xarid/_forms.html" import combo, widget, required_mark with context %}
+{% from "xarid/_pagination.html" import pagination_bar with context %}
 {#
 The Kelishinlingan Shartnoma page (section 4.6) with the Shartnoma Kiritish
 form (section 4.8). Buyurtma nomi comes from the contract's own goods rows.
 Firma INN raqami is shown, not typed: the drop-down carries the INN on each
-option. Ko'rish and Yuborish are still waiting for later work.
+option. Saqlash, Yuborish and O'chirish share one form per row - they all
+act on the row the status drop-down belongs to, and a select can only belong
+to one form - so Saqlash saves the status where the form points and the other
+two override it with formaction. Ko'rish opens the shared slide-over, and
+Tahrirlash is a link to a page.
+
+A contract that is not this reader's to act on draws every control disabled
+rather than hidden: a Menejer and a Bo`lim Boshlig`i see the whole table and
+act on what they entered themselves, and a row whose controls simply were
+not there would read as a row with nothing to do about it.
 #}
-{% block title %}Kelishinlingan Shartnoma{% endblock %}
-{% block breadcrumb %}Shartnomalar / Kelishinlingan{% endblock %}
-{% block page_heading %}Kelishinlingan{% endblock %}
+{% block title %}{{ _("Kelishinlingan Shartnoma") }}{% endblock %}
+{% block breadcrumb %}{{ _("Shartnomalar / Kelishinlingan") }}{% endblock %}
+{% block page_heading %}{{ _("Kelishinlingan") }}{% endblock %}
 {% block content %}
 
     <div class="page-header">
-      <div><h1 class="page-title">Kelishinlingan Shartnoma</h1><div class="muted">Agreed Contracts</div></div>
+      <div><h1 class="page-title">{{ _("Kelishinlingan Shartnoma") }}</h1><div class="muted">{{ _("Agreed Contracts") }}</div></div>
       <div class="page-actions">
-        <span class="role-tag role-admin">Admin</span>
-        <span class="role-tag role-manager">Manager</span>
+        <span class="role-tag role-admin">{{ _("Admin") }}</span>
+        <span class="role-tag role-manager">{{ _("Manager") }}</span>
       </div>
     </div>
 
     <div class="panel">
       <div class="toolbar">{{ filter_bar(table_filter, url('xarid:kelishinlingan')) }}<div class="toolbar-group">
-          <button class="btn btn-primary-custom btn-sm" type="button" data-open-modal="sht-modal"><i class="bi bi-plus-lg" aria-hidden="true"></i> Shartnoma Kiritish</button>
+          <button class="btn btn-primary-custom btn-sm" type="button" data-open-modal="sht-modal"><i class="bi bi-plus-lg" aria-hidden="true"></i> {{ _("Shartnoma Kiritish") }}</button>
           {{ export_links('kelishinlingan', table_filter) }}
         </div>
       </div>
@@ -31,18 +41,20 @@ option. Ko'rish and Yuborish are still waiting for later work.
         <table class="table-app" id="kelish-table">
           <thead><tr>
             <th style="width:36px;">#</th>
-            <th>Ariza №</th>
-            <th>Bo'lim</th>
-            <th>Buyurtma nomi</th>
-            <th>Shartnoma №</th>
-            <th>Firma</th>
-            <th>Kim tuzdi</th>
-            <th>Yaratilgan</th>
-            <th>Qiymati (UZS)</th>
-            <th style="width:210px;">Holati</th>
-            <th style="text-align:center;width:60px;">Ko'rish</th>
-            <th style="text-align:center;width:100px;">Yuborish</th>
-            <th>Izoh</th>
+            <th>{{ _("Ariza №") }}</th>
+            <th>{{ _("Bo'lim") }}</th>
+            <th>{{ _("Buyurtma nomi") }}</th>
+            <th>{{ _("Shartnoma №") }}</th>
+            <th>{{ _("Firma") }}</th>
+            <th>{{ _("Kim tuzdi") }}</th>
+            <th>{{ _("Yaratilgan") }}</th>
+            <th>{{ _("Qiymati (UZS)") }}</th>
+            <th style="width:150px;">{{ _("Holati") }}</th>
+            <th style="width:150px;">{{ _("Status") }}</th>
+            <th style="text-align:center;width:100px;">{{ _("Saqlash") }}</th>
+            <th style="text-align:center;width:100px;">{{ _("Ko'rish") }}</th>
+            <th style="text-align:center;width:130px;">{{ _("Amallar") }}</th>
+            <th style="text-align:center;width:70px;">{{ _("Izoh") }}</th>
           </tr></thead>
           <tbody id="kelish-tbody">
           {% for shartnoma in contracts %}
@@ -51,7 +63,7 @@ option. Ko'rish and Yuborish are still waiting for later work.
             {% for qator in lines %}
             <tr data-id="{{ shartnoma.pk }}">
               {% if loop.first %}
-              <td rowspan="{{ lines|length }}">{{ contract_row.index }}</td>
+              <td rowspan="{{ lines|length }}">{{ table_page.start_index + contract_row.index0 }}</td>
               <td class="mono-cell" rowspan="{{ lines|length }}">{{ shartnoma.application.ariza_raqami }}</td>
               <td rowspan="{{ lines|length }}">{{ shartnoma.application.department.name }}</td>
               {% endif %}
@@ -60,147 +72,180 @@ option. Ko'rish and Yuborish are still waiting for later work.
               <td class="mono-cell" rowspan="{{ lines|length }}">{{ shartnoma.shartnoma_raqami }}</td>
               <td rowspan="{{ lines|length }}">{{ shartnoma.supplier.name }}</td>
               <td rowspan="{{ lines|length }}">{{ display_name(shartnoma.created_by) }}</td>
-              <td class="mono-cell" rowspan="{{ lines|length }}">{{ shartnoma.yaratilingan_sana|date("Y-m-d") }}</td>
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ shartnoma.yaratilingan_sana|date("d/m/Y") }}</td>
               <td style="font-weight:600;color:var(--color-primary);" rowspan="{{ lines|length }}">{{ shartnoma.qiymati_display }}</td>
               <td rowspan="{{ lines|length }}">
-                {% if shartnoma.status %}<span class="badge {{ shartnoma.status.badge_class }}">{{ shartnoma.status.name }}</span>{% else %}<span class="muted small">Holat belgilanmagan</span>{% endif %}
+                {% if shartnoma.status %}<span class="badge {{ shartnoma.status.badge_class }}">{{ shartnoma.status.name }}</span>{% else %}<span class="muted small">{{ _("Holat belgilanmagan") }}</span>{% endif %}
                 {% set oxirgi = shartnoma.last_status_change %}
-                {% if oxirgi %}<div class="muted small" style="margin-top:4px;">{{ display_name(oxirgi.changed_by) }} · {{ oxirgi.changed_at|date("Y-m-d H:i") }}</div>{% endif %}
-                {% if is_own_contract(shartnoma) and shartnoma_statuslari %}
-                <form method="post" action="{{ url('xarid:kelishinlingan-holat', shartnoma.pk) }}" style="display:flex;gap:4px;margin-top:6px;">
+                {% if oxirgi %}<div class="muted small" style="margin-top:4px;">{{ display_name(oxirgi.changed_by) }} · {{ oxirgi.changed_at|date("d/m/Y H:i") }}</div>{% endif %}
+              </td>
+              {#
+              One form for the row, carrying the drop-down, with a submit in
+              each of the two columns that use it: Saqlash saves the status
+              where the form points, and Yuborish saves it and sends through
+              formaction. A form cannot span table cells, so the buttons name
+              it by id rather than sitting inside it - and a select can only
+              belong to one form, which is why there is one rather than two.
+
+              A contract with no status yet keeps a blank first option, so
+              pressing either button without choosing leaves the status alone
+              rather than silently taking whichever row happens to be first.
+              #}
+              {% set meniki = is_own_contract(shartnoma) %}
+              <td rowspan="{{ lines|length }}">
+                {% if meniki %}
+                <form method="post" id="sht-qator-{{ shartnoma.pk }}" action="{{ url('xarid:kelishinlingan-holat', shartnoma.pk) }}">
                   {{ csrf_input }}
-                  <select class="form-control" name="holat" style="width:130px;" aria-label="{{ shartnoma.shartnoma_raqami }} holati">
+                {% endif %}
+                {% if shartnoma_statuslari %}
+                  <select class="form-control" name="holat" style="width:140px;" aria-label="{{ shartnoma.shartnoma_raqami }} holati"{% if not meniki %} disabled{% endif %}>
+                    {% if not shartnoma.status %}<option value="">{{ _("Holat tanlanmagan") }}</option>{% endif %}
                     {% for holat in shartnoma_statuslari %}<option value="{{ holat.pk }}"{% if shartnoma.status_id == holat.pk %} selected{% endif %}>{{ holat.name }}</option>{% endfor %}
                   </select>
-                  <button type="submit" class="btn btn-outline-custom btn-xs">Saqlash</button>
+                {% endif %}
+                {% if meniki %}
                 </form>
                 {% endif %}
               </td>
               <td style="text-align:center;" rowspan="{{ lines|length }}">
-                <button class="btn btn-outline-custom btn-xs" disabled title="Ko'rish keyingi bosqichda"><i class="bi bi-eye" aria-hidden="true"></i></button>
-              </td>
-              <td style="text-align:center;" rowspan="{{ lines|length }}">
-                {% if is_own_contract(shartnoma) %}
-                <form method="post" action="{{ url('xarid:kelishinlingan-yuborish', shartnoma.pk) }}" data-confirm="{{ shartnoma.shartnoma_raqami }} tasdiqlashga yuborilsinmi?">
-                  {{ csrf_input }}
-                  <button type="submit" class="btn btn-primary-custom btn-xs">{{ shartnoma.send_label }}</button>
-                </form>
+                {% if shartnoma_statuslari %}
+                <button type="submit" form="sht-qator-{{ shartnoma.pk }}" class="btn btn-outline-custom btn-xs"{% if not meniki %} disabled{% endif %}>{{ _("Saqlash") }}</button>
                 {% else %}
-                <span class="muted small">—</span>
+                <span class="muted small">—"</span>
                 {% endif %}
               </td>
-              <td style="font-size:11px;color:var(--color-text-muted);" rowspan="{{ lines|length }}">{{ shartnoma.inkor_izohi or "—" }}</td>
+              <td style="text-align:center;" rowspan="{{ lines|length }}">
+                <button type="button" class="btn btn-outline-custom btn-xs" data-detail-url="{{ url('xarid:shartnoma-tafsilot', shartnoma.pk) }}" data-detail-title="{{ shartnoma.shartnoma_raqami }} — Tafsilotlar"><i class="bi bi-eye" aria-hidden="true"></i> {{ _("Ko'rish") }}</button>
+              </td>
+              <td rowspan="{{ lines|length }}">
+                <div class="amallar-stack">
+                  {% if meniki %}
+                  <a class="btn btn-outline-custom btn-xs" href="{{ url('xarid:shartnoma-tahrirlash', shartnoma.pk) }}"><i class="bi bi-pencil" aria-hidden="true"></i> {{ _("Tahrirlash") }}</a>
+                  {% else %}
+                  <span class="btn btn-outline-custom btn-xs disabled" aria-disabled="true"><i class="bi bi-pencil" aria-hidden="true"></i> {{ _("Tahrirlash") }}</span>
+                  {% endif %}
+                  <button type="submit" form="sht-qator-{{ shartnoma.pk }}" formaction="{{ url('xarid:kelishinlingan-yuborish', shartnoma.pk) }}" data-confirm="{{ shartnoma.shartnoma_raqami }} tasdiqlashga yuborilsinmi?" class="btn btn-primary-custom btn-xs"{% if not meniki %} disabled{% endif %}><i class="bi bi-send" aria-hidden="true"></i> {{ shartnoma.send_label }}</button>
+                  <button type="submit" form="sht-qator-{{ shartnoma.pk }}" formaction="{{ url('xarid:shartnoma-ochirish', shartnoma.pk) }}" data-confirm="{{ shartnoma.shartnoma_raqami }} o'chirilsinmi? Admin uni tiklay oladi." class="btn btn-outline-custom btn-xs text-danger"{% if not meniki %} disabled{% endif %}><i class="bi bi-trash" aria-hidden="true"></i> {{ _("O'chirish") }}</button>
+                </div>
+              </td>
+              {#
+              The icon and nothing else. Everything written about a
+              contract is in the drawer behind it - the note it was entered
+              with, the reason each decision carried, and the comments -
+              and a cell that also printed the last rejection would be one
+              of those things, cut to fit a column, saying less than the
+              panel it sits beside while taking the room of a sentence.
+              #}
+              <td style="text-align:center;" rowspan="{{ lines|length }}">
+                {% set izohlar = contract_notes[shartnoma.pk] %}
+                <button type="button" class="comment-open" data-open-drawer="sht-izoh-{{ shartnoma.pk }}"
+                        title="Izohlar" aria-label="{{ shartnoma.shartnoma_raqami }} bo'yicha izohlar">
+                  <i class="bi bi-chat-left-text" aria-hidden="true"></i>
+                  {% if izohlar %}<span class="comment-count">{{ izohlar|length }}</span>{% endif %}
+                </button>
+              </td>
               {% endif %}
             </tr>
             {% endfor %}
           {% else %}
-            <tr><td colspan="13" class="muted" style="text-align:center;">Hozircha kelishinlingan shartnoma yo'q.</td></tr>
+            <tr><td colspan="15" class="muted" style="text-align:center;">{{ _("Hozircha kelishinlingan shartnoma yo'q.") }}</td></tr>
           {% endfor %}
           </tbody>
         </table>
       </div>
+      {{ pagination_bar(table_page, url('xarid:kelishinlingan')) }}
     </div>
 
 {% endblock %}
 {% block scripts %}
+{% include "xarid/_shartnoma_drawer.html" %}
+
+{#
+The Izoh drawer, one panel per row and rendered here rather than fetched
+(TASK-UZK-066). The rows are already the ones this reader may see, and an
+izoh written by somebody else is text nobody has vetted - handing it to
+innerHTML is how a comment becomes markup. The details slide-over above
+fetches because a contract's own columns are the server's own words.
+
+The panel a comment was just posted to opens with the page, so that writing
+one does not lose the reader's place in a table they were reading.
+#}
+{% for shartnoma in contracts %}
+<div id="sht-izoh-{{ shartnoma.pk }}-overlay" class="drawer-overlay{% if opened_thread != shartnoma.pk %} hidden{% endif %}">
+  <div class="drawer-panel" role="dialog" aria-modal="true" aria-label="{{ shartnoma.shartnoma_raqami }} izohlari">
+    <div class="drawer-header">
+      <div class="drawer-title"><i class="bi bi-chat-left-text" aria-hidden="true"></i> {{ _("Izohlar") }}</div>
+      <button type="button" class="drawer-close" data-close-drawer="sht-izoh-{{ shartnoma.pk }}" aria-label="Yopish">
+        <i class="bi bi-x-lg" aria-hidden="true"></i>
+      </button>
+    </div>
+    <div class="drawer-body">
+      <div class="muted small" style="margin-bottom:16px;">
+        <span class="mono-cell">{{ shartnoma.shartnoma_raqami }}</span> — {{ shartnoma.supplier.name }}
+      </div>
+      {% for izoh in contract_notes[shartnoma.pk] %}
+      <div class="comment-entry">
+        <div class="comment-entry-head">
+          <span class="comment-author">{{ display_name(izoh.by) if izoh.by else "—" }}</span>
+          <span class="badge {{ izoh.badge }}">{{ izoh.act }}</span>
+        </div>
+        {% if izoh.text %}
+        <div class="comment-text">{{ izoh.text }}</div>
+        {% else %}
+        <div class="comment-text muted">{{ _("Izoh qoldirilmagan.") }}</div>
+        {% endif %}
+        <div class="comment-date mono-cell">{{ izoh.at|date("d/m/Y H:i") }}</div>
+      </div>
+      {% else %}
+      <div class="muted small">{{ _("Bu shartnoma bo'yicha hali izoh yo'q.") }}</div>
+      {% endfor %}
+    </div>
+    <div class="drawer-footer drawer-footer-form">
+      <form method="post" action="{{ url('xarid:shartnoma-izoh', shartnoma.pk) }}">
+        {{ csrf_input }}
+        <label class="form-label" for="sht-izoh-matn-{{ shartnoma.pk }}">{{ _("Yangi izoh") }}</label>
+        <textarea class="form-control" id="sht-izoh-matn-{{ shartnoma.pk }}" name="matn" rows="3" required placeholder="Izohingizni yozing"></textarea>
+        <button type="submit" class="btn btn-primary-custom btn-sm" style="margin-top:10px;">
+          <i class="bi bi-send" aria-hidden="true"></i> {{ _("Yuborish") }}
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
 <datalist id="olchov-birliklari">
   {% for birlik in suggested_units %}<option value="{{ birlik }}"></option>{% endfor %}
 </datalist>
 
+
+{#
+One dialog for both: entering a contract and editing one. Which it is
+depends on `shartnoma`, the contract being edited - Tahrirlash reloads this
+page with it set and the dialog open, exactly as a failed creation reloads
+it with the form it could not save.
+#}
 <div id="sht-modal" class="modal-overlay{% if not open_form %} hidden{% endif %}">
   <div class="modal-box modal-lg" style="max-width:860px;">
-    <form method="post" action="{{ url('xarid:shartnoma-yaratish') }}" enctype="multipart/form-data" data-contract-form>
+    <form method="post" action="{{ url('xarid:shartnoma-tahrirlash', shartnoma.pk) if shartnoma else url('xarid:shartnoma-yaratish') }}" enctype="multipart/form-data" data-contract-form>
       {{ csrf_input }}
-      <div class="modal-title"><i class="bi bi-file-earmark-text" aria-hidden="true"></i> Shartnoma Kiritish</div>
+      <div class="modal-title"><i class="bi bi-file-earmark-text" aria-hidden="true"></i> {{ "Shartnoma Tahrirlash" if shartnoma else "Shartnoma Kiritish" }}</div>
 
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Shartnoma Raqami</label>
-          <input type="text" class="form-control mono" value="Saqlashda beriladi" disabled/>
-          <div class="form-hint">DEC-022: SHT-{{ now('Y') }}-00001.</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Yaratilingan Sana</label>
-          <input type="text" class="form-control" value="{{ now('Y-m-d') }}" disabled/>
-        </div>
-      </div>
-
-      <div class="form-row">
-        {{ widget(form.application, "Ariza Raqami", required=true, hint="Tayinlangan arizalar (REQ-ROLE-007).") }}
-        {{ widget(form.shartnoma_sanasi, "Shartnoma Sanasi", required=true) }}
-      </div>
-
-      <div class="form-row">
-        <div data-inn-source>{{ widget(form.supplier, "Firma Nomi", required=true) }}</div>
-        <div class="form-group">
-          <label class="form-label" for="sht-firma-inn">Firma INN Raqami</label>
-          <input type="text" class="form-control mono" id="sht-firma-inn" value="" readonly data-inn-target/>
-          <div class="form-hint">Tanlangan firmadan olinadi (DEC-011).</div>
-        </div>
-      </div>
-
-      <div class="form-row">
-        {{ widget(form.shartnoma_turi, "Shartnoma Turi", hint="Shartnoma turi ma'lumotnomasidan (DEC-023).") }}
-        {{ widget(form.status, "Status") }}
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Buyurtma tovarlari {{ required_mark() }}</label>
-        <div class="form-error">{{ item_formset.non_form_errors()|striptags }}</div>
-        {{ item_formset.management_form }}
-        <div id="sht-item-rows" data-contract-rows>
-          {% for qator_form in item_formset %}
-          <div class="form-row-items-4 js-sht-qator" style="margin-bottom:10px;">
-            {{ qator_form.id }}
-            {{ widget(qator_form.buyurtma_nomi, "Buyurtma Nomi", compact=true) }}
-            {{ widget(qator_form.part_number, "Part Number", compact=true) }}
-            {{ widget(qator_form.buyurtma_soni, "Miqdori", compact=true) }}
-            {{ widget(qator_form.olchov_birligi, "Birligi", compact=true) }}
-            {{ widget(qator_form.narxi, "Narxi", compact=true) }}
-            <div class="form-group" style="margin-bottom:0;">
-              <label class="form-label">Umumiy Narx</label>
-              <input type="text" class="form-control mono js-qator-jami" value="0,00" readonly/>
-            </div>
-          </div>
-          {% endfor %}
-        </div>
-        <button type="button" class="btn btn-outline-custom btn-xs" data-add-row data-row-template="sht-row-template" data-row-container="sht-item-rows" data-total-forms="id_form-TOTAL_FORMS">+ Qator qo'shish</button>
-      </div>
-
-      <div class="form-row-3">
-        {{ widget(form.tolash_muddati, "To'lash Muddati") }}
-        {{ widget(form.muddat_talabi, "Muddat Talabi") }}
-        {{ widget(form.invoice_sanasi, "Invoice Sanasi", hint="Invoice kelganda to'ldiriladi. Dashboard uni o'rtacha muddatda hisobga oladi.") }}
-      </div>
-
-      <div class="form-row">
-        {{ widget(form.izoh, "Izoh") }}
-        <div class="form-group">
-          <label class="form-label">Shartnoma Qiymati (UZS)</label>
-          <input type="text" class="form-control mono" id="sht-qiymati" value="0,00" readonly data-contract-value/>
-          <div class="form-hint">Qatorlar yig'indisi; saqlashda server hisoblaydi.</div>
-        </div>
-      </div>
-
-      <div style="margin-top:16px;">{{ widget(form.pdf, "Ilova (PDF)", required=true, hint="PDF, eng ko'pi bilan 10 MB (DEC-019).") }}</div>
+      {% include "xarid/_shartnoma_form.html" %}
 
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline-custom" data-close-modal="sht-modal"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</button>
-        <button type="submit" class="btn btn-primary-custom"><i class="bi bi-check-lg" aria-hidden="true"></i> Create</button>
+        {# Editing arrived here by a page load, so Bekor goes back to the
+           table rather than hiding a dialog over a page nobody asked for. #}
+        {% if shartnoma %}
+        <a class="btn btn-outline-custom" href="{{ url('xarid:kelishinlingan') }}"><i class="bi bi-x-lg" aria-hidden="true"></i> {{ _("Bekor") }}</a>
+        {% else %}
+        <button type="button" class="btn btn-outline-custom" data-close-modal="sht-modal"><i class="bi bi-x-lg" aria-hidden="true"></i> {{ _("Bekor") }}</button>
+        {% endif %}
+        <button type="submit" class="btn btn-primary-custom"><i class="bi bi-check-lg" aria-hidden="true"></i> {{ "Saqlash" if shartnoma else "Create" }}</button>
       </div>
     </form>
   </div>
 </div>
 
-<template id="sht-row-template">
-  <div class="form-row-items-4 js-sht-qator" style="margin-bottom:10px;">
-    {{ item_formset.empty_form.id }}
-    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Buyurtma Nomi</label>{{ item_formset.empty_form.buyurtma_nomi }}</div>
-    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Part Number</label>{{ item_formset.empty_form.part_number }}</div>
-    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Miqdori</label>{{ item_formset.empty_form.buyurtma_soni }}</div>
-    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Birligi</label>{{ item_formset.empty_form.olchov_birligi }}</div>
-    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Narxi</label>{{ item_formset.empty_form.narxi }}</div>
-    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Umumiy Narx</label><input type="text" class="form-control mono js-qator-jami" value="0,00" readonly/></div>
-  </div>
-</template>
+{% include "xarid/_shartnoma_qator_template.html" %}
 {% endblock %}

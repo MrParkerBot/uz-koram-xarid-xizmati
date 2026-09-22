@@ -42,6 +42,28 @@ Import with context so the macros can read csrf_input.
 </div>
 {%- endmacro %}
 
+{# A text box with its own list of suggestions underneath, for when a
+   <datalist> will not do: the browser draws that one itself and will not be
+   told how many rows to show or to scroll them. Each option is (value,
+   description); the value is what typing matches and what lands in the box. #}
+{% macro combo(field, label, options, required=false, hint="", detail="") -%}
+<div class="form-group">
+  <label class="form-label" for="{{ field.id_for_label }}">{{ label }}{% if required %} {{ required_mark() }}{% endif %}</label>
+  <div class="combo" data-combo>
+    {{ field }}
+    <ul class="combo-list hidden" role="listbox" data-combo-list>
+      {% for option in options %}
+      <li class="combo-option" role="option" data-value="{{ option.value }}"{% if detail %} data-{{ detail }}="{{ option.detail }}"{% endif %}>
+        <span class="combo-value">{{ option.value }}</span><span class="combo-hint">{{ option.description }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% if hint %}<div class="form-hint">{{ hint }}</div>{% endif %}
+  {{ errors(field) }}
+</div>
+{%- endmacro %}
+
 {% macro widget(field, label, required=false, hint="", compact=false) -%}
 <div class="form-group"{% if compact %} style="margin-bottom:0;"{% endif %}>
   <label class="form-label" for="{{ field.id_for_label }}">{{ label }}{% if required %} {{ required_mark() }}{% endif %}</label>
@@ -60,8 +82,8 @@ Import with context so the macros can read csrf_input.
 
 {% macro save_and_cancel(cancel_url) -%}
 <div style="display:flex;gap:10px;margin-top:24px;">
-  <button type="submit" class="btn btn-primary-custom" style="flex:1;"><i class="bi bi-save" aria-hidden="true"></i> Saqlash</button>
-  <a class="btn btn-outline-custom" style="flex:1;" href="{{ cancel_url }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</a>
+  <button type="submit" class="btn btn-primary-custom" style="flex:1;"><i class="bi bi-save" aria-hidden="true"></i> {{ _("Saqlash") }}</button>
+  <a class="btn btn-outline-custom" style="flex:1;" href="{{ cancel_url }}"><i class="bi bi-x-lg" aria-hidden="true"></i> {{ _("Bekor") }}</a>
 </div>
 {%- endmacro %}
 

@@ -1,28 +1,29 @@
 {% extends "xarid/base.html" %}
 {% from "xarid/_filters.html" import filter_bar, export_links with context %}
 {% from "xarid/_forms.html" import widget, errors, pdf_badge, required_mark with context %}
+{% from "xarid/_pagination.html" import pagination_bar with context %}
 {#
 The Qabul qilingan Arizalar page (REQ-ARIZA-006): accepted applications
 waiting to be given to a specialist, the ones already given (re-assignment
 is offered on the row), and the Ariza Yaratish form of section 4.2. One row
 per order line, with the application's own cells spanning its lines.
 #}
-{% block title %}Qabul Qilingan Arizalar{% endblock %}
-{% block breadcrumb %}Arizalar / Qabul Qilingan{% endblock %}
-{% block page_heading %}Qabul Qilingan{% endblock %}
+{% block title %}{{ _("Qabul Qilingan Arizalar") }}{% endblock %}
+{% block breadcrumb %}{{ _("Arizalar / Qabul Qilingan") }}{% endblock %}
+{% block page_heading %}{{ _("Qabul Qilingan") }}{% endblock %}
 {% block content %}
 
     <div class="page-header">
-      <div><h1 class="page-title">Qabul Qilingan Arizalar</h1><div class="muted">Accepted Applications + Employee Assignment</div></div>
+      <div><h1 class="page-title">{{ _("Qabul Qilingan Arizalar") }}</h1><div class="muted">{{ _("Accepted Applications + Employee Assignment") }}</div></div>
       <div class="page-actions">
-        <span class="role-tag role-admin">Admin</span>
-        <span class="role-tag role-manager">Manager</span>
+        <span class="role-tag role-admin">{{ _("Admin") }}</span>
+        <span class="role-tag role-manager">{{ _("Manager") }}</span>
       </div>
     </div>
 
     <div class="panel" style="margin-bottom:24px;">
       <div class="toolbar"><div class="toolbar-group">
-        <button class="btn btn-primary-custom btn-sm" type="button" data-open-modal="create-modal"><i class="bi bi-plus-lg" aria-hidden="true"></i> Ariza Yaratish</button>
+        <button class="btn btn-primary-custom btn-sm" type="button" data-open-modal="create-modal"><i class="bi bi-plus-lg" aria-hidden="true"></i> {{ _("Ariza Yaratish") }}</button>
         {{ filter_bar(table_filter, url('xarid:qabul-arizalar')) }}
         </div><div class="toolbar-group">
           {{ export_links('qabul-arizalar', table_filter) }}
@@ -33,16 +34,18 @@ per order line, with the application's own cells spanning its lines.
         <table class="table-app" id="qabul-table">
           <thead><tr>
             <th style="width:36px;">#</th>
-            <th>Ariza №</th>
-            <th>Bo'lim</th>
-            <th>Mahsulot Turi</th>
-            <th>Buyurtma nomi</th>
-            <th>Soni</th>
-            <th>O'lchov</th>
-            <th>PDF</th>
-            <th>Qabul qilingan sana</th>
-            <th>Tayinlangan xodim</th>
-            <th style="text-align:center;width:150px;">Amallar</th>
+            <th>{{ _("Ariza №") }}</th>
+            <th>{{ _("Bo'lim") }}</th>
+            <th>{{ _("Mahsulot Turi") }}</th>
+            <th>{{ _("Buyurtma nomi") }}</th>
+            <th>{{ _("Soni") }}</th>
+            <th>{{ _("O'lchov") }}</th>
+            <th>{{ _("Izoh") }}</th>
+            <th>{{ _("Ariza PDF") }}</th>
+            <th>{{ _("Ilova PDF") }}</th>
+            <th>{{ _("Qabul qilingan sana") }}</th>
+            <th>{{ _("Tayinlangan xodim") }}</th>
+            <th style="text-align:center;width:150px;">{{ _("Amallar") }}</th>
           </tr></thead>
           <tbody id="qabul-tbody">
           {% for ariza in applications %}
@@ -51,7 +54,7 @@ per order line, with the application's own cells spanning its lines.
             {% for qator in lines %}
             <tr data-id="{{ ariza.pk }}">
               {% if loop.first %}
-              <td rowspan="{{ lines|length }}">{{ application_row.index }}</td>
+              <td rowspan="{{ lines|length }}">{{ table_page.start_index + application_row.index0 }}</td>
               <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.ariza_raqami }}</td>
               <td rowspan="{{ lines|length }}">{{ ariza.department.name }}</td>
               {% endif %}
@@ -60,27 +63,40 @@ per order line, with the application's own cells spanning its lines.
               <td style="font-weight:600;color:var(--color-primary);">{{ qator.soni_display }}</td>
               <td>{{ qator.olchov_birligi }}</td>
               {% if loop.first %}
-              <td rowspan="{{ lines|length }}">
-                {% if ariza.pdf %}{{ pdf_badge(url('xarid:ariza-pdf', ariza.pk), ariza.ariza_raqami ~ ".pdf") }}{% else %}<span class="muted small">—</span>{% endif %}
+              <td style="font-size:11px;color:var(--color-text-muted);" rowspan="{{ lines|length }}">
+                {{ ariza.izoh }}
+                {% set qarorlar = decisions[ariza.pk] %}
+                <button type="button" class="comment-open" data-open-drawer="qa-izoh-{{ ariza.pk }}"
+                        title="Qaror izohlari" aria-label="{{ ariza.ariza_raqami }} bo'yicha qaror izohlari">
+                  <i class="bi bi-chat-left-text" aria-hidden="true"></i>
+                  {% if qarorlar %}<span class="comment-count">{{ qarorlar|length }}</span>{% endif %}
+                </button>
               </td>
-              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.qabul_qilingan_sana|date("Y-m-d") }}</td>
+              {# Drawn from the record, so it is always there to read. #}
+              <td rowspan="{{ lines|length }}">
+                {{ pdf_badge(url('xarid:ariza-hujjat-pdf', ariza.pk), ariza.ariza_raqami ~ "-ariza.pdf") }}
+              </td>
+              <td rowspan="{{ lines|length }}">
+                {% if ariza.pdf %}{{ pdf_badge(url('xarid:ariza-pdf', ariza.pk), ariza.ariza_raqami ~ "-Ilova.pdf") }}{% else %}<span class="muted small">—"</span>{% endif %}
+              </td>
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.qabul_qilingan_sana|date("d/m/Y") }}</td>
               <td rowspan="{{ lines|length }}">
                 {% if ariza.assigned_to %}
                   <span class="badge badge-info">{{ display_name(ariza.assigned_to) }}</span>
                 {% else %}
                   <select class="form-control" form="tayinlash-{{ ariza.pk }}" name="xodim" style="width:140px;padding:5px 8px;font-size:11px;" required>
-                    <option value="">— Tanlang —</option>
+                    <option value="">{{ _("— Tanlang —") }}</option>
                     {% for xodim in specialists %}<option value="{{ xodim.pk }}">{{ display_name(xodim) }}</option>{% endfor %}
                   </select>
                 {% endif %}
               </td>
               <td style="text-align:center;white-space:nowrap;" rowspan="{{ lines|length }}">
                 {% if ariza.assigned_to %}
-                  <button type="button" class="btn btn-outline-custom btn-xs" data-modal-form="reassign-modal" data-action-url="{{ url('xarid:ariza-tayinlash', ariza.pk) }}" data-fill-ariza="{{ ariza.ariza_raqami }}" data-fill-xodim="{{ display_name(ariza.assigned_to) }}"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Qayta</button>
+                  <button type="button" class="btn btn-outline-custom btn-xs" data-modal-form="reassign-modal" data-action-url="{{ url('xarid:ariza-tayinlash', ariza.pk) }}" data-fill-ariza="{{ ariza.ariza_raqami }}" data-fill-xodim="{{ display_name(ariza.assigned_to) }}"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> {{ _("Qayta") }}</button>
                 {% else %}
                   <form method="post" id="tayinlash-{{ ariza.pk }}" action="{{ url('xarid:ariza-tayinlash', ariza.pk) }}" style="display:inline;">
                     {{ csrf_input }}
-                    <button type="submit" class="btn btn-primary-custom btn-xs">Tayinlash</button>
+                    <button type="submit" class="btn btn-primary-custom btn-xs">{{ _("Tayinlash") }}</button>
                   </form>
                 {% endif %}
               </td>
@@ -88,31 +104,73 @@ per order line, with the application's own cells spanning its lines.
             </tr>
             {% endfor %}
           {% else %}
-            <tr><td colspan="11" class="muted" style="text-align:center;">Hozircha qabul qilingan ariza yo'q.</td></tr>
+            <tr><td colspan="13" class="muted" style="text-align:center;">{{ _("Hozircha qabul qilingan ariza yo'q.") }}</td></tr>
           {% endfor %}
           </tbody>
         </table>
       </div>
+      {{ pagination_bar(table_page, url('xarid:qabul-arizalar')) }}
     </div>
 
 {% endblock %}
 {% block scripts %}
+{#
+One panel per row of the table, rendered server-side: the rows are already
+the ones this reader may see, and an izoh written by somebody else is text
+nobody has vetted - handing it to innerHTML is how a comment becomes markup.
+#}
+{% for ariza in applications %}
+<div id="qa-izoh-{{ ariza.pk }}-overlay" class="drawer-overlay hidden">
+  <div class="drawer-panel" role="dialog" aria-modal="true" aria-label="{{ ariza.ariza_raqami }} qaror izohlari">
+    <div class="drawer-header">
+      <div class="drawer-title"><i class="bi bi-chat-left-text" aria-hidden="true"></i> {{ _("Qaror izohlari") }}</div>
+      <button type="button" class="drawer-close" data-close-drawer="qa-izoh-{{ ariza.pk }}" aria-label="Yopish">
+        <i class="bi bi-x-lg" aria-hidden="true"></i>
+      </button>
+    </div>
+    <div class="drawer-body">
+      <div class="muted small" style="margin-bottom:16px;">
+        <span class="mono-cell">{{ ariza.ariza_raqami }}</span> — {{ ariza.department.name }}
+      </div>
+      {% for qaror in decisions[ariza.pk] %}
+      <div class="comment-entry">
+        <div class="comment-entry-head">
+          <span class="comment-author">{{ display_name(qaror.by) }}</span>
+          <span class="badge {{ 'badge-approved' if qaror.approved else 'badge-danger' }}">
+            {{ "Qabul qildi" if qaror.approved else "Inkor etdi" }}
+          </span>
+        </div>
+        {% if qaror.comment %}
+        <div class="comment-text">{{ qaror.comment }}</div>
+        {% else %}
+        <div class="comment-text muted">{{ _("Izoh qoldirilmagan.") }}</div>
+        {% endif %}
+        <div class="comment-date mono-cell">{{ qaror.at|date("d/m/Y H:i") }}</div>
+      </div>
+      {% else %}
+      <div class="muted small">{{ _("Bu ariza bo'yicha hali qaror qabul qilinmagan.") }}</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endfor %}
+
 {# The creation form opens by itself when a refused submission comes back. #}
 <div id="create-modal" class="modal-overlay{% if not open_form %} hidden{% endif %}">
   <div class="modal-box modal-lg" style="max-width:720px;">
     <form method="post" action="{{ url('xarid:ariza-yaratish') }}" enctype="multipart/form-data">
       {{ csrf_input }}
-      <div class="modal-title"><i class="bi bi-clipboard" aria-hidden="true"></i> Ariza Yaratish Formasi</div>
+      <div class="modal-title"><i class="bi bi-clipboard" aria-hidden="true"></i> {{ _("Ariza Yaratish Formasi") }}</div>
 
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Ariza Raqami</label>
+          <label class="form-label">{{ _("Ariza Raqami") }}</label>
           <input type="text" class="form-control mono" value="Saqlashda beriladi" disabled/>
-          <div class="form-hint">Raqam saqlanganda avtomatik beriladi (DEC-022).</div>
+          <div class="form-hint">{{ _("Raqam saqlanganda avtomatik beriladi (DEC-022).") }}</div>
         </div>
         <div class="form-group">
-          <label class="form-label">Yaratilingan Sana</label>
-          <input type="text" class="form-control" value="{{ now('Y-m-d') }}" disabled/>
+          <label class="form-label">{{ _("Yaratilingan Sana") }}</label>
+          <input type="text" class="form-control" value="{{ now('d/m/Y') }}" disabled/>
         </div>
       </div>
 
@@ -136,15 +194,15 @@ per order line, with the application's own cells spanning its lines.
           </div>
           {% endfor %}
         </div>
-        <button type="button" class="btn btn-outline-custom btn-xs" data-add-row data-row-template="item-row-template" data-row-container="item-rows-container" data-total-forms="id_form-TOTAL_FORMS">+ Qator qo'shish</button>
+        <button type="button" class="btn btn-outline-custom btn-xs" data-add-row data-row-template="item-row-template" data-row-container="item-rows-container" data-total-forms="id_form-TOTAL_FORMS">{{ _("+ Qator qo'shish") }}</button>
       </div>
 
       <div style="margin-top:16px;">{{ widget(form.pdf, "Ilova (PDF)", required=true, hint="PDF, eng ko'pi bilan 10 MB (DEC-019).") }}</div>
       {{ widget(form.izoh, "Izoh") }}
 
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline-custom" data-close-modal="create-modal"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</button>
-        <button type="submit" class="btn btn-primary-custom"><i class="bi bi-check-lg" aria-hidden="true"></i> Yaratish</button>
+        <button type="button" class="btn btn-outline-custom" data-close-modal="create-modal"><i class="bi bi-x-lg" aria-hidden="true"></i> {{ _("Bekor") }}</button>
+        <button type="submit" class="btn btn-primary-custom"><i class="bi bi-check-lg" aria-hidden="true"></i> {{ _("Yaratish") }}</button>
       </div>
     </form>
   </div>
@@ -154,10 +212,10 @@ per order line, with the application's own cells spanning its lines.
 <template id="item-row-template">
   <div class="form-row-items-4" style="margin-bottom:10px;">
     {{ item_formset.empty_form.id }}
-    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Mahsulot Turi</label>{{ item_formset.empty_form.mahsulot_turi }}</div>
-    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Buyurtma Nomi</label>{{ item_formset.empty_form.buyurtma_nomi }}</div>
-    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Soni</label>{{ item_formset.empty_form.buyurtma_soni }}</div>
-    <div class="form-group" style="margin-bottom:0;"><label class="form-label">O'lchov</label>{{ item_formset.empty_form.olchov_birligi }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">{{ _("Mahsulot Turi") }}</label>{{ item_formset.empty_form.mahsulot_turi }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">{{ _("Buyurtma Nomi") }}</label>{{ item_formset.empty_form.buyurtma_nomi }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">{{ _("Soni") }}</label>{{ item_formset.empty_form.buyurtma_soni }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">{{ _("O'lchov") }}</label>{{ item_formset.empty_form.olchov_birligi }}</div>
   </div>
 </template>
 
@@ -165,18 +223,18 @@ per order line, with the application's own cells spanning its lines.
   <div class="modal-box">
     <form method="post" id="reassign-form">
       {{ csrf_input }}
-      <div class="modal-title"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Qayta tayinlash</div>
-      <p class="modal-desc muted">Ariza <span data-fill="ariza" class="mono-cell"></span> hozir <span data-fill="xodim"></span>da. Boshqa xodimga o'tkazish uchun tanlang.</p>
+      <div class="modal-title"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> {{ _("Qayta tayinlash") }}</div>
+      <p class="modal-desc muted">{{ _("Ariza") }} <span data-fill="ariza" class="mono-cell"></span> hozir <span data-fill="xodim"></span>da. Boshqa xodimga o'tkazish uchun tanlang.</p>
       <div class="form-group">
         <label class="form-label" for="reassign-select">Xodim {{ required_mark() }}</label>
         <select class="form-control" id="reassign-select" name="xodim" required>
-          <option value="">— Tanlang —</option>
+          <option value="">{{ _("— Tanlang —") }}</option>
           {% for xodim in specialists %}<option value="{{ xodim.pk }}">{{ display_name(xodim) }}</option>{% endfor %}
         </select>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline-custom" data-close-modal="reassign-modal">Bekor qilish</button>
-        <button type="submit" class="btn btn-primary-custom">O'tkazish</button>
+        <button type="button" class="btn btn-outline-custom" data-close-modal="reassign-modal">{{ _("Bekor qilish") }}</button>
+        <button type="submit" class="btn btn-primary-custom">{{ _("O'tkazish") }}</button>
       </div>
     </form>
   </div>

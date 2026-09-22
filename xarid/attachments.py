@@ -129,6 +129,25 @@ def contract_pdf_field() -> models.FileField:
     )
 
 
+# What every downloaded attachment is called at the end: the word the pages
+# label the column with. A folder of downloads is then readable on its own -
+# the record's number says which record, and Ilova says this is the file
+# somebody attached rather than the sheet the application draws.
+ATTACHMENT_SUFFIX = "Ilova"
+
+
+def attachment_name(number: str, *parts: str) -> str:
+    """The filename an attachment of this record downloads as.
+
+    Args:
+        number: the record's own number, such as XA-2026-00001.
+        parts: anything that distinguishes one attachment of a record from
+            another, such as "asl" for the copy kept before the approval
+            stamp. They sit between the number and the suffix.
+    """
+    return "-".join((number, *parts, ATTACHMENT_SUFFIX)) + PDF_SUFFIX
+
+
 def attachment_response(attachment, download_name: str) -> FileResponse:
     """Hand a stored attachment back as a download.
 

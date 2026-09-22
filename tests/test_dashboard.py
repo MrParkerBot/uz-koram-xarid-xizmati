@@ -275,13 +275,20 @@ class DashboardPageTests(SignedInAdminTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "0 / 0 jami")
 
-    def test_a_type_that_may_not_open_it_is_refused(self) -> None:
-        """The DEC-015 matrix still closes the page; it has a real view now."""
+    def test_a_type_that_may_not_open_it_is_sent_to_their_own_page(self) -> None:
+        """The matrix still closes the page: what changes is where they go.
+
+        The dashboard answers at the site root, which is where a browser goes
+        when it is given the host alone, so a reader who may not open it is
+        sent to the first page that is theirs rather than told 403 for
+        visiting the application (page_or_landing).
+        """
         self.client.force_login(make_user("dash.outsider", user_type=KATTA_MUTAXASIS))
 
-        response = self.client.get(page("dashboard"))
+        response = self.client.get(page("dashboard"), follow=True)
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.redirect_chain[-1][0], page("tayinlangan"))
 
 
 class SpendingTests(TestCase):
@@ -860,7 +867,8 @@ class SupplierCategoryPageTests(SignedInAdminTestCase):
         self.assertIn('"firms": 1', chart_data)
 
     def test_an_empty_database_renders_the_block(self) -> None:
+        """The panel's heading is drawn from the catalogue, in Uzbek by default."""
         response = self.client.get(page("dashboard"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Supplier Category Taqsimoti")
+        self.assertContains(response, "Yetkazib beruvchilar toifalari taqsimoti")

@@ -13,7 +13,11 @@ document.getElementById('sync-now').addEventListener('click', (event) => {
     btn.innerHTML = '<i class="bi bi-arrow-repeat" aria-hidden="true"></i> Sinxronlash';
     Toast.success('Sinxronlash muvaffaqiyatli bajarildi');
     const tbody = document.getElementById('sync-log-tbody');
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    // Day first, the way every date on the pages is printed.
+    const now = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} `
+      + `${pad(d.getHours())}:${pad(d.getMinutes())}`;
     const newRow = `<tr><td class="mono-cell">SHT-2025-044</td><td class="mono-cell">${now}</td><td><span class="badge badge-approved">Muvaffaq</span></td><td>—</td><td>—</td></tr>`;
     tbody.insertAdjacentHTML('afterbegin', newRow);
   }, 2000);

@@ -30,9 +30,16 @@ from xarid.models import (
     KATTA_MUTAXASIS,
     MENEJER,
     USERS,
+    MahsulotTuri,
+    Supplier,
 )
 from xarid.navigation import navigation_page_names
-from xarid.permissions import ADMIN_ONLY_PAGES, PAGES_BY_USER_TYPE
+from xarid.permissions import (
+    ADMIN_ONLY_PAGES,
+    PAGES_BY_USER_TYPE,
+    _PURCHASING_DEPARTMENT_PAGES as PURCHASING_DEPARTMENT_PAGES,
+    decides_on_contracts,
+)
 
 WRONG_PASSWORD = get_random_string(24)
 REJECTION_MESSAGE = "Username yoki parol noto'g'ri"
@@ -75,6 +82,79 @@ class LoginTests(AuthenticationTestCase):
         self.assertEqual(int(self.client.session["_auth_user_id"]), self.user.pk)
         self.assertRedirects(response, page("landing"), target_status_code=302)
         self.assertRedirects(self.client.get(page("landing")), page("dashboard"))
+
+    def test_signing_in_never_lands_on_a_refusal(self) -> None:
+        """The report this answers: signing in correctly and getting a 403.
+
+        The login page carries wherever the visitor was turned away from, and
+        the browser is shared - one person signs out of a page and the next
+        signs in on the same form. The address is somewhere the first account
+        could go and the second cannot, and obeying it answers 403 to somebody
+        who has just proved who they are.
+        """
+        for role, landing in (
+            (KATTA_MUTAXASIS, "tayinlangan"),
+            (USERS, "xarid-ariza"),
+            (DIREKTOR, "dashboard"),
+        ):
+            with self.subTest(user_type=role):
+                account = make_user(f"next.{role}".lower().replace(" ", "."), user_type=role)
+                self.client.logout()
+
+                landed = self.client.post(
+                    f"{reverse('login')}?next={page('users')}",
+                    {"username": account.get_username(), "password": PASSWORD},
+                    follow=True,
+                )
+
+                self.assertEqual(landed.status_code, 200)
+                self.assertEqual(landed.redirect_chain[-1][0], page(landing))
+
+    def test_a_next_the_account_may_open_is_still_obeyed(self) -> None:
+        """Dropping one that refuses is not dropping all of them."""
+        landed = self.client.post(
+            f"{reverse('login')}?next={page('users')}",
+            {"username": "b.toshmatov", "password": PASSWORD},
+            follow=True,
+        )
+
+        self.assertEqual(landed.redirect_chain[-1][0], page("users"))
+
+    def test_a_next_that_is_not_a_matrix_page_is_left_alone(self) -> None:
+        """Somebody's own notifications are not a page the matrix answers for."""
+        account = make_user("next.notified", user_type=USERS)
+        self.client.logout()
+
+        landed = self.client.post(
+            f"{reverse('login')}?next={page('notifications')}",
+            {"username": account.get_username(), "password": PASSWORD},
+            follow=True,
+        )
+
+        self.assertEqual(landed.redirect_chain[-1][0], page("notifications"))
+
+    def test_the_site_root_sends_every_type_somewhere_they_may_work(self) -> None:
+        """Typing the host is not asking for the dashboard by name."""
+        for role, landing in (
+            (ADMIN, None),
+            (BOLIM_BOSHLIGI, None),
+            (MENEJER, None),
+            (DIREKTOR, None),
+            (KATTA_MUTAXASIS, "tayinlangan"),
+            (USERS, "xarid-ariza"),
+        ):
+            with self.subTest(user_type=role):
+                self.client.force_login(
+                    make_user(f"root.{role}".lower().replace(" ", "."), user_type=role)
+                )
+
+                landed = self.client.get("/", follow=True)
+
+                self.assertEqual(landed.status_code, 200)
+                if landing is None:
+                    self.assertEqual(landed.redirect_chain, [])
+                else:
+                    self.assertEqual(landed.redirect_chain[-1][0], page(landing))
 
     def test_a_wrong_password_and_an_unknown_username_are_rejected_alike(self) -> None:
         wrong_password = self.sign_in(password=WRONG_PASSWORD)
@@ -227,12 +307,29 @@ class PagePermissionTests(TestCase):
     """DEC-015: which User Type may open which page."""
 
     def test_each_type_opens_its_pages_and_is_refused_the_rest(self) -> None:
-        for type_name, permitted in PAGES_BY_USER_TYPE.items():
+        """The matrix by type, with nobody in the purchasing department.
+
+        The pages that are that department's own are held back here, because
+        holding the type is not what opens them: these accounts have no
+        department, and no department is marked as the purchasing one, so
+        those pages fall closed. DepartmentHeadPagesTests is where they are
+        asked for by somebody who is in it.
+        """
+        for type_name, granted in PAGES_BY_USER_TYPE.items():
+            permitted = granted - PURCHASING_DEPARTMENT_PAGES
             account = make_user(type_name.lower().replace(" ", "."), user_type=type_name)
             self.client.force_login(account)
             for page_name in navigation_page_names():
                 with self.subTest(user_type=type_name, page=page_name):
                     expected = 200 if page_name in permitted else 403
+                    # The root is the one page that sends a refusal onwards
+                    # rather than answering it: see page_or_landing().
+                    if page_name == "dashboard" and expected == 403:
+                        onwards = self.client.get(page(page_name), follow=True)
+                        self.assertEqual(onwards.status_code, 200)
+                        self.assertTrue(onwards.redirect_chain)
+                        continue
+
                     self.assertEqual(self.client.get(page(page_name)).status_code, expected)
 
     def test_admin_only_pages_are_refused_to_every_other_type(self) -> None:
@@ -240,11 +337,14 @@ class PagePermissionTests(TestCase):
             self.assertTrue(ADMIN_ONLY_PAGES.isdisjoint(PAGES_BY_USER_TYPE[type_name]))
 
     def test_an_account_with_no_type_opens_nothing(self) -> None:
+        """Including the root, which has nowhere to send them."""
         self.client.force_login(make_user("untyped"))
 
         for page_name in navigation_page_names():
             with self.subTest(page=page_name):
-                self.assertEqual(self.client.get(page(page_name)).status_code, 403)
+                self.assertEqual(
+                    self.client.get(page(page_name), follow=True).status_code, 403
+                )
 
     def test_a_superuser_opens_everything(self) -> None:
         self.client.force_login(make_user("root", is_staff=True, is_superuser=True))
@@ -268,6 +368,231 @@ class PagePermissionTests(TestCase):
 
         self.assertEqual(self.client.post(page("ariza-qabul", application.pk)).status_code, 403)
         self.assertEqual(self.client.post(page("user-create"), {}).status_code, 403)
+
+
+class DepartmentHeadPagesTests(TestCase):
+    """What a Bo`lim Boshlig`i keeps depends on which department they are in."""
+
+    OUTSIDE = frozenset({"kelib-arizalar", "qabul-arizalar", "xarid-ariza"})
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.purchasing = a_department("Xarid bo`limi")
+        cls.elsewhere = a_department("Ishlab chiqarish")
+
+    def mark_the_purchasing_department(self) -> None:
+        self.purchasing.is_purchasing = True
+        self.purchasing.save(update_fields=["is_purchasing"])
+
+    def test_a_head_outside_it_keeps_only_the_three_pages_that_are_theirs(self) -> None:
+        self.mark_the_purchasing_department()
+        self.client.force_login(
+            make_user("outside.head", user_type=BOLIM_BOSHLIGI, department=self.elsewhere)
+        )
+
+        for page_name in navigation_page_names():
+            with self.subTest(page=page_name):
+                expected = 200 if page_name in self.OUTSIDE else 403
+                # The root sends them to their own first page instead.
+                if page_name == "dashboard":
+                    self.assertEqual(
+                        self.client.get(page(page_name), follow=True).status_code, 200
+                    )
+                    continue
+
+                self.assertEqual(self.client.get(page(page_name)).status_code, expected)
+
+    def test_a_head_inside_it_keeps_the_whole_of_section_11(self) -> None:
+        self.mark_the_purchasing_department()
+        self.client.force_login(
+            make_user("inside.head", user_type=BOLIM_BOSHLIGI, department=self.purchasing)
+        )
+
+        for page_name in PAGES_BY_USER_TYPE[BOLIM_BOSHLIGI]:
+            with self.subTest(page=page_name):
+                self.assertEqual(self.client.get(page(page_name)).status_code, 200)
+
+    def test_the_purchasing_head_reads_the_contracts_and_decides_them(self) -> None:
+        """Tuzilgan Shartnomalar is theirs to read and theirs to decide.
+
+        DEC-013 read REQ-SHARTNOMA-002's department head as Admin, because
+        "Admin is the Xarid bo`lim boshlig`i". TASK-UZK-067 gives the
+        decision to the head and the Menejer of the purchasing department
+        as well, where it is staffed by accounts of their own types.
+        """
+        self.mark_the_purchasing_department()
+        head = make_user("signing.head", user_type=BOLIM_BOSHLIGI, department=self.purchasing)
+        self.client.force_login(head)
+
+        self.assertEqual(self.client.get(page("tuzilgan")).status_code, 200)
+        self.assertTrue(decides_on_contracts(head))
+
+    def test_the_purchasing_head_maintains_the_product_categories(self) -> None:
+        """Mahsulot Turlari is theirs to open, and theirs to add to.
+
+        The categories are what every application and every report is written
+        in terms of, and the purchasing department's head is who knows a new
+        one is needed. A head elsewhere raises requests in the ones that
+        already exist, so the page is not theirs.
+        """
+        self.mark_the_purchasing_department()
+        self.client.force_login(
+            make_user("category.head", user_type=BOLIM_BOSHLIGI, department=self.purchasing)
+        )
+
+        opened = self.client.get(page("mahsulot-turlari"))
+        self.assertEqual(opened.status_code, 200)
+        # And the sidebar offers it, rather than leaving them to guess the URL.
+        self.assertContains(opened, "Mahsulot Turlari")
+
+        added = self.client.post(
+            page("mahsulot-turlari-create"), {"category_number": "", "name": "Kimyo"}
+        )
+        self.assertEqual(added.status_code, 302)
+        self.assertEqual(MahsulotTuri.objects.get(name="Kimyo").category_number, 100000)
+
+        self.client.force_login(
+            make_user("elsewhere.head", user_type=BOLIM_BOSHLIGI, department=self.elsewhere)
+        )
+        self.assertEqual(self.client.get(page("mahsulot-turlari")).status_code, 403)
+        self.assertEqual(
+            self.client.post(
+                page("mahsulot-turlari-create"), {"category_number": "", "name": "Metall"}
+            ).status_code,
+            403,
+        )
+
+    def test_the_purchasing_department_keeps_the_list_of_firms(self) -> None:
+        """Firmalar is theirs to open and theirs to add to.
+
+        Its head, its Menejer and its Katta Mutaxasis are the people who deal
+        with the firms and who know when a new one is needed; the same three
+        types in another department do not, so the page is not theirs.
+        """
+        self.mark_the_purchasing_department()
+
+        for number, user_type in enumerate((BOLIM_BOSHLIGI, MENEJER, KATTA_MUTAXASIS)):
+            with self.subTest(user_type=user_type, department="xarid"):
+                self.client.force_login(
+                    make_user(f"firma.in.{number}", user_type=user_type, department=self.purchasing)
+                )
+
+                self.assertEqual(self.client.get(page("firmalar")).status_code, 200)
+                added = self.client.post(
+                    page("firmalar-create"),
+                    {"name": f"Firma {number}", "inn": f"12345678{number}"},
+                )
+                self.assertEqual(added.status_code, 302)
+
+            with self.subTest(user_type=user_type, department="elsewhere"):
+                self.client.force_login(
+                    make_user(f"firma.out.{number}", user_type=user_type, department=self.elsewhere)
+                )
+
+                self.assertEqual(self.client.get(page("firmalar")).status_code, 403)
+                refused = self.client.post(
+                    page("firmalar-create"), {"name": "Boshqa", "inn": "999999999"}
+                )
+                self.assertEqual(refused.status_code, 403)
+
+        self.assertEqual(Supplier.objects.count(), 3)
+
+    def test_the_sidebar_offers_the_firms_to_the_purchasing_department(self) -> None:
+        self.mark_the_purchasing_department()
+        self.client.force_login(
+            make_user("firma.menejer", user_type=MENEJER, department=self.purchasing)
+        )
+
+        rendered = self.client.get(page("kelishinlingan")).content.decode()
+
+        self.assertIn(page("firmalar"), rendered)
+
+    def test_a_head_outside_the_purchasing_department_decides_nothing(self) -> None:
+        """Its own, not any: they cannot even open the page."""
+        self.mark_the_purchasing_department()
+        head = make_user("outside.signing", user_type=BOLIM_BOSHLIGI, department=self.elsewhere)
+
+        self.assertFalse(decides_on_contracts(head))
+
+    def test_the_purchasing_head_opens_the_dashboard_and_its_ranking(self) -> None:
+        """The two travel together: the panel on one links to the other."""
+        self.mark_the_purchasing_department()
+        self.client.force_login(
+            make_user("panel.head", user_type=BOLIM_BOSHLIGI, department=self.purchasing)
+        )
+
+        rendered = self.client.get(page("dashboard"))
+
+        self.assertEqual(rendered.status_code, 200)
+        # The Top suppliers panel's own link, which must not answer 403.
+        self.assertContains(rendered, f'href="{page("top-suppliers")}"')
+        self.assertEqual(self.client.get(page("top-suppliers")).status_code, 200)
+
+    def test_a_head_outside_it_gets_neither(self) -> None:
+        """Neither is theirs; the root sends them on rather than refusing."""
+        self.mark_the_purchasing_department()
+        self.client.force_login(
+            make_user("nopanel.head", user_type=BOLIM_BOSHLIGI, department=self.elsewhere)
+        )
+
+        landed = self.client.get(page("dashboard"), follow=True)
+        self.assertEqual(landed.redirect_chain[-1][0], page("kelib-arizalar"))
+        self.assertEqual(self.client.get(page("top-suppliers")).status_code, 403)
+
+    def test_a_head_outside_it_does_not_read_the_contracts(self) -> None:
+        self.mark_the_purchasing_department()
+        self.client.force_login(
+            make_user("other.head", user_type=BOLIM_BOSHLIGI, department=self.elsewhere)
+        )
+
+        self.assertEqual(self.client.get(page("tuzilgan")).status_code, 403)
+
+    def test_nothing_narrows_until_a_purchasing_department_is_named(self) -> None:
+        """The same switch the arrived queue waits for.
+
+        Except the pages that are the purchasing department's own, which fall
+        closed rather than open: until somebody has been put in that
+        department, editing the list of firms the company buys from stays
+        where it was, with Admin.
+        """
+        self.client.force_login(
+            make_user("unmarked.head", user_type=BOLIM_BOSHLIGI, department=self.elsewhere)
+        )
+
+        for page_name in PAGES_BY_USER_TYPE[BOLIM_BOSHLIGI] - PURCHASING_DEPARTMENT_PAGES:
+            with self.subTest(page=page_name):
+                self.assertEqual(self.client.get(page(page_name)).status_code, 200)
+
+        for page_name in PURCHASING_DEPARTMENT_PAGES:
+            with self.subTest(page=page_name, falls="closed"):
+                self.assertEqual(self.client.get(page(page_name)).status_code, 403)
+
+    def test_the_sidebar_offers_the_three_and_nothing_else(self) -> None:
+        self.mark_the_purchasing_department()
+        self.client.force_login(
+            make_user("sidebar.head", user_type=BOLIM_BOSHLIGI, department=self.elsewhere)
+        )
+
+        rendered = self.client.get(page("xarid-ariza")).content.decode()
+
+        for page_name in self.OUTSIDE:
+            self.assertIn(f'href="{page(page_name)}"', rendered)
+        for page_name in ("tayinlangan", "kelishinlingan", "xodimlar-yuklamasi"):
+            self.assertNotIn(f'href="{page(page_name)}"', rendered)
+
+    def test_the_kept_approval_page_is_still_where_they_approve(self) -> None:
+        """Removing it would leave DEC-016's first step with nowhere to happen."""
+        self.mark_the_purchasing_department()
+        head = make_user("approving.head", user_type=BOLIM_BOSHLIGI, department=self.elsewhere)
+        requester = make_user("their.requester", user_type=USERS, department=self.elsewhere)
+        request = a_purchase_application(requester, self.elsewhere, with_pdf=False)
+        self.client.force_login(head)
+
+        self.assertContains(self.client.get(page("kelib-arizalar")), request.xarid_raqami)
+        self.client.post(page("xarid-ariza-tasdiqlash", request.pk))
+
+        request.refresh_from_db()
+        self.assertEqual(request.tasdiqlagan_bolim_boshligi, head)
 
 
 class OwnershipTests(SignedInAdminTestCase):
@@ -329,6 +654,112 @@ class OwnershipTests(SignedInAdminTestCase):
 
         self.assertEqual(
             self.client.post(page("xarid-ariza-tasdiqlash", request.pk)).status_code, 403
+        )
+
+    def test_a_requester_reads_only_the_requests_they_raised(self) -> None:
+        """Xarid Arizasi is the one page a Users account has, and it is theirs."""
+        other_requester = make_user("requester2", user_type=USERS, department=self.department)
+        mine = a_purchase_application(self.requester, self.department, with_pdf=False)
+        theirs = a_purchase_application(other_requester, self.department, with_pdf=False)
+        self.client.force_login(self.requester)
+
+        response = self.client.get(page("xarid-ariza"))
+
+        self.assertContains(response, mine.xarid_raqami)
+        self.assertNotContains(response, theirs.xarid_raqami)
+
+    def test_a_requester_cannot_download_another_requester_s_attachment(self) -> None:
+        other_requester = make_user("requester3", user_type=USERS, department=self.department)
+        theirs = a_purchase_application(other_requester, self.department)
+        mine = a_purchase_application(self.requester, self.department)
+        self.client.force_login(self.requester)
+
+        self.assertEqual(self.client.get(page("xarid-ariza-pdf", mine.pk)).status_code, 200)
+        self.assertEqual(self.client.get(page("xarid-ariza-pdf", theirs.pk)).status_code, 404)
+
+    def test_a_requester_cannot_download_another_requester_s_ariza_pdf(self) -> None:
+        """The generated sheet answers to the same rule as the attachment."""
+        other_requester = make_user("requester4", user_type=USERS, department=self.department)
+        theirs = a_purchase_application(other_requester, self.department)
+        mine = a_purchase_application(self.requester, self.department)
+        self.client.force_login(self.requester)
+
+        self.assertEqual(
+            self.client.get(page("xarid-ariza-hujjat-pdf", mine.pk)).status_code, 200
+        )
+        self.assertEqual(
+            self.client.get(page("xarid-ariza-hujjat-pdf", theirs.pk)).status_code, 404
+        )
+
+    def test_admin_alone_still_reads_every_request(self) -> None:
+        """The one account that maintains the rest keeps the whole table."""
+        raised = a_purchase_application(self.requester, self.department, with_pdf=False)
+        self.client.force_login(self.admin)
+
+        self.assertContains(self.client.get(page("xarid-ariza")), raised.xarid_raqami)
+
+    def test_no_other_type_reads_a_request_it_did_not_raise(self) -> None:
+        """Xarid Arizasi is each reader's own work, whatever type they are.
+
+        The approvers are here too: a Direktor decides on Kelib Tushgan
+        Arizalar and reads back what they let through on Tasdiqlangan
+        Arizalar, so this page owes them nothing of somebody else's.
+        """
+        somebody_elses = a_purchase_application(
+            self.requester, self.department, with_pdf=False
+        )
+        menejer = make_user("menejer", user_type=MENEJER, department=self.department)
+
+        for reader in (self.direktor, menejer, self.specialist, self.head):
+            with self.subTest(reader=reader.get_username()):
+                self.client.force_login(reader)
+                self.assertNotContains(
+                    self.client.get(page("xarid-ariza")), somebody_elses.xarid_raqami
+                )
+
+    def test_a_head_reads_only_their_own_requests_on_xarid_arizasi(self) -> None:
+        """The page they raise from; the ones they decide are on their other two."""
+        somebody_elses = a_purchase_application(
+            self.requester, self.department, with_pdf=False
+        )
+        mine = a_purchase_application(self.head, self.department, with_pdf=False)
+        self.client.force_login(self.head)
+
+        response = self.client.get(page("xarid-ariza"))
+
+        self.assertContains(response, mine.xarid_raqami)
+        self.assertNotContains(response, somebody_elses.xarid_raqami)
+
+    def test_a_head_still_opens_the_pdf_of_a_request_waiting_for_them(self) -> None:
+        """Deciding a request blind is not deciding it."""
+        waiting = a_purchase_application(self.requester, self.department)
+        self.client.force_login(self.head)
+
+        self.assertEqual(self.client.get(page("xarid-ariza-pdf", waiting.pk)).status_code, 200)
+        self.assertEqual(
+            self.client.get(page("xarid-ariza-hujjat-pdf", waiting.pk)).status_code, 200
+        )
+
+    def test_a_head_still_opens_the_pdf_of_a_request_they_approved(self) -> None:
+        """Tasdiqlangan Arizalar shows both badges, so both have to open."""
+        decided = a_purchase_application(self.requester, self.department)
+        decided.approve(by=self.head)
+        self.client.force_login(self.head)
+
+        self.assertEqual(self.client.get(page("xarid-ariza-pdf", decided.pk)).status_code, 200)
+        self.assertEqual(
+            self.client.get(page("xarid-ariza-hujjat-pdf", decided.pk)).status_code, 200
+        )
+
+    def test_a_head_cannot_open_the_pdf_of_another_department_s_request(self) -> None:
+        elsewhere = a_department("Moliya bo`limi")
+        stranger = make_user("moliya.user", user_type=USERS, department=elsewhere)
+        theirs = a_purchase_application(stranger, elsewhere)
+        self.client.force_login(self.head)
+
+        self.assertEqual(self.client.get(page("xarid-ariza-pdf", theirs.pk)).status_code, 404)
+        self.assertEqual(
+            self.client.get(page("xarid-ariza-hujjat-pdf", theirs.pk)).status_code, 404
         )
 
     def test_an_attachment_follows_the_page_its_application_is_on(self) -> None:

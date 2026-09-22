@@ -1,0 +1,29 @@
+{#
+The shell of the Ko'rish slide-over, included once by each contract page
+(TASK-UZK-063). Its contents arrive from xarid:shartnoma-tafsilot when a
+Ko'rish button is pressed.
+
+The project's own drawer rather than a dialog of its own: a contract has
+more to say than a centred box holds, and the Izoh drawers on Kelib Tushgan
+and Qabul Qilingan already slide a full-height panel in from the right. A
+second slide-over built beside it would be the one that falls behind.
+
+The heading and the close stay here rather than travelling with the fetched
+fragment: both handlers are bound at load over what is in the document then,
+so a close button that arrived later would not close anything. The heading's
+text is the contract number, which the button that opened it carries.
+
+No footer. Nothing is decided here - deciding is the Amallar column's, on
+the page behind it (DEC-013).
+#}
+<div id="sht-tafsilot-overlay" class="drawer-overlay hidden">
+  <div class="drawer-panel" role="dialog" aria-modal="true" aria-label="Shartnoma tafsilotlari">
+    <div class="drawer-header">
+      <div class="drawer-title" data-detail-title>{{ _("Tafsilotlar") }}</div>
+      <button type="button" class="drawer-close" data-close-drawer="sht-tafsilot" aria-label="Yopish">
+        <i class="bi bi-x-lg" aria-hidden="true"></i>
+      </button>
+    </div>
+    <div class="drawer-body" data-detail-body></div>
+  </div>
+</div>

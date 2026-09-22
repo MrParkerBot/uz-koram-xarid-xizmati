@@ -1,0 +1,104 @@
+{#
+One contract, read rather than worked on: the body of the Ko'rish slide-over
+on both Kelishinlingan and Tuzilgan (TASK-UZK-063).
+
+A fragment rather than a page. The two contract tables fetch it when the
+button is pressed, so a list of two hundred rows carries one panel rather
+than two hundred - the reason the modal code beside it gives for filling one
+dialog from attributes rather than rendering one per row.
+
+The same fragment on both pages. What it says about a contract does not
+depend on which table it was opened from, and one page's version of it would
+be the one that falls behind.
+#}
+<div class="detail-card">
+  <div class="detail-grid">
+    <div>
+      <div class="detail-label">Shartnoma №</div>
+      <div class="detail-value mono-cell">{{ shartnoma.shartnoma_raqami }}</div>
+    </div>
+    <div>
+      <div class="detail-label">Ariza №</div>
+      <div class="detail-value mono-cell">{{ shartnoma.application.ariza_raqami }}</div>
+    </div>
+    <div>
+      <div class="detail-label">Firma</div>
+      <div class="detail-value">{{ shartnoma.supplier.name }}</div>
+    </div>
+    <div>
+      <div class="detail-label">Bo'lim</div>
+      <div class="detail-value">{{ shartnoma.application.department.name }}</div>
+    </div>
+    <div>
+      <div class="detail-label">Buyurtma</div>
+      <div class="detail-value">{{ shartnoma.buyurtma_xulosasi }}</div>
+    </div>
+    <div>
+      <div class="detail-label">{{ _("Umumiy qiymat") }}</div>
+      <div class="detail-value detail-total">{{ shartnoma.qiymati_display }} UZS</div>
+    </div>
+    <div>
+      <div class="detail-label">Kim tuzdi</div>
+      <div class="detail-value">{{ display_name(shartnoma.created_by) }}</div>
+    </div>
+    <div>
+      <div class="detail-label">{{ _("Sana") }}</div>
+      <div class="detail-value mono-cell">{{ shartnoma.yaratilingan_sana|date("d/m/Y") }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table class="table-app">
+    <thead><tr>
+      <th>{{ _("Buyurtma nomi") }}</th>
+      <th style="text-align:right;">{{ _("Miqdori") }}</th>
+      <th>{{ _("Birlik") }}</th>
+      <th style="text-align:right;">{{ _("Narx (1ta)") }}</th>
+      <th style="text-align:right;">{{ _("Jami") }}</th>
+    </tr></thead>
+    <tbody>
+    {% for qator in qatorlar %}
+      <tr>
+        <td>{{ qator.buyurtma_nomi }}{% if qator.part_number %} <span class="muted small mono-cell">{{ qator.part_number }}</span>{% endif %}</td>
+        <td class="mono-cell" style="text-align:right;">{{ qator.soni_display }}</td>
+        <td>{{ qator.olchov_birligi }}</td>
+        <td class="mono-cell" style="text-align:right;">{{ qator.narxi_display }}</td>
+        <td class="mono-cell" style="text-align:right;font-weight:600;">{{ qator.umumiy_narx_display }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{#
+Two downloads, one under the other: the department's own document, kept as it
+was uploaded, and the contract drawn from the record.
+
+Contracts entered before TASK-UZK-036A made the attachment mandatory have
+none, and a download button that answers 404 is worse than no button - so the
+Ilova button is drawn only when there is a file behind it.
+
+The drawn contract is different: every contract will have one eventually, and
+a reader looking for it should see that it exists and is not ready yet rather
+than wonder whether the panel forgot it. So it is always drawn, and stays
+muted until the contract has been approved - which is the same question the
+route asks anybody who tries the URL without one.
+#}
+<div class="detail-actions">
+  {% if shartnoma.pdf %}
+  <a class="btn btn-outline-custom btn-xs text-danger" href="{{ url('xarid:shartnoma-pdf', shartnoma.pk) }}">
+    <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> {{ _("Shartnoma Ilova yuklab olish") }}
+  </a>
+  {% endif %}
+  {% if shartnoma.is_signed %}
+  <a class="btn btn-outline-custom btn-xs text-danger" href="{{ url('xarid:shartnoma-hujjat-pdf', shartnoma.pk) }}">
+    <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> {{ _("Shartnomani Yuklab Olish") }}
+  </a>
+  {% else %}
+  <span class="btn btn-outline-custom btn-xs disabled" aria-disabled="true"
+        title="Shartnoma tasdiqlangandan so'ng yuklab olinadi">
+    <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> {{ _("Shartnomani Yuklab Olish") }}
+  </span>
+  {% endif %}
+</div>

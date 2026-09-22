@@ -17,6 +17,7 @@ from tests.support import (
     a_contract,
     a_department,
     a_pdf,
+    a_purchase_application,
     a_supplier,
     an_application,
     an_assigned_application,
@@ -24,7 +25,14 @@ from tests.support import (
     make_user,
     page,
 )
-from xarid.audit import APPROVED, REFUSED, record_created, record_decision, record_deleted
+from xarid.audit import (
+    APPROVED,
+    REFUSED,
+    decisions_for,
+    record_created,
+    record_decision,
+    record_deleted,
+)
 from xarid.models import (
     ADMIN,
     BOLIM_BOSHLIGI,
@@ -382,7 +390,7 @@ class UserLoggingTests(SignedInAdminTestCase):
             "first_name": "Bobur",
             "last_name": "Toshmatov",
             "password": PASSWORD,
-            "phone_number": "90 123 45 67",
+            "phone_number": "90-123-45-67",
             "user_type": UserType.objects.get(name=MENEJER).pk,
             "department": a_department().pk,
         }
@@ -450,3 +458,50 @@ class TwoApprovalsTests(TestCase):
             for entry in AuditEntry.objects.filter(approved_at__isnull=False).order_by("id")
         ]
         self.assertEqual(approvers, [self.head, self.direktor])
+
+
+class ReadingDecisionsTests(TestCase):
+    """decisions_for(): what the Izoh column's panel is filled from."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.department = a_department()
+        cls.requester = make_user("read.requester", user_type=USERS, department=cls.department)
+        cls.head = make_user("read.head", user_type=BOLIM_BOSHLIGI, department=cls.department)
+        cls.direktor = make_user("read.direktor", user_type=DIREKTOR)
+
+    def test_the_decisions_come_back_oldest_first_with_who_what_and_when(self) -> None:
+        application = a_purchase_application(self.requester, self.department)
+        record_decision(self.head, application, approved=True)
+        record_decision(self.direktor, application, approved=False, comment="Byudjet yetarli emas")
+
+        decisions = decisions_for([application])[application.pk]
+
+        self.assertEqual([decision.by for decision in decisions], [self.head, self.direktor])
+        self.assertEqual([decision.approved for decision in decisions], [True, False])
+        self.assertEqual(
+            [decision.comment for decision in decisions], ["", "Byudjet yetarli emas"]
+        )
+        self.assertTrue(all(decision.at is not None for decision in decisions))
+
+    def test_a_record_nobody_has_decided_is_in_the_answer_with_nothing_in_it(self) -> None:
+        """Every record asked about is a key, so no caller has to check."""
+        application = a_purchase_application(self.requester, self.department)
+
+        self.assertEqual(decisions_for([application]), {application.pk: []})
+
+    def test_a_whole_table_of_records_costs_one_query(self) -> None:
+        applications = [
+            a_purchase_application(self.requester, self.department) for _ in range(3)
+        ]
+        for application in applications:
+            record_decision(self.head, application, approved=True)
+
+        with self.assertNumQueries(1):
+            decisions = decisions_for(applications)
+
+        self.assertEqual([len(decisions[one.pk]) for one in applications], [1, 1, 1])
+
+    def test_nothing_asked_about_means_nothing_to_look_up(self) -> None:
+        with self.assertNumQueries(0):
+            self.assertEqual(decisions_for([]), {})

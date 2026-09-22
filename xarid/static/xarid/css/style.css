@@ -339,12 +339,36 @@ body.is-sidebar-open .sidebar-backdrop { display: block; }
 textarea.form-control { min-height: 80px; }
 
 .input-group { position: relative; }
-.input-group .form-control { padding-right: 38px; }
+/* Bootstrap lifts a focused field to z-index 5 (.input-group > .form-control:focus),
+   which paints the opaque field over our absolutely positioned toggle. Pin the field
+   down at the same specificity and keep the toggle above Bootstrap's ceiling. */
+.input-group .form-control { padding-right: 42px; position: relative; z-index: 1; }
+.input-group > .form-control:focus,
+.input-group > .form-select:focus { z-index: 1; }
+/* Browsers draw their own reveal/clear/autofill buttons inside a password field
+   once it is focused or filled; they sit on top of ours, so turn them off. */
+.input-group input[type="password"]::-ms-reveal,
+.input-group input[type="password"]::-ms-clear { display: none; width: 0; height: 0; }
+.input-group input[type="password"]::-webkit-credentials-auto-fill-button,
+.input-group input[type="password"]::-webkit-strong-password-auto-fill-button,
+.input-group input[type="password"]::-webkit-textfield-decoration-container {
+  visibility: hidden;
+  pointer-events: none;
+  margin: 0;
+  width: 0;
+}
 .input-group-icon {
   position: absolute;
-  right: 12px;
+  right: 6px;
   top: 50%;
   transform: translateY(-50%);
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
   color: var(--color-text-muted);
   font-size: 14px;
   cursor: pointer;
@@ -352,9 +376,35 @@ textarea.form-control { min-height: 80px; }
   border: none;
   padding: 0;
   line-height: 1;
+  transition: color .15s, background-color .15s;
 }
-.input-icon-left .form-control { padding-left: 38px; }
-.input-icon-left .input-group-icon { right: auto; left: 12px; }
+.input-group-icon:hover { color: var(--color-text); background: var(--color-surface-muted); }
+.input-group-icon:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+  color: var(--color-text);
+}
+/* Keep the toggle legible while the field is focused or being typed into. */
+.input-group:focus-within .input-group-icon { color: var(--color-text); }
+/* A fixed prefix printed inside the field: the +998 every number starts with.
+   The field is padded past it so the digits cannot run underneath. */
+.input-group.has-prefix .form-control { padding-left: 50px; }
+.input-prefix {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--color-text-muted);
+  /* Clicks fall through to the field, so the prefix is not a dead spot. */
+  pointer-events: none;
+}
+.input-group.has-prefix:focus-within .input-prefix { color: var(--color-text); }
+
+.input-icon-left .form-control { padding-left: 38px; padding-right: 14px; }
+.input-icon-left .input-group-icon { right: auto; left: 8px; }
 
 .form-error { font-size: 11px; color: var(--color-danger); margin-top: 4px; }
 .form-hint  { font-size: 11px; color: var(--color-text-muted); margin-top: 4px; }
@@ -674,11 +724,160 @@ textarea.form-control { min-height: 80px; }
   max-width: 480px;
   box-shadow: var(--shadow-soft);
   animation: fadeIn .15s ease;
+  /* A form taller than the screen scrolls inside the dialog. The overlay is
+     fixed to the viewport, so without this the bottom of a long form - the
+     Shartnoma Kiritish one runs well past a laptop screen - is simply cut
+     off, taking its Saqlash button with it and leaving no way to submit.
+     48px is the overlay's own padding, top and bottom. dvh as well as vh so
+     a phone's address bar does not hide the last row; browsers that do not
+     know dvh keep the vh line above it. */
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  /* Reaching the end of the form scrolls no further: the page behind a modal
+     staying put is what tells a reader the modal is what they are in. */
+  overscroll-behavior: contain;
 }
 .modal-box.modal-lg { max-width: 640px; }
 .modal-title { font-size: 17px; font-weight: 700; color: var(--color-text); margin-bottom: 8px; }
 .modal-desc  { font-size: 13px; color: var(--color-text-muted); line-height: 1.6; margin-bottom: 20px; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+
+/* ─── THE AMALLAR STACK (TASK-UZK-064) ───
+   Three actions in one cell, one above the other rather than in a row: side
+   by side they push the decision columns off a laptop screen, and the table
+   already scrolls. Stretched so the three read as one group of equal width. */
+.amallar-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.amallar-stack .btn { white-space: nowrap; }
+/* A control that is not this reader's to use. Bootstrap disables buttons
+   itself; this is for the anchor that stands in for Tahrirlash, which has
+   no disabled attribute to honour. */
+.btn.disabled, .btn:disabled { opacity: .45; pointer-events: none; }
+
+/* Removing a row of goods while editing (TASK-UZK-064, TASK-UZK-065).
+   The tick is what the server reads and the button is what people press,
+   so the tick is hidden rather than absent - display:none, not a hidden
+   input, because a checkbox that is not checked submits nothing either
+   way and this one has to be checkable from script. */
+.qator-ochirish { display: flex; flex-direction: column; align-items: center; }
+.qator-ochirish input[type="checkbox"] { display: none; }
+.qator-ochirish-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-danger);
+  cursor: pointer;
+  padding: 7px 10px;
+  line-height: 1;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.qator-ochirish-btn:hover:not(:disabled) { background: #fdecec; border-color: var(--color-danger); }
+.qator-ochirish-btn:disabled { color: var(--color-text-muted); cursor: default; opacity: .5; }
+.qator-ochirish-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+/* ─── WHAT THE KO'RISH SLIDE-OVER HOLDS (TASK-UZK-063) ───
+   The panel itself is the drawer above: this is the card of labelled facts
+   it opens with, above the goods the contract covers. The card is auto-fit
+   rather than two fixed columns, so the eight fields fall to one column in
+   a narrowed drawer without a media query of their own. */
+.detail-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 18px;
+  margin-bottom: 18px;
+}
+.detail-grid {
+  display: grid;
+  /* 160px, not 200: the drawer is 480 wide and the card sits inside its
+     padding and its own, which leaves about 394 for the columns. A 200px
+     minimum needs 424 and so falls to one column in the very panel this
+     card was written for. A phone-width drawer still drops to one. */
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px 24px;
+}
+.detail-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+}
+.detail-value { font-size: 14px; font-weight: 500; color: var(--color-text); }
+.detail-total { font-weight: 700; color: var(--color-danger); }
+/* Two downloads sit here now, so they wrap and keep a gap rather than
+   running together on a narrow panel. */
+.detail-actions { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ─── COMBO (type-ahead with a list of its own) ───
+   A browser draws a <datalist> popup itself, outside the document, so it
+   takes no CSS: how many rows it shows and whether it scrolls are the
+   browser's to decide and cannot be asked for. This list is ordinary markup
+   instead, which is the only way to say "five, then scroll". */
+.combo { position: relative; }
+.combo-list {
+  /* One row's height, named once: the five below is only a count of rows if
+     every row is the same height, so the two are defined together. */
+  --combo-row: 34px;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 1080;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
+  /* Five rows exactly, then it scrolls. box-sizing is border-box here, so
+     the padding and the border have to be added on or the fifth row is cut. */
+  max-height: calc(var(--combo-row) * 5 + 8px + 2px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.combo-list.hidden { display: none; }
+.combo-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--combo-row);
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* display:flex above would otherwise beat the [hidden] attribute's own
+   display:none, and a filtered-out row would stay on screen. */
+.combo-option[hidden] { display: none; }
+.combo-option.is-active,
+.combo-option:hover { background: var(--color-surface-muted); }
+/* Both halves shrink and ellipsize rather than one pushing the other out of
+   a row that hides its overflow: the values are short codes on one page and
+   long firm names on another, and either can be the longer of the two. */
+.combo-value {
+  font-size: 12px;
+  font-weight: 600;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.combo-hint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ─── DRAWER (Slide-Over) ─── */
 .drawer-overlay {
@@ -731,6 +930,72 @@ textarea.form-control { min-height: 80px; }
   gap: 10px;
   flex-shrink: 0;
 }
+
+/* Tasdiqlangan, with the way back beside it (TASK-UZK-067). The badge
+   reads first and the button sits to its right, so the cell says what the
+   state is before it says what can be done about it. */
+.amallar-decided {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  /* Deliberately not flex-wrap: wrap. A wrapping flex container's smallest
+     width is its widest single item, so the column would collapse to the
+     button's width and the badge would drop below it; without wrapping the
+     column cannot be narrower than the two side by side, which is where
+     the badge belongs - the state reads before what can be done about it. */
+  flex-wrap: nowrap;
+}
+
+/* A footer holding a form rather than a row of buttons: the comment box at
+   the bottom of the Izoh drawer (TASK-UZK-066). */
+.drawer-footer.drawer-footer-form { display: block; }
+
+/* ─── DECISION COMMENTS (the Izoh column's drawer) ─── */
+/* The button that opens it, sitting beside the comment in a table cell. */
+.comment-open {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  margin-left: 4px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  transition: color .15s, background .15s;
+}
+.comment-open:hover { color: var(--color-primary); background: #f4efe8; }
+.comment-open:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.comment-count {
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: super;
+  margin-left: 1px;
+}
+/* One decision to an entry, ruled off from the next. */
+.comment-entry {
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+.comment-entry:last-child { margin-bottom: 0; }
+.comment-entry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.comment-author { font-size: 13px; font-weight: 600; }
+.comment-text {
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.comment-date { font-size: 11px; color: var(--color-text-muted); margin-top: 6px; }
 
 /* ─── TOAST ─── */
 .toast-container {
@@ -1288,3 +1553,37 @@ textarea.form-control { min-height: 80px; }
 }
 .anon-nav a { color: var(--color-text-muted); text-decoration: none; }
 .anon-nav a:hover { color: var(--color-primary); }
+
+/* ─── TABLE PAGER ─────────────────────────────────────────────
+   The rest of .pagination-wrap, now that it is filled in: the gap
+   the page numbers elide through, and the row-count form inside
+   .pagination-info. The buttons themselves are the guide's own -
+   outline for a page, primary for the one being read. */
+.pager-gap { padding: 0 2px; color: var(--color-text-muted); font-size: 12px; }
+.pager-rows-form { display: flex; align-items: center; gap: 8px; margin: 0; }
+/* main.js applies the count on change, and says so by hiding the
+   button it replaces - so the button is only ever gone where there
+   is script to do its job. */
+html.js-on .pager-rows-apply { display: none; }
+
+@media (max-width: 768px) {
+  .pagination-info { margin-left: 0; width: 100%; justify-content: space-between; }
+}
+
+/* ─── LANGUAGE PICKER ─────────────────────────────────────────
+   The globe in the top bar, left of the bell. It borrows the
+   account menu's dropdown, so the two open the same way and sit
+   at the same depth. */
+.language-chip { position: relative; }
+.language-chip .btn { display: inline-flex; align-items: center; gap: 6px; }
+.language-code { font-size: 11px; font-weight: 700; letter-spacing: .3px; }
+.language-menu { min-width: 170px; }
+.language-menu form { margin: 0; }
+.language-menu .dropdown-item { width: 100%; text-align: left; }
+/* The language being read: shown with a tick and not pressable, because
+   pressing it would be a round trip to the same page. */
+.language-menu .is-current { color: var(--color-primary); font-weight: 600; }
+
+@media (max-width: 768px) {
+  .language-code { display: none; }
+}

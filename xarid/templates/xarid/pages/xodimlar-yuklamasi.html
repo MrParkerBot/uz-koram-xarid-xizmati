@@ -1,30 +1,31 @@
 {% extends "xarid/base.html" %}
 {% from "xarid/_filters.html" import filter_bar, export_links with context %}
+{% from "xarid/_pagination.html" import pagination_bar with context %}
 {#
 The Xodimlar Yuklamasi report: a row per specialist, a counter per active
 contract status and a totals row (REQ-YUKLAMA-002). The status columns are
 generated from the master data, so adding a status adds a column (DEC-010).
 #}
-{% block title %}Xodimlar Yuklamasi{% endblock %}
-{% block breadcrumb %}Hisobotlar / Xodimlar Yuklamasi{% endblock %}
-{% block page_heading %}Xodimlar Yuklamasi{% endblock %}
+{% block title %}{{ _("Xodimlar Yuklamasi") }}{% endblock %}
+{% block breadcrumb %}{{ _("Hisobotlar / Xodimlar Yuklamasi") }}{% endblock %}
+{% block page_heading %}{{ _("Xodimlar Yuklamasi") }}{% endblock %}
 {% block content %}
 
     <div class="page-header">
-      <div><h1 class="page-title">Xodimlar Yuklamasi</h1><div class="muted">Employee Workload Report</div></div>
-      <div class="page-actions"><span class="role-tag role-admin">Admin va Bo'lim Boshlig'i</span></div>
+      <div><h1 class="page-title">{{ _("Xodimlar Yuklamasi") }}</h1><div class="muted">{{ _("Employee Workload Report") }}</div></div>
+      <div class="page-actions"><span class="role-tag role-admin">{{ _("Admin va Bo'lim Boshlig'i") }}</span></div>
     </div>
 
     <div class="grid-2" style="margin-bottom:24px;">
       <div class="panel stat-card">
         <div class="stat-icon" style="background:rgba(223,88,48,.12);"><i class="bi bi-people" aria-hidden="true"></i></div>
-        <div class="stat-label">Jami Xodimlar</div>
+        <div class="stat-label">{{ _("Jami Xodimlar") }}</div>
         <div class="kpi-value">{{ report.subject_count }}</div>
-        <div class="stat-sub">Faol mutaxassislar</div>
+        <div class="stat-sub">{{ _("Faol mutaxassislar") }}</div>
       </div>
       <div class="panel stat-card">
         <div class="stat-icon" style="background:rgba(75,85,99,.12);"><i class="bi bi-clipboard" aria-hidden="true"></i></div>
-        <div class="stat-label">Jami Topshiriqlar</div>
+        <div class="stat-label">{{ _("Jami Topshiriqlar") }}</div>
         <div class="kpi-value" style="color:var(--color-primary);">{{ report.totals.total }}</div>
         <div class="stat-sub">{% if table_filter.period.is_active %}Tanlangan davr{% else %}Barcha davr{% endif %}</div>
       </div>
@@ -39,26 +40,26 @@ generated from the master data, so adding a status adds a column (DEC-010).
         <table class="table-app" id="yukl-table">
           <thead><tr>
             <th style="width:36px;">#</th>
-            <th>Xodim</th>
-            <th>Telefon</th>
-            <th>Xarid topshiriqlari</th>
+            <th>{{ _("Xodim") }}</th>
+            <th>{{ _("Telefon") }}</th>
+            <th>{{ _("Xarid topshiriqlari") }}</th>
             {% for column in report.columns %}<th>{{ column.label }}</th>{% endfor %}
           </tr></thead>
           <tbody>
-            {% for row in report.rows %}
+            {% for row in table_page.rows %}
             <tr>
-              <td>{{ loop.index }}</td>
+              <td>{{ table_page.start_index + loop.index0 }}</td>
               <td><div style="display:flex;align-items:center;gap:8px;"><div class="user-avatar">{{ row.subject_label.split()|map('first')|join|upper }}</div><strong>{{ row.subject_label }}</strong></div></td>
               <td class="mono-cell">{{ row.detail or '—' }}</td>
               <td style="font-weight:800;font-size:15px;{% if row.total and row.total == report.busiest %}color:var(--color-primary);{% endif %}">{{ row.total }}</td>
               {% for counter in row.counters %}<td>{{ counter }}</td>{% endfor %}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 4 + report.columns|length }}" class="muted" style="text-align:center;padding:24px;">Xodim topilmadi.</td></tr>
+            <tr><td colspan="{{ 4 + report.columns|length }}" class="muted" style="text-align:center;padding:24px;">{{ _("Xodim topilmadi.") }}</td></tr>
             {% endfor %}
             {% if report.has_rows %}
             <tr class="total-row" data-jami="{{ report.totals.total }}">
-              <td colspan="3" style="font-weight:700;"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Jami:</td>
+              <td colspan="3" style="font-weight:700;"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> {{ _("Jami:") }}</td>
               <td style="font-weight:800;color:var(--color-primary);">{{ report.totals.total }}</td>
               {% for counter in report.totals.counters %}<td style="font-weight:700;">{{ counter }}</td>{% endfor %}
             </tr>
@@ -66,8 +67,9 @@ generated from the master data, so adding a status adds a column (DEC-010).
           </tbody>
         </table>
       </div>
+      {{ pagination_bar(table_page, url('xarid:xodimlar-yuklamasi')) }}
       {% if not report.columns %}
-      <div class="muted" style="padding:12px 16px;">Shartnoma statuslari belgilanmagan, shuning uchun holat ustunlari yo'q.</div>
+      <div class="muted" style="padding:12px 16px;">{{ _("Shartnoma statuslari belgilanmagan, shuning uchun holat ustunlari yo'q.") }}</div>
       {% endif %}
     </div>
 

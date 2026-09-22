@@ -87,6 +87,16 @@ class Contract <<xarid_contract>> {
   izoh : TextField
   pdf : FileField
   yaratilingan_sana : DateTimeField
+  deleted_at : DateTimeField
+  deleted_by : ForeignKey
+}
+
+class ContractComment <<xarid_contractcomment>> {
+  id : BigAutoField
+  contract : ForeignKey
+  author : ForeignKey
+  matn : TextField
+  created_at : DateTimeField
 }
 
 class ContractItem <<xarid_contractitem>> {
@@ -114,6 +124,7 @@ class Department <<xarid_department>> {
   is_active : BooleanField
   created_at : DateTimeField
   name : CharField
+  is_purchasing : BooleanField
 }
 
 class MahsulotTuri <<xarid_mahsulotturi>> {
@@ -243,9 +254,12 @@ Contract "*" --> "1" ShartnomaStatus : status
 Contract "*" --> "1" ShartnomaTuri : shartnoma_turi
 Contract "*" --> "1" Supplier : supplier
 Contract "*" --> "1" User : created_by
+Contract "*" --> "1" User : deleted_by
 Contract "*" --> "1" User : inkor_qilgan
 Contract "*" --> "1" User : tasdiqlagan
 Contract "*" --> "1" User : yuborgan
+ContractComment "*" --> "1" Contract : contract
+ContractComment "*" --> "1" User : author
 ContractItem "*" --> "1" Contract : contract
 ContractStatusChange "*" --> "1" Contract : contract
 ContractStatusChange "*" --> "1" ShartnomaStatus : from_status

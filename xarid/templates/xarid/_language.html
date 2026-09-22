@@ -1,0 +1,37 @@
+{#
+The language picker: the globe in the top bar, left of the notification bell.
+
+A form per language rather than links, because set_language writes to the
+session and a GET that changes what a person sees on every page afterwards is
+not a GET. Each posts back to the page it was pressed on, so choosing a
+language keeps the reader where they were - filters, page and all.
+
+The list is settings.LANGUAGES, so adding a fourth language is a settings
+change and not a template one. The one being read is marked and not offered:
+pressing it would be a round trip to the same page.
+#}
+{% macro language_picker(current_path) -%}
+<div class="language-chip" data-language-chip>
+  <button type="button" class="btn btn-outline-custom btn-sm" aria-haspopup="true"
+          aria-label="{{ _("Til") }}" title="{{ _("Til") }}">
+    <i class="bi bi-translate" aria-hidden="true"></i>
+    <span class="language-code">{{ language_code()|upper }}</span>
+  </button>
+  <div class="account-menu language-menu hidden" data-language-menu>
+    {% for code, name in languages() %}
+    {% if code == language_code() %}
+    <span class="dropdown-item is-current" aria-current="true">
+      <i class="bi bi-check2" aria-hidden="true"></i> {{ name }}
+    </span>
+    {% else %}
+    <form method="post" action="{{ url('set_language') }}">
+      {{ csrf_input }}
+      <input type="hidden" name="language" value="{{ code }}"/>
+      <input type="hidden" name="next" value="{{ current_path }}"/>
+      <button type="submit" class="dropdown-item" lang="{{ code }}">{{ name }}</button>
+    </form>
+    {% endif %}
+    {% endfor %}
+  </div>
+</div>
+{%- endmacro %}

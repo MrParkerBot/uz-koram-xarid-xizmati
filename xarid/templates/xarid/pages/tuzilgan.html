@@ -1,52 +1,69 @@
 {% extends "xarid/base.html" %}
-{% from "xarid/_forms.html" import widget with context %}
+{% from "xarid/_forms.html" import widget, pdf_badge with context %}
+{% from "xarid/_filters.html" import filter_bar, export_links with context %}
+{% from "xarid/_pagination.html" import pagination_bar with context %}
 {#
 Tuzilgan Shartnomalar: the contracts TASK-UZK-038 sends, and the department
 head's decision on them (REQ-SHARTNOMA-001, REQ-SHARTNOMA-002).
 
-Four user types may open this page and one of them decides (DEC-013), so the
-controls render for that one and the route asks again. Everybody else sees the
-contracts and what is waiting, which is what the page is for them.
+Who decides is decides_on_contracts(): Admin, and Xarid Bo`limi's own Bo`lim
+Boshlig`i and Menejer (TASK-UZK-067). The controls render for them and the
+route asks again. Everybody else - the Katta Mutaxasis who sent the contract,
+above all - sees the same states as a status badge, which is how they learn
+what became of what they sent.
 
 The Holati column is a drop-down once a contract is signed and a badge while it
 is awaiting a decision: a signed contract's terms are settled and its progress
 is not (DEC-028), and a contract must not change underneath the person
-deciding on it.
+deciding on it. Not for a Katta Mutaxasis, who reads this page: the contract
+is out of their hands while it is on it (TASK-UZK-068).
+
+Ko'rish has a column of its own rather than a place among the Amallar: reading
+a contract is everybody's on this page, while deciding on one is the Admin's
+(DEC-013), and the Amallar cell already carries the decision once it is made.
 #}
-{% block title %}Tuzilgan Shartnomalar{% endblock %}
-{% block breadcrumb %}Shartnomalar / Tuzilgan{% endblock %}
-{% block page_heading %}Tuzilgan Shartnomalar{% endblock %}
+{% block title %}{{ _("Tuzilgan Shartnomalar") }}{% endblock %}
+{% block breadcrumb %}{{ _("Shartnomalar / Tuzilgan") }}{% endblock %}
+{% block page_heading %}{{ _("Tuzilgan Shartnomalar") }}{% endblock %}
 {% block content %}
 
     <div class="page-header">
-      <div><h1 class="page-title">Tuzilgan Shartnomalar</h1><div class="muted">Contracts awaiting a decision, and decided</div></div>
+      <div><h1 class="page-title">{{ _("Tuzilgan Shartnomalar") }}</h1><div class="muted">{{ _("Contracts awaiting a decision, and decided") }}</div></div>
       <div class="page-actions">
-        {% if may_decide %}<span class="role-tag role-admin">Tasdiqlovchi</span>{% else %}<span class="role-tag">Ko'rish uchun</span>{% endif %}
+        {% if may_decide %}<span class="role-tag role-admin">Tasdiqlovchi</span>{% else %}<span class="role-tag">{{ _("Ko'rish uchun") }}</span>{% endif %}
       </div>
     </div>
 
     <div class="panel">
+      <div class="toolbar">{{ filter_bar(table_filter, url('xarid:tuzilgan')) }}<div class="toolbar-group">
+          {{ export_links('tuzilgan', table_filter) }}
+        </div>
+      </div>
+
       <div class="table-wrap">
         <table class="table-app" id="tuzilgan-table">
           <thead><tr>
             <th style="width:36px;">#</th>
-            <th>Ariza №</th>
-            <th>Bo'lim</th>
-            <th>Buyurtma nomi</th>
-            <th>Shartnoma №</th>
-            <th>Firma</th>
-            <th>Kim tuzdi</th>
-            <th>Yuborilgan</th>
-            <th style="width:210px;">Holati</th>
-            <th style="text-align:center;width:180px;">Amallar</th>
+            <th>{{ _("Ariza №") }}</th>
+            <th>{{ _("Bo'lim") }}</th>
+            <th>{{ _("Buyurtma nomi") }}</th>
+            <th>{{ _("Shartnoma №") }}</th>
+            <th>{{ _("Firma") }}</th>
+            <th>{{ _("Kim tuzdi") }}</th>
+            <th>{{ _("Yuborilgan") }}</th>
+            <th style="width:210px;">{{ _("Holati") }}</th>
+            <th style="text-align:center;width:110px;">{{ _("Shartnoma PDF") }}</th>
+            <th style="text-align:center;width:100px;">{{ _("Ko'rish") }}</th>
+            <th style="text-align:center;width:290px;">{{ _("Amallar") }}</th>
           </tr></thead>
           <tbody>
           {% for shartnoma in contracts %}
+            {% set contract_row = loop %}
             {% set qatorlar = shartnoma.items.all()|list %}
             {% for qator in qatorlar %}
             <tr data-id="{{ shartnoma.pk }}">
               {% if loop.first %}
-              <td rowspan="{{ qatorlar|length }}">{{ loop.index }}</td>
+              <td rowspan="{{ qatorlar|length }}">{{ table_page.start_index + contract_row.index0 }}</td>
               <td class="mono-cell" rowspan="{{ qatorlar|length }}">{{ shartnoma.application.ariza_raqami }}</td>
               <td rowspan="{{ qatorlar|length }}">{{ shartnoma.application.department.name }}</td>
               {% endif %}
@@ -56,65 +73,108 @@ deciding on it.
               <td rowspan="{{ qatorlar|length }}">{{ shartnoma.supplier.name }}</td>
               <td rowspan="{{ qatorlar|length }}">{{ display_name(shartnoma.created_by) }}</td>
               <td class="mono-cell" rowspan="{{ qatorlar|length }}">
-                {{ shartnoma.yuborilgan_sana|date("Y-m-d") if shartnoma.yuborilgan_sana else "—" }}
+                {{ shartnoma.yuborilgan_sana|date("d/m/Y") if shartnoma.yuborilgan_sana else "—" }}
                 {% if shartnoma.yuborishlar_soni > 1 %}<div class="muted small">{{ shartnoma.yuborishlar_soni }}-marta</div>{% endif %}
               </td>
               <td rowspan="{{ qatorlar|length }}">
-                {% if shartnoma.status %}<span class="badge {{ shartnoma.status.badge_class }}">{{ shartnoma.status.name }}</span>{% else %}<span class="muted small">Holat belgilanmagan</span>{% endif %}
+                {% if shartnoma.status %}<span class="badge {{ shartnoma.status.badge_class }}">{{ shartnoma.status.name }}</span>{% else %}<span class="muted small">{{ _("Holat belgilanmagan") }}</span>{% endif %}
                 {% if shartnoma.inkor_izohi %}<div class="muted small" style="margin-top:4px;">Oldingi inkor: {{ shartnoma.inkor_izohi }}</div>{% endif %}
-                {% if shartnoma.status_may_move and shartnoma_statuslari and is_own_contract(shartnoma) %}
+                {#
+                may_move_status as well as the row's own question: a Katta
+                Mutaxasis reads this page. The contract is past their hands
+                once it is here, and Kelishinlingan is where they report
+                progress on the ones still in them (TASK-UZK-068).
+                #}
+                {% if may_move_status and shartnoma.status_may_move and shartnoma_statuslari and is_own_contract(shartnoma) %}
                 <form method="post" action="{{ url('xarid:kelishinlingan-holat', shartnoma.pk) }}" style="display:flex;gap:4px;margin-top:6px;">
                   {{ csrf_input }}
                   <select class="form-control" name="holat" style="width:130px;" aria-label="{{ shartnoma.shartnoma_raqami }} holati">
                     {% for holat in shartnoma_statuslari %}<option value="{{ holat.pk }}"{% if shartnoma.status_id == holat.pk %} selected{% endif %}>{{ holat.name }}</option>{% endfor %}
                   </select>
-                  <button type="submit" class="btn btn-outline-custom btn-xs">Saqlash</button>
+                  <button type="submit" class="btn btn-outline-custom btn-xs">{{ _("Saqlash") }}</button>
                 </form>
                 {% endif %}
               </td>
+              {#
+              The contract drawn from the record, and only once it has been
+              approved: until then there is no signature to print, and a
+              sheet that read as a contract before anybody agreed to it is
+              the one document this table must not hand out. A dash says so,
+              the way the Ilova PDF columns say a row has no attachment.
+              #}
+              <td style="text-align:center;" rowspan="{{ qatorlar|length }}">
+                {% if shartnoma.is_signed %}
+                {{ pdf_badge(url('xarid:shartnoma-hujjat-pdf', shartnoma.pk), shartnoma.shartnoma_raqami ~ "-shartnoma.pdf") }}
+                {% else %}
+                <span class="muted small" title="Tasdiqlanmagan shartnoma yuklab olinmaydi">—"</span>
+                {% endif %}
+              </td>
+              <td style="text-align:center;" rowspan="{{ qatorlar|length }}">
+                <button type="button" class="btn btn-outline-custom btn-xs" data-detail-url="{{ url('xarid:shartnoma-tafsilot', shartnoma.pk) }}" data-detail-title="{{ shartnoma.shartnoma_raqami }} — Tafsilotlar"><i class="bi bi-eye" aria-hidden="true"></i> {{ _("Ko'rish") }}</button>
+              </td>
+              {#
+              Three states in one cell. Whoever decides sees the two
+              buttons while the contract waits, and the way back once it is
+              decided; everybody else sees the same thing as a status, so
+              the specialist who sent it can read what became of it without
+              a column of their own (TASK-UZK-067).
+              #}
               <td style="text-align:center;white-space:nowrap;" rowspan="{{ qatorlar|length }}">
                 {% if shartnoma.awaits_approval and may_decide %}
-                <form method="post" action="{{ url('xarid:tuzilgan-tasdiqlash', shartnoma.pk) }}" style="display:inline;" data-confirm="{{ shartnoma.shartnoma_raqami }} tasdiqlansinmi?">
+                <form method="post" action="{{ url('xarid:tuzilgan-tasdiqlash', shartnoma.pk) }}" style="display:inline;" data-confirm="{{ shartnoma.shartnoma_raqami }} qabul qilinsinmi?">
                   {{ csrf_input }}
-                  <button type="submit" class="btn btn-outline-custom text-success btn-xs"><i class="bi bi-check-lg" aria-hidden="true"></i> Tasdiqlash</button>
+                  <button type="submit" class="btn btn-outline-custom text-success btn-xs"><i class="bi bi-check-lg" aria-hidden="true"></i> {{ _("Qabul") }}</button>
                 </form>
-                <button type="button" class="btn btn-outline-custom text-danger btn-xs" data-modal-form="inkor-modal" data-action-url="{{ url('xarid:tuzilgan-inkor', shartnoma.pk) }}" data-fill-shartnoma="{{ shartnoma.shartnoma_raqami }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Inkor</button>
+                <button type="button" class="btn btn-outline-custom text-danger btn-xs" data-modal-form="inkor-modal" data-action-url="{{ url('xarid:tuzilgan-inkor', shartnoma.pk) }}" data-fill-shartnoma="{{ shartnoma.shartnoma_raqami }}"><i class="bi bi-x-lg" aria-hidden="true"></i> {{ _("Inkor") }}</button>
                 {% elif shartnoma.awaits_approval %}
-                <span class="muted small">Tasdiqlash kutilmoqda</span>
+                <span class="badge badge-soft">{{ _("Tasdiqlash kutilmoqda") }}</span>
                 {% else %}
-                <span class="badge badge-success">Tasdiqlangan</span>
-                {% if shartnoma.tasdiqlangan_sana %}<div class="muted small">{{ display_name(shartnoma.tasdiqlagan) }} · {{ shartnoma.tasdiqlangan_sana|date("Y-m-d") }}</div>{% endif %}
+                <div class="amallar-decided">
+                  {# badge-approved, not badge-success: the stylesheet has no such class,
+                     so this badge has been rendering unstyled since it was written. #}
+                  <span class="badge badge-approved">{{ _("Tasdiqlangan") }}</span>
+                  {% if may_decide %}
+                  <form method="post" action="{{ url('xarid:tuzilgan-bekor', shartnoma.pk) }}" style="display:inline;" data-confirm="{{ shartnoma.shartnoma_raqami }} tasdig'i bekor qilinsinmi?">
+                    {{ csrf_input }}
+                    <button type="submit" class="btn btn-outline-custom btn-xs"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> {{ _("Bekor Qilish") }}</button>
+                  </form>
+                  {% endif %}
+                </div>
+                {% if shartnoma.tasdiqlangan_sana %}<div class="muted small">{{ display_name(shartnoma.tasdiqlagan) }} · {{ shartnoma.tasdiqlangan_sana|date("d/m/Y") }}</div>{% endif %}
                 {% endif %}
               </td>
               {% endif %}
             </tr>
             {% endfor %}
           {% else %}
-            <tr><td colspan="10" class="muted" style="text-align:center;padding:24px;">Hozircha tasdiqlashga yuborilgan shartnoma yo'q.</td></tr>
+            <tr><td colspan="12" class="muted" style="text-align:center;padding:24px;">{{ _("Hozircha tasdiqlashga yuborilgan shartnoma yo'q.") }}</td></tr>
           {% endfor %}
           </tbody>
         </table>
       </div>
+      {{ pagination_bar(table_page, url('xarid:tuzilgan')) }}
     </div>
 
 {% endblock %}
 
 {% block scripts %}
+{% include "xarid/_shartnoma_drawer.html" %}
+
 {% if may_decide %}
 <div id="inkor-modal" class="modal-overlay hidden">
   <div class="modal-box">
     <form method="post" id="inkor-form">
       {{ csrf_input }}
-      <div class="modal-title"><i class="bi bi-x-circle" aria-hidden="true"></i> Shartnomani inkor qilish</div>
-      <p class="modal-desc muted">Shartnoma <span data-fill="shartnoma" class="mono-cell"></span> mutaxassisga qaytariladi.</p>
+      <div class="modal-title"><i class="bi bi-x-circle" aria-hidden="true"></i> {{ _("Shartnomani inkor qilish") }}</div>
+      <p class="modal-desc muted">{{ _("Shartnoma") }} <span data-fill="shartnoma" class="mono-cell"></span> mutaxassisga qaytariladi.</p>
       <div class="form-group">
         <label class="form-label" for="inkor-izoh">Izoh <span style="color:var(--color-danger)">*</span></label>
         <textarea class="form-control" id="inkor-izoh" name="izoh" rows="3" required placeholder="Nima uchun qaytarilmoqda?"></textarea>
-        <div class="form-hint">Izoh majburiy: inkor sababi mutaxassisga ko'rinadi (REQ-SHARTNOMA-004).</div>
+        <div class="form-hint">{{ _("Izoh majburiy: inkor sababi mutaxassisga ko'rinadi (REQ-SHARTNOMA-004).") }}</div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline-custom" data-close-modal="inkor-modal"><i class="bi bi-x-lg" aria-hidden="true"></i> Bekor</button>
-        <button type="submit" class="btn btn-primary-custom"><i class="bi bi-check-lg" aria-hidden="true"></i> Inkor qilish</button>
+        <button type="button" class="btn btn-outline-custom" data-close-modal="inkor-modal"><i class="bi bi-x-lg" aria-hidden="true"></i> {{ _("Bekor") }}</button>
+        <button type="submit" class="btn btn-primary-custom"><i class="bi bi-check-lg" aria-hidden="true"></i> {{ _("Inkor qilish") }}</button>
       </div>
     </form>
   </div>

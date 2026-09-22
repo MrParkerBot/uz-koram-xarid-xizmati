@@ -1,0 +1,82 @@
+{% extends "xarid/base.html" %}
+{% from "xarid/_pagination.html" import pagination_bar with context %}
+{#
+O'chirilgan Shartnomalar: what O'chirish took off Kelishinlingan, and the
+way back (TASK-UZK-064).
+
+Admin alone opens it. Deleting a contract keeps the row and marks it, so
+this page is the whole record - the same columns the working table shows,
+plus who deleted it and when - and Tiklash puts it back at the stage it
+left from.
+
+Ko'rish opens the same slide-over the two contract pages do, so a deleted
+contract can be read in full before it is restored.
+#}
+{% block title %}{{ _("O'chirilgan Shartnomalar") }}{% endblock %}
+{% block breadcrumb %}{{ _("Shartnomalar / O'chirilgan") }}{% endblock %}
+{% block page_heading %}{{ _("O'chirilgan Shartnomalar") }}{% endblock %}
+{% block content %}
+
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">{{ _("O'chirilgan Shartnomalar") }}</h1>
+        <div class="muted">{{ _("Deleted contracts") }}</div>
+      </div>
+      <div class="page-actions">
+        <span class="role-tag role-admin">{{ _("Admin") }}</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="table-wrap">
+        <table class="table-app" id="ochirilgan-table">
+          <thead><tr>
+            <th style="width:36px;">#</th>
+            <th>{{ _("Shartnoma №") }}</th>
+            <th>{{ _("Ariza №") }}</th>
+            <th>{{ _("Bo'lim") }}</th>
+            <th>{{ _("Buyurtma") }}</th>
+            <th>{{ _("Firma") }}</th>
+            <th>{{ _("Qiymati (UZS)") }}</th>
+            <th>{{ _("Kim tuzdi") }}</th>
+            <th>{{ _("Kim o'chirdi") }}</th>
+            <th>{{ _("O'chirilgan sana") }}</th>
+            <th style="text-align:center;width:100px;">{{ _("Ko'rish") }}</th>
+            <th style="text-align:center;width:110px;">{{ _("Amallar") }}</th>
+          </tr></thead>
+          <tbody>
+          {% for shartnoma in contracts %}
+            <tr data-id="{{ shartnoma.pk }}">
+              <td>{{ table_page.start_index + loop.index0 }}</td>
+              <td class="mono-cell">{{ shartnoma.shartnoma_raqami }}</td>
+              <td class="mono-cell">{{ shartnoma.application.ariza_raqami }}</td>
+              <td>{{ shartnoma.application.department.name }}</td>
+              <td>{{ shartnoma.buyurtma_xulosasi }}</td>
+              <td>{{ shartnoma.supplier.name }}</td>
+              <td style="font-weight:600;color:var(--color-primary);">{{ shartnoma.qiymati_display }}</td>
+              <td>{{ display_name(shartnoma.created_by) }}</td>
+              <td>{{ display_name(shartnoma.deleted_by) if shartnoma.deleted_by else "—" }}</td>
+              <td class="mono-cell">{{ shartnoma.deleted_at|date("d/m/Y H:i") }}</td>
+              <td style="text-align:center;">
+                <button type="button" class="btn btn-outline-custom btn-xs" data-detail-url="{{ url('xarid:shartnoma-tafsilot', shartnoma.pk) }}" data-detail-title="{{ shartnoma.shartnoma_raqami }} — Tafsilotlar"><i class="bi bi-eye" aria-hidden="true"></i> {{ _("Ko'rish") }}</button>
+              </td>
+              <td style="text-align:center;">
+                <form method="post" action="{{ url('xarid:shartnoma-tiklash', shartnoma.pk) }}" data-confirm="{{ shartnoma.shartnoma_raqami }} tiklansinmi?">
+                  {{ csrf_input }}
+                  <button type="submit" class="btn btn-outline-custom btn-xs"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> {{ _("Tiklash") }}</button>
+                </form>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="12" class="muted" style="text-align:center;padding:24px;">{{ _("O'chirilgan shartnoma yo'q.") }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {{ pagination_bar(table_page, url('xarid:ochirilgan-shartnomalar')) }}
+    </div>
+
+{% endblock %}
+{% block scripts %}
+{% include "xarid/_shartnoma_drawer.html" %}
+{% endblock %}

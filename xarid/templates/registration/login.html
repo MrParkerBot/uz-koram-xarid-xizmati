@@ -17,40 +17,39 @@ would let anyone test whether a username exists.
         <p class="mb-0 muted small">Xarid Xizmati Bo'limi</p>
       </div>
     </div>
-    <div class="section-title mb-3">Xarid jarayonlarini bitta joydan boshqaring</div>
-    <p class="muted mb-4">Arizalar, shartnomalar, yetkazib beruvchilar va mahsulot ma'lumotlari —
-      bo'lim bo'yicha yagona ish maydonida. Hisobotlar va 1C integratsiyasi bilan.</p>
+    <div class="section-title mb-3">{{ _("Xarid jarayonlarini bitta joydan boshqaring") }}</div>
+    <p class="muted mb-4">{{ _("Arizalar, shartnomalar, yetkazib beruvchilar va mahsulot ma'lumotlari — bo'lim bo'yicha yagona ish maydonida. Hisobotlar va 1C integratsiyasi bilan.") }}</p>
   </div>
 
   <div class="login-card">
-    <h1 class="page-title">Kirish</h1>
-    <p class="muted mb-4">Hisobingiz bilan tizimga kiring.</p>
+    <h1 class="page-title">{{ _("Kirish") }}</h1>
+    <p class="muted mb-4">{{ _("Hisobingiz bilan tizimga kiring.") }}</p>
 
     <form method="post" action="{{ url('login') }}" novalidate>
       {{ csrf_input }}
       {% if next %}<input type="hidden" name="next" value="{{ next }}"/>{% endif %}
       <div class="form-group">
-        <label class="form-label" for="{{ form.username.id_for_label }}">Foydalanuvchi nomi</label>
+        <label class="form-label" for="{{ form.username.id_for_label }}">{{ _("Foydalanuvchi nomi") }}</label>
         <div class="input-group">
           <input type="text" name="{{ form.username.html_name }}" id="{{ form.username.id_for_label }}" class="form-control" placeholder="username kiriting" value="{{ form.username.value() or '' }}" required autocomplete="username"/>
         </div>
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="{{ form.password.id_for_label }}">Parol</label>
+        <label class="form-label" for="{{ form.password.id_for_label }}">{{ _("Parol") }}</label>
         <div class="input-group">
           <input type="password" name="{{ form.password.html_name }}" id="{{ form.password.id_for_label }}" class="form-control" placeholder="••••••••" required autocomplete="current-password"/>
-          <button type="button" class="input-group-icon pwd-toggle" aria-label="Parolni ko'rsatish"><i class="bi bi-eye" aria-hidden="true"></i></button>
+          <button type="button" class="input-group-icon pwd-toggle" aria-label="Parolni ko'rsatish" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button>
         </div>
       </div>
 
       <div class="alert alert-danger{% if not form.errors %} hidden{% endif %}" id="login-error">
         <i class="bi bi-exclamation-octagon" aria-hidden="true"></i>
-        <span>Username yoki parol noto'g'ri. Qayta urinib ko'ring.</span>
+        <span>{{ _("Username yoki parol noto'g'ri. Qayta urinib ko'ring.") }}</span>
       </div>
 
       <button type="submit" class="btn btn-primary-custom btn-lg w-100 justify-content-center mt-3" id="login-btn">
-        Kirish
+        {{ _("Kirish") }}
       </button>
     </form>
   </div>

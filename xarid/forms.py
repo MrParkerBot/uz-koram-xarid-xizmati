@@ -11,6 +11,8 @@ browser clones the formset's empty form.
 
 from __future__ import annotations
 
+import re
+
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractBaseUser
@@ -58,13 +60,18 @@ def category_number_field(label: str = "Category Number") -> forms.IntegerField:
     )
 
 
-def required_category_number_field(label: str = "Category Raqami") -> forms.IntegerField:
-    """The Category Number a master data form insists on, same six-digit rule."""
+def generated_category_number_field(label: str = "Category Raqami") -> forms.IntegerField:
+    """The Category Number a category takes, typed in or left to the model.
+
+    Optional in the form and never empty in the record: blank means "the next
+    one", which MahsulotTuri.save() fills in. A number that is typed is still
+    held to the six-digit rule, and to being free.
+    """
     return forms.IntegerField(
         label=label,
-        required=True,
+        required=False,
         validators=list(CATEGORY_NUMBER_VALIDATORS),
-        help_text="6 xonali kod (masalan 100042).",
+        help_text="6 xonali kod (masalan 100042). Bo'sh qoldirilsa, avtomatik beriladi.",
     )
 
 
@@ -191,23 +198,35 @@ class ShartnomaStatusForm(MasterDataForm):
 
 
 class MahsulotTuriForm(MasterDataForm):
-    """Capture one product category; its number is required and unique."""
+    """Capture one product category; its number is unique, and may be left out."""
 
     NUMBER_ALREADY_USED = "Bu raqam allaqachon mavjud."
     NUMBER_HELD_BY_DELETED_RECORD = (
         "Bu raqam o'chirilgan kategoriyaga tegishli. Boshqa raqam kiriting."
     )
 
-    category_number = required_category_number_field()
+    category_number = generated_category_number_field()
 
     class Meta:
         model = MahsulotTuri
         fields = ("category_number", "name", "description")
 
-    def clean_category_number(self) -> int:
-        """Refuse a number already taken, saying which kind of clash it is."""
+    def clean_category_number(self) -> int | None:
+        """Refuse a number already taken, saying which kind of clash it is.
+
+        An empty box is not a clash with anything. On a new category it means
+        None, and MahsulotTuri.save() takes the next number; on one being
+        edited it means the number it already has. Emptying the box is how a
+        number is left alone, not how a category is renumbered behind the
+        reader - the code is what the department knows the category by, and
+        changing it is something to ask for rather than to be given.
+        """
+        typed = self.cleaned_data.get("category_number")
+        if typed is None:
+            return self.instance.category_number if self.instance.pk else None
+
         return self.refuse_a_clash(
-            self.cleaned_data["category_number"],
+            typed,
             lookup="category_number",
             already_used=self.NUMBER_ALREADY_USED,
             held_by_deleted_record=self.NUMBER_HELD_BY_DELETED_RECORD,
@@ -225,13 +244,37 @@ class ShartnomaTuriForm(MasterDataForm):
 
 
 class DepartmentForm(MasterDataForm):
-    """Capture one department."""
+    """Capture one department, and which one works the arrived applications."""
+
+    ALREADY_A_PURCHASING_DEPARTMENT = (
+        "Xarid bo`limi allaqachon belgilangan: avval {name} dan olib tashlang."
+    )
 
     category_number = category_number_field()
 
     class Meta:
         model = Department
-        fields = ("name", "category_number")
+        fields = ("name", "category_number", "is_purchasing")
+
+    def clean_is_purchasing(self) -> bool:
+        """Refuse a second purchasing department, naming the one that holds it.
+
+        The database constraint would refuse it too, with an IntegrityError
+        that reaches the reader as a server error. This turns the same rule
+        into a sentence beside the field.
+        """
+        wants_it = self.cleaned_data["is_purchasing"]
+        if not wants_it:
+            return wants_it
+
+        others = Department.objects.filter(is_purchasing=True).exclude(pk=self.instance.pk)
+        held_by = others.first()
+        if held_by is not None:
+            raise forms.ValidationError(
+                self.ALREADY_A_PURCHASING_DEPARTMENT.format(name=held_by.name)
+            )
+
+        return wants_it
 
 
 class SupplierForm(MasterDataForm):
@@ -266,9 +309,25 @@ class SupplierForm(MasterDataForm):
 
 MAXIMUM_USERNAME_ATTEMPTS = 1000
 
-# The format the page's own hint promises: "90 123 45 67". The +998 is printed
-# by the page rather than stored.
-PHONE_NUMBER_FORMAT = r"^\d{2} \d{3} \d{2} \d{2}$"
+# The format the page's own mask produces: "90-123-45-67", the nine digits
+# of __-___-__-__. The +998 is printed beside the field rather than stored.
+PHONE_NUMBER_FORMAT = r"^\d{2}-\d{3}-\d{2}-\d{2}$"
+PHONE_NUMBER_EXAMPLE = "90-123-45-67"
+
+
+def dashed_phone_number(value: str) -> str:
+    """A stored number in the dashed form the page shows.
+
+    Accounts created before the mask hold "90 123 45 67". Editing one must
+    not fail over a separator the person never typed, and the list must not
+    print two spellings of the same number in one column. Anything that is
+    not nine digits is handed back untouched for the validator to reject.
+    """
+    digits = re.sub(r"\D", "", value or "")
+    if len(digits) != 9:
+        return value or ""
+
+    return f"{digits[:2]}-{digits[2:5]}-{digits[5:7]}-{digits[7:]}"
 
 
 def derive_username(first_name: str, last_name: str) -> str:
@@ -312,7 +371,9 @@ class UserAdministrationForm(forms.Form):
     phone_number = forms.CharField(
         label="Telefon Raqam",
         max_length=12,
-        validators=[RegexValidator(PHONE_NUMBER_FORMAT, message="Format: 90 123 45 67")],
+        validators=[
+            RegexValidator(PHONE_NUMBER_FORMAT, message=f"Format: {PHONE_NUMBER_EXAMPLE}")
+        ],
     )
     user_type = forms.ModelChoiceField(
         label="User Type", queryset=UserType.objects.none(), required=False
@@ -379,7 +440,7 @@ class UserAdministrationForm(forms.Form):
             initial={
                 "first_name": user.first_name,
                 "last_name": user.last_name,
-                "phone_number": profile.phone_number,
+                "phone_number": dashed_phone_number(profile.phone_number),
                 "user_type": profile.user_type_id,
                 "department": profile.department_id,
             },
@@ -421,6 +482,21 @@ def pdf_upload_field(
         help_text="PDF, eng ko`pi bilan 10 MB (DEC-019).",
         error_messages={"required": missing},
         widget=forms.ClearableFileInput(attrs={"class": "form-control", "accept": ".pdf"}),
+    )
+
+
+def date_widget() -> forms.DateInput:
+    """A date box whose value an <input type="date"> will accept.
+
+    The format has to be said. Django renders a date in the active locale's
+    first DATE_INPUT_FORMATS entry, which under LANGUAGE_CODE "uz" is
+    %d.%m.%Y - and a date input whose value is not YYYY-MM-DD is one the
+    browser shows as empty. On a form that creates something nothing is
+    filled in and the fault is invisible; on one that edits something every
+    date comes up blank and saving writes the blanks back.
+    """
+    return forms.DateInput(
+        attrs={"class": "form-control", "type": "date"}, format="%Y-%m-%d"
     )
 
 
@@ -517,15 +593,15 @@ class PurchaseApplicationForm(forms.ModelForm):
         model = PurchaseApplication
         fields = ("shartnoma_nomi", "muddat_talabi", "izoh", "pdf")
         labels = {
-            "shartnoma_nomi": "Shartnoma nomi",
+            "shartnoma_nomi": "Ariza nomi",
             "muddat_talabi": "Muddat talabi",
             "izoh": "Izoh",
         }
         widgets = {
             "shartnoma_nomi": forms.TextInput(
-                attrs={"class": "form-control", "placeholder": "Shartnoma nomi"}
+                attrs={"class": "form-control", "placeholder": "Ariza nomi"}
             ),
-            "muddat_talabi": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "muddat_talabi": date_widget(),
             "izoh": forms.Textarea(
                 attrs={"class": "form-control", "rows": 2, "placeholder": "Qo`shimcha izoh"}
             ),
@@ -575,36 +651,82 @@ PurchaseApplicationItemFormSet = forms.modelformset_factory(
 
 
 class ApplicationChoiceField(forms.ModelChoiceField):
-    """The Ariza raqami drop-down, labelled so a person can tell them apart.
+    """The Ariza raqami box: typed in, and matched against the number.
 
-    The number alone means little to a specialist choosing which request to
-    commit the company to a supplier for; the department and the goods are
-    what they recognise it by.
+    Typed rather than picked because the list runs long and whoever is
+    entering a contract has the number in front of them. Still a
+    ModelChoiceField, though, and still holding the queryset of what this
+    person may contract against: matching happens against those rows and no
+    others, so typing a number is not a way past a rule the drop-down used
+    to enforce by simply not offering it.
+
+    to_field_name makes the number the value, so what is typed, what is
+    suggested and what is matched are all one string.
     """
 
-    def label_from_instance(self, obj: Application) -> str:
-        lines = list(obj.items.all())
+    def describe(self, application: Application) -> str:
+        """What a number is recognised by, for the suggestion beside it.
+
+        The number alone means little to a specialist choosing which request
+        to commit the company to a supplier for; the department and the goods
+        are what they know it by.
+        """
+        lines = list(application.items.all())
         ordered = lines[0].buyurtma_nomi if lines else "-"
         if len(lines) > 1:
             ordered = f"{ordered} +{len(lines) - 1}"
 
-        return f"{obj.ariza_raqami} - {obj.department.name} - {ordered}"
+        return f"{application.department.name} - {ordered}"
+
+    def label_from_instance(self, obj: Application) -> str:
+        return f"{obj.ariza_raqami} - {self.describe(obj)}"
+
+    def to_python(self, value: object) -> Application | None:
+        """Match a typed number, forgiving the case and stray spaces.
+
+        Somebody reading a number off another screen types it as they see it,
+        and a form that refuses "arz-2026-00001" is being pedantic about the
+        one thing it could fix itself.
+        """
+        if isinstance(value, str):
+            value = value.strip().upper()
+
+        return super().to_python(value)
 
 
-class SupplierSelect(forms.Select):
-    """A Firma drop-down whose options carry the firm's INN.
+class SupplierChoiceField(forms.ModelChoiceField):
+    """The Firma nomi box: typed in, and matched against the firm's name.
 
-    The INN is shown beside the drop-down rather than typed (DEC-011): the
-    option carries it and a small script copies it into a read-only field.
+    A list of firms outgrows a drop-down the way the applications did, so it
+    is searched rather than scrolled. Still a ModelChoiceField holding the
+    firms this form offers, so what is typed is matched against those rows
+    and a name that is not one of them is refused.
+
+    The INN is still shown beside the box rather than typed (DEC-011); the
+    suggestion carries it and a small script copies it across.
     """
 
-    def create_option(self, name, value, label, selected, index, **kwargs) -> dict:
-        option = super().create_option(name, value, label, selected, index, **kwargs)
-        supplier = getattr(value, "instance", None)
-        if supplier is not None:
-            option["attrs"]["data-inn"] = supplier.inn
+    def describe(self, supplier: Supplier) -> str:
+        """What tells two firms apart when their names look alike."""
+        return f"INN {supplier.inn}" if supplier.inn else "INN kiritilmagan"
 
-        return option
+    def label_from_instance(self, obj: Supplier) -> str:
+        return obj.name
+
+    def to_python(self, value: object) -> Supplier | None:
+        """Match a typed name, forgiving the case and stray spaces.
+
+        A name is not a code, so it cannot simply be upper-cased the way a
+        number can: the canonical spelling is looked up and then matched, so
+        "tayyor mahsulot mchj" finds the firm without the row having to be
+        stored twice.
+        """
+        if isinstance(value, str) and value.strip():
+            typed = value.strip()
+            named = self.queryset.filter(name__iexact=typed).first()
+            value = named.name if named is not None else typed
+
+        return super().to_python(value)
 
 
 class ContractForm(forms.ModelForm):
@@ -619,6 +741,57 @@ class ContractForm(forms.ModelForm):
     claim nobody can check.
     """
 
+    application = ApplicationChoiceField(
+        # Replaced in __init__ with what this person may contract against.
+        # Empty here so that a caller who forgets is offered nothing rather
+        # than everything.
+        queryset=Application.objects.none(),
+        to_field_name="ariza_raqami",
+        label="Ariza raqami",
+        widget=forms.TextInput(
+            attrs={
+                **CONTROL,
+                "placeholder": "ARZ-2026-00001",
+                # No list= attribute: the suggestions are drawn in the page
+                # (see the combo macro), and a datalist as well would put a
+                # second popup over the first.
+                "autocomplete": "off",
+                "role": "combobox",
+                "aria-autocomplete": "list",
+                "aria-expanded": "false",
+            }
+        ),
+        error_messages={
+            "invalid_choice": (
+                "%(value)s raqamli tayinlangan ariza topilmadi. "
+                "Ro`yxatdan tanlang yoki raqamni tekshiring."
+            )
+        },
+    )
+    supplier = SupplierChoiceField(
+        # Every firm, as the generated drop-down offered before this: which
+        # firms exist is not a question about who is asking, so unlike the
+        # applications above it is not narrowed per person.
+        queryset=Supplier.objects.all(),
+        to_field_name="name",
+        label="Firma nomi",
+        widget=forms.TextInput(
+            attrs={
+                **CONTROL,
+                "placeholder": "Firma nomini yozing",
+                "autocomplete": "off",
+                "role": "combobox",
+                "aria-autocomplete": "list",
+                "aria-expanded": "false",
+            }
+        ),
+        error_messages={
+            "invalid_choice": (
+                "%(value)s nomli firma topilmadi. "
+                "Ro`yxatdan tanlang yoki nomni tekshiring."
+            )
+        },
+    )
     pdf = pdf_upload_field("Shartnoma uchun PDF ilova yuklanishi shart.")
 
     class Meta:
@@ -635,10 +808,7 @@ class ContractForm(forms.ModelForm):
             "izoh",
             "pdf",
         )
-        field_classes = {"application": ApplicationChoiceField}
         labels = {
-            "application": "Ariza raqami",
-            "supplier": "Firma nomi",
             "shartnoma_turi": "Shartnoma turi",
             "status": "Status",
             "shartnoma_sanasi": "Shartnoma sanasi",
@@ -648,14 +818,12 @@ class ContractForm(forms.ModelForm):
             "izoh": "Izoh",
         }
         widgets = {
-            "application": forms.Select(attrs=CONTROL),
-            "supplier": SupplierSelect(attrs=CONTROL),
             "shartnoma_turi": forms.Select(attrs=CONTROL),
             "status": forms.Select(attrs=CONTROL),
-            "shartnoma_sanasi": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
-            "tolash_muddati": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
-            "muddat_talabi": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
-            "invoice_sanasi": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "shartnoma_sanasi": date_widget(),
+            "tolash_muddati": date_widget(),
+            "muddat_talabi": date_widget(),
+            "invoice_sanasi": date_widget(),
             "izoh": forms.Textarea(
                 attrs={"class": "form-control", "rows": 2, "placeholder": "Qo`shimcha izoh"}
             ),
@@ -728,4 +896,58 @@ ContractItemFormSet = forms.modelformset_factory(
     extra=STARTING_ITEM_ROWS,
     min_num=1,
     validate_min=True,
+)
+
+
+class ContractEditForm(ContractForm):
+    """The same form again, for a contract that already exists (TASK-UZK-064).
+
+    One difference: the attachment is optional. Creation demands a PDF
+    because a contract is a document before it is a row, and that argument
+    does not carry over to correcting a mistyped price on a contract whose
+    document is already on file. Leaving the box empty keeps the file that
+    is there; choosing one replaces it.
+    """
+
+    # FileInput, not the ClearableFileInput the creation form uses: a
+    # clearable input renders a link to the file it already has, and an
+    # attachment has no URL by design (DEC-019) - asking for one raises. The
+    # page links to the download view instead, which checks permission.
+    pdf = forms.FileField(
+        label="Ilova (PDF)",
+        required=False,
+        validators=[validate_pdf],
+        help_text="Yangi fayl tanlansa, avvalgisi almashtiriladi (DEC-019).",
+        widget=forms.FileInput(attrs={"class": "form-control", "accept": ".pdf"}),
+    )
+
+    def __init__(self, *args, **kwargs) -> None:
+        """Open the two combos on what they hold rather than on its id.
+
+        Both are choice fields matched on a name - the ariza number and the
+        firm's name - drawn as boxes somebody types into. A ModelForm fills
+        its initial values from model_to_dict, which gives the primary key,
+        so without this the form opens reading "1" where the contract says
+        ARZ-2026-00001, and saving it unchanged is a different contract or
+        no contract at all.
+        """
+        super().__init__(*args, **kwargs)
+
+        if self.instance.pk:
+            self.initial["application"] = self.instance.application.ariza_raqami
+            self.initial["supplier"] = self.instance.supplier.name
+
+
+# The rows of a contract being edited. extra=0 because the rows already
+# exist and a blank one is added by the page's own button, and can_delete
+# because a row is removed by saying so rather than by being emptied: a
+# cleared row of a model formset fails its required fields instead of going
+# away.
+ContractItemEditFormSet = forms.modelformset_factory(
+    ContractItem,
+    form=ContractItemForm,
+    extra=0,
+    min_num=1,
+    validate_min=True,
+    can_delete=True,
 )

@@ -2,24 +2,56 @@
 db.sqlite3
 db.sqlite3-journal
 
+# Local database backups taken before a migration.
+.backups/
+
 # Python
 __pycache__/
 *.py[cod]
 *.egg-info/
+build/
+dist/
 
 # Environments
 .venv/
 venv/
+env/
+# Every other .env belongs to one machine; the example is the one committed.
 .env
+.env.*
+!.env.example
 
 # Django
 staticfiles/
 media/
 
-# Editors
-.idea/
-.vscode/
-
 # Uploaded attachments (DEC-019). Stored on local disk outside anything the web
 # server publishes, and never committed: they are customer documents.
 /attachments/
+
+# The compiled catalogues under locale/ are deliberately NOT ignored.
+# manage.py translations compiles them byte-for-byte deterministically, so a
+# committed .mo never shows up as a change, and a deployment that never runs
+# that command still needs one to read anything but Uzbek.
+
+# Tool caches. Each of these writes a .gitignore inside itself; named here as
+# well, so emptying one does not put it back in git status.
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# The knowledge graph the understand-anything tooling builds from the code:
+# megabytes of it, generated, and rebuilt on demand.
+.ua/
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# Operating system
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -18,11 +18,12 @@ from tests.support import (
     a_purchase_application,
     a_supplier,
     an_application,
+    an_arrived_purchase_request,
     an_assigned_application,
-    arrived_on,
     assigned_on,
     make_user,
     page,
+    raised_on,
 )
 from xarid.exports import EXCEL_CONTENT_TYPE, PDF_CONTENT_TYPE
 from xarid.models import (
@@ -91,7 +92,7 @@ class ExportRouteTests(SignedInAdminTestCase):
 
         rows = workbook_rows(excel)
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0][:3], ["Ariza raqami", "Bo'lim", "Mahsulot turi"])
+        self.assertEqual(rows[0][:3], ["Ariza raqami", "Ariza nomi", "Bo'lim"])
         self.assertIn("Ariza raqami", pdf_text(pdf))
 
     def test_an_unknown_format_is_a_not_found(self) -> None:
@@ -109,7 +110,7 @@ class ExportRouteTests(SignedInAdminTestCase):
 
     def test_the_toolbar_links_carry_the_active_filters(self) -> None:
         department = a_department("Texnik bo`lim")
-        an_application(department=department)
+        an_arrived_purchase_request(department=department)
 
         plain = self.client.get(page("kelib-arizalar"))
         filtered = self.client.get(page("kelib-arizalar"), {"bolim": department.pk})
@@ -130,38 +131,34 @@ class ExportContentTests(SignedInAdminTestCase):
         cls.moliya = a_department("Moliya bo`limi")
         cls.metal = a_category(100042, "Metallurgiya")
         cls.kimyo = a_category(200031, "Kimyoviy")
-        cls.texnik_application = an_application(department=cls.texnik, category=cls.metal)
-        cls.moliya_application = an_application(department=cls.moliya, category=cls.kimyo)
-        # A second order line makes the export two rows for one application,
-        # the way the table renders it.
-        cls.moliya_application.items.create(
-            mahsulot_turi=cls.metal,
-            buyurtma_nomi="Prokat",
-            buyurtma_soni="12.5",
-            olchov_birligi="kg",
+        cls.texnik_request = an_arrived_purchase_request(
+            department=cls.texnik, category=cls.metal
+        )
+        cls.moliya_request = an_arrived_purchase_request(
+            department=cls.moliya, category=cls.kimyo
         )
 
     def test_exporting_with_no_filter_writes_every_table_row(self) -> None:
+        """One row per request, because that is how this table renders."""
         excel = self.client.get(page("kelib-arizalar-eksport", "xlsx"))
 
         rows = workbook_rows(excel)
-        self.assertEqual(len(rows), 1 + 3)
-        numbers = {row[0] for row in rows[1:]}
+        self.assertEqual(len(rows), 1 + 2)
         self.assertEqual(
-            numbers,
-            {self.texnik_application.ariza_raqami, self.moliya_application.ariza_raqami},
+            {row[0] for row in rows[1:]},
+            {self.texnik_request.xarid_raqami, self.moliya_request.xarid_raqami},
         )
-        prokat = next(row for row in rows[1:] if row[3] == "Prokat")
-        self.assertEqual(prokat[0], self.moliya_application.ariza_raqami)
-        self.assertEqual(prokat[1], "Moliya bo`limi")
-        self.assertEqual(prokat[4], Decimal("12.5"))
+        moliya = next(row for row in rows[1:] if row[0] == self.moliya_request.xarid_raqami)
+        self.assertEqual(moliya[1], "Kabel xaridi")
+        self.assertEqual(moliya[2], "Moliya bo`limi")
+        self.assertEqual(moliya[4], "Xarid bo`limi")
 
     def test_exporting_with_a_filter_writes_only_the_filtered_rows(self) -> None:
         excel = self.client.get(page("kelib-arizalar-eksport", "xlsx"), {"bolim": self.texnik.pk})
 
         rows = workbook_rows(excel)
         self.assertEqual(len(rows), 1 + 1)
-        self.assertEqual(rows[1][0], self.texnik_application.ariza_raqami)
+        self.assertEqual(rows[1][0], self.texnik_request.xarid_raqami)
 
     def test_the_pdf_carries_the_same_rows_as_the_workbook(self) -> None:
         for query in ({}, {"bolim": self.moliya.pk}):
@@ -172,14 +169,14 @@ class ExportContentTests(SignedInAdminTestCase):
                 text = pdf_text(pdf)
                 for row in workbook_rows(excel)[1:]:
                     self.assertIn(str(row[0]), text)
-                    self.assertIn(str(row[3]), text)
+                    self.assertIn(str(row[2]), text)
                 if query:
-                    self.assertNotIn(self.texnik_application.ariza_raqami, text)
+                    self.assertNotIn(self.texnik_request.xarid_raqami, text)
 
     def test_an_invalid_filter_value_exports_the_full_list(self) -> None:
         excel = self.client.get(page("kelib-arizalar-eksport", "xlsx"), {"bolim": "999999"})
 
-        self.assertEqual(len(workbook_rows(excel)), 1 + 3)
+        self.assertEqual(len(workbook_rows(excel)), 1 + 2)
 
     def test_the_assigned_export_is_limited_to_a_specialist_s_own_work(self) -> None:
         specialist = make_user("spec", user_type=KATTA_MUTAXASIS)
@@ -236,17 +233,56 @@ class ExportContentTests(SignedInAdminTestCase):
             pdf_text(self.client.get(page("kelishinlingan-eksport", "pdf"))),
         )
 
-    def test_the_purchase_export_follows_its_category_filter(self) -> None:
-        requester = make_user("requester", user_type=USERS, department=self.texnik)
-        kimyo = a_purchase_application(requester, self.texnik, category=self.kimyo, with_pdf=False)
-        a_purchase_application(requester, self.texnik, category=self.metal, with_pdf=False)
+    def test_the_signed_contracts_export_carries_the_decision(self) -> None:
+        """What Tuzilgan is about, after the columns every contract file has."""
+        specialist = make_user("signed.spec", user_type=KATTA_MUTAXASIS)
+        waiting = a_contract(an_assigned_application(self.admin, specialist), self.admin)
+        waiting.send_for_approval(by=self.admin)
+        decided = a_contract(an_assigned_application(self.admin, specialist), self.admin)
+        decided.send_for_approval(by=self.admin)
+        decided.accept(by=self.admin)
+
+        rows = workbook_rows(self.client.get(page("tuzilgan-eksport", "xlsx")))
+
+        self.assertEqual(len(rows), 1 + 2)
+        self.assertEqual(rows[0][-4:], ["Yuborilgan sana", "Qaror", "Kim tasdiqlagan", "Tasdiqlangan sana"])
+        written = {row[0]: row for row in rows[1:]}
+        self.assertEqual(written[decided.shartnoma_raqami][-3], "Tuzilgan")
+        self.assertEqual(written[waiting.shartnoma_raqami][-3], "Tasdiqlashga yuborilgan")
+        # Nobody has decided on the waiting one, so nobody is named against
+        # it - an empty cell, which openpyxl reads back as None.
+        self.assertFalse(written[waiting.shartnoma_raqami][-2])
+        self.assertIn(
+            decided.shartnoma_raqami, pdf_text(self.client.get(page("tuzilgan-eksport", "pdf")))
+        )
+
+    def test_the_signed_contracts_export_follows_the_decision_filter(self) -> None:
+        specialist = make_user("filtered.spec", user_type=KATTA_MUTAXASIS)
+        waiting = a_contract(an_assigned_application(self.admin, specialist), self.admin)
+        waiting.send_for_approval(by=self.admin)
+        decided = a_contract(an_assigned_application(self.admin, specialist), self.admin)
+        decided.send_for_approval(by=self.admin)
+        decided.accept(by=self.admin)
 
         rows = workbook_rows(
-            self.client.get(page("xarid-ariza-eksport", "xlsx"), {"mahsulot": self.kimyo.pk})
+            self.client.get(page("tuzilgan-eksport", "xlsx"), {"qaror": Contract.Stage.SIGNED})
         )
 
         self.assertEqual(len(rows), 1 + 1)
-        self.assertEqual(rows[1][0], kimyo.xarid_raqami)
+        self.assertEqual(rows[1][0], decided.shartnoma_raqami)
+
+    def test_the_purchase_export_follows_its_category_filter(self) -> None:
+        plastik = a_category(300055, "Plastik")
+        requester = make_user("requester", user_type=USERS, department=self.texnik)
+        chosen = a_purchase_application(requester, self.texnik, category=plastik, with_pdf=False)
+        a_purchase_application(requester, self.texnik, category=self.metal, with_pdf=False)
+
+        rows = workbook_rows(
+            self.client.get(page("xarid-ariza-eksport", "xlsx"), {"mahsulot": plastik.pk})
+        )
+
+        self.assertEqual(len(rows), 1 + 1)
+        self.assertEqual(rows[1][0], chosen.xarid_raqami)
 
 
 class ExportPeriodTests(SignedInAdminTestCase):
@@ -255,9 +291,9 @@ class ExportPeriodTests(SignedInAdminTestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        cls.january = arrived_on(date(2026, 1, 10))
-        cls.february = arrived_on(date(2026, 2, 20))
-        cls.march = arrived_on(date(2026, 3, 5))
+        cls.january = raised_on(date(2026, 1, 10))
+        cls.february = raised_on(date(2026, 2, 20))
+        cls.march = raised_on(date(2026, 3, 5))
 
     def exported_numbers(self, chosen: dict[str, str]) -> list[str]:
         response = self.client.get(page("kelib-arizalar-eksport", "xlsx"), chosen)
@@ -266,14 +302,14 @@ class ExportPeriodTests(SignedInAdminTestCase):
     def test_a_download_holds_only_the_rows_inside_the_period(self) -> None:
         numbers = self.exported_numbers({"dan": "2026-02-01", "gacha": "2026-02-28"})
 
-        self.assertEqual(numbers, [self.february.ariza_raqami])
+        self.assertEqual(numbers, [self.february.xarid_raqami])
 
     def test_a_download_follows_the_chosen_order(self) -> None:
         descending = self.exported_numbers({})
         ascending = self.exported_numbers({"tartib": "osish"})
 
         self.assertEqual(descending, list(reversed(ascending)))
-        self.assertEqual(ascending[0], self.january.ariza_raqami)
+        self.assertEqual(ascending[0], self.january.xarid_raqami)
 
     def test_a_download_ignores_an_inverted_period_as_the_page_does(self) -> None:
         numbers = self.exported_numbers({"dan": "2026-03-01", "gacha": "2026-01-01"})

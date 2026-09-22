@@ -1,6 +1,7 @@
 {% extends "xarid/base.html" %}
 {% from "xarid/_filters.html" import filter_bar, export_links with context %}
 {% from "xarid/_forms.html" import pdf_badge with context %}
+{% from "xarid/_pagination.html" import pagination_bar with context %}
 {#
 The Korhona Xaridi | Mahsulotlar report: one row per ordered product line
 with its application, department, type, comment, PDF, acceptance date and
@@ -11,24 +12,24 @@ describes. Its last three steps are contract statuses, which nothing in this
 codebase sets yet - TASK-UZK-037 - so a row can only reach the first three
 today. It is drawn as a legend rather than as a claim about the rows.
 #}
-{% block title %}Mahsulotlar{% endblock %}
-{% block breadcrumb %}Hisobotlar / Mahsulotlar{% endblock %}
-{% block page_heading %}Mahsulotlar{% endblock %}
+{% block title %}{{ _("Mahsulotlar") }}{% endblock %}
+{% block breadcrumb %}{{ _("Hisobotlar / Mahsulotlar") }}{% endblock %}
+{% block page_heading %}{{ _("Mahsulotlar") }}{% endblock %}
 {% block content %}
 
     <div class="page-header">
-      <div><h1 class="page-title">Korhona Xaridi | Mahsulotlar</h1><div class="muted">Enterprise Purchase — Products Detail</div></div>
-      <div class="page-actions"><span class="role-tag role-admin">Admin va Bo'lim Boshlig'i</span></div>
+      <div><h1 class="page-title">{{ _("Korhona Xaridi | Mahsulotlar") }}</h1><div class="muted">{{ _("Enterprise Purchase — Products Detail") }}</div></div>
+      <div class="page-actions"><span class="role-tag role-admin">{{ _("Admin va Bo'lim Boshlig'i") }}</span></div>
     </div>
 
     <div class="panel" style="margin-bottom:20px;">
       <div class="panel-body" style="padding:16px 20px;">
-        <div style="font-size:11px;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;margin-bottom:10px;">Holat Tartibi:</div>
+        <div style="font-size:11px;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;margin-bottom:10px;">{{ _("Holat Tartibi:") }}</div>
         <div class="status-flow">
-          <div class="status-step">Kelib tushdi</div><div class="status-arrow"><i class="bi bi-arrow-right" aria-hidden="true"></i></div>
-          <div class="status-step">Qabul qilindi</div><div class="status-arrow"><i class="bi bi-arrow-right" aria-hidden="true"></i></div>
-          <div class="status-step">Tayinlandi</div><div class="status-arrow"><i class="bi bi-arrow-right" aria-hidden="true"></i></div>
-          <div class="status-step">Shartnoma holatlari</div>
+          <div class="status-step">{{ _("Kelib tushdi") }}</div><div class="status-arrow"><i class="bi bi-arrow-right" aria-hidden="true"></i></div>
+          <div class="status-step">{{ _("Qabul qilindi") }}</div><div class="status-arrow"><i class="bi bi-arrow-right" aria-hidden="true"></i></div>
+          <div class="status-step">{{ _("Tayinlandi") }}</div><div class="status-arrow"><i class="bi bi-arrow-right" aria-hidden="true"></i></div>
+          <div class="status-step">{{ _("Shartnoma holatlari") }}</div>
         </div>
       </div>
     </div>
@@ -43,22 +44,22 @@ today. It is drawn as a legend rather than as a claim about the rows.
         <table class="table-app" id="mahsulot-table">
           <thead><tr>
             <th style="width:36px;">#</th>
-            <th>Ariza №</th>
-            <th>Bo'lim</th>
-            <th>Mahsulot Turi</th>
-            <th>Buyurtma nomi</th>
-            <th>Soni</th>
-            <th>O'lchov</th>
-            <th>Izoh</th>
-            <th>PDF</th>
-            <th>Qabul sanasi</th>
-            <th>Holati</th>
+            <th>{{ _("Ariza №") }}</th>
+            <th>{{ _("Bo'lim") }}</th>
+            <th>{{ _("Mahsulot Turi") }}</th>
+            <th>{{ _("Buyurtma nomi") }}</th>
+            <th>{{ _("Soni") }}</th>
+            <th>{{ _("O'lchov") }}</th>
+            <th>{{ _("Izoh") }}</th>
+            <th>{{ _("PDF") }}</th>
+            <th>{{ _("Qabul sanasi") }}</th>
+            <th>{{ _("Holati") }}</th>
           </tr></thead>
           <tbody id="mahsulot-tbody">
           {% for qator in lines %}
             {% set ariza = qator.application %}
             <tr data-id="{{ qator.pk }}">
-              <td>{{ loop.index }}</td>
+              <td>{{ table_page.start_index + loop.index0 }}</td>
               <td class="mono-cell">{{ ariza.ariza_raqami }}</td>
               <td>{{ ariza.department.name }}</td>
               <td style="font-size:11px;" class="mono-cell">{{ qator.mahsulot_turi.category_number }} — {{ qator.mahsulot_turi.name }}</td>
@@ -67,17 +68,18 @@ today. It is drawn as a legend rather than as a claim about the rows.
               <td>{{ qator.olchov_birligi }}</td>
               <td style="font-size:11px;color:var(--color-text-muted);">{{ ariza.izoh or "—" }}</td>
               <td>
-                {% if pdf_is_reachable(ariza) %}{{ pdf_badge(url('xarid:ariza-pdf', ariza.pk), ariza.ariza_raqami ~ ".pdf") }}{% else %}<span class="muted small">—</span>{% endif %}
+                {% if pdf_is_reachable(ariza) %}{{ pdf_badge(url('xarid:ariza-pdf', ariza.pk), ariza.ariza_raqami ~ "-Ilova.pdf") }}{% else %}<span class="muted small">—"</span>{% endif %}
               </td>
-              <td class="mono-cell">{{ ariza.qabul_qilingan_sana|date("Y-m-d") if ariza.qabul_qilingan_sana else "—" }}</td>
+              <td class="mono-cell">{{ ariza.qabul_qilingan_sana|date("d/m/Y") if ariza.qabul_qilingan_sana else "—" }}</td>
               <td>{{ ariza.current_status_label }}</td>
             </tr>
           {% else %}
-            <tr><td colspan="11" class="muted" style="text-align:center;padding:24px;">Mahsulot topilmadi.</td></tr>
+            <tr><td colspan="11" class="muted" style="text-align:center;padding:24px;">{{ _("Mahsulot topilmadi.") }}</td></tr>
           {% endfor %}
           </tbody>
         </table>
       </div>
+      {{ pagination_bar(table_page, url('xarid:mahsulotlar')) }}
     </div>
 
 {% endblock %}

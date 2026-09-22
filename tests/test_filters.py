@@ -19,10 +19,12 @@ from tests.support import (
     a_supplier,
     an_accepted_application,
     an_application,
+    an_arrived_purchase_request,
     an_assigned_application,
     arrived_on,
     make_user,
     page,
+    raised_on,
 )
 from xarid.filters import (
     DateColumn,
@@ -173,36 +175,36 @@ class FilterBarPageTests(SignedInAdminTestCase):
         cls.other_specialist = make_user("spec2", user_type=KATTA_MUTAXASIS)
 
     def test_the_incoming_page_filters_by_department_and_category(self) -> None:
-        texnik = an_application(department=self.texnik, category=self.metal)
-        moliya = an_application(department=self.moliya, category=self.kimyo)
+        texnik = an_arrived_purchase_request(department=self.texnik, category=self.metal)
+        moliya = an_arrived_purchase_request(department=self.moliya, category=self.kimyo)
 
         unfiltered = self.client.get(page("kelib-arizalar"))
-        self.assertContains(unfiltered, texnik.ariza_raqami)
-        self.assertContains(unfiltered, moliya.ariza_raqami)
+        self.assertContains(unfiltered, texnik.xarid_raqami)
+        self.assertContains(unfiltered, moliya.xarid_raqami)
         self.assertContains(unfiltered, '<form method="get" action="/kelib-arizalar/"')
         self.assertContains(unfiltered, "Moliya bo`limi</option>")
         self.assertNotContains(unfiltered, "Tozalash")
 
         by_department = self.client.get(page("kelib-arizalar"), {"bolim": self.texnik.pk})
-        self.assertContains(by_department, texnik.ariza_raqami)
-        self.assertNotContains(by_department, moliya.ariza_raqami)
+        self.assertContains(by_department, texnik.xarid_raqami)
+        self.assertNotContains(by_department, moliya.xarid_raqami)
         self.assertContains(by_department, f'<option value="{self.texnik.pk}" selected>')
         self.assertContains(by_department, "Tozalash")
 
         by_both = self.client.get(
             page("kelib-arizalar"), {"bolim": self.texnik.pk, "mahsulot": self.kimyo.pk}
         )
-        self.assertNotContains(by_both, texnik.ariza_raqami)
-        self.assertNotContains(by_both, moliya.ariza_raqami)
-        self.assertContains(by_both, "Hozircha kelib tushgan ariza yo'q.")
+        self.assertNotContains(by_both, texnik.xarid_raqami)
+        self.assertNotContains(by_both, moliya.xarid_raqami)
+        self.assertContains(by_both, "Sizni kutayotgan ariza yo'q.")
 
     def test_an_unknown_value_is_refused_with_a_message_and_the_full_list(self) -> None:
-        application = an_application(department=self.texnik)
+        request = an_arrived_purchase_request(department=self.texnik)
 
         response = self.client.get(page("kelib-arizalar"), {"bolim": "999999"})
 
         self.assertContains(response, REFUSED_DEPARTMENT)
-        self.assertContains(response, application.ariza_raqami)
+        self.assertContains(response, request.xarid_raqami)
 
     def test_the_accepted_page_filters_by_specialist(self) -> None:
         mine = an_assigned_application(self.admin, self.specialist, department=self.texnik)
@@ -230,7 +232,9 @@ class FilterBarPageTests(SignedInAdminTestCase):
     def test_the_assigned_page_filters_by_status(self) -> None:
         moving = an_assigned_application(self.admin, self.specialist)
         waiting = an_assigned_application(self.admin, self.specialist)
-        status = ArizaStatus.with_code(ArizaStatus.Code.ASSIGNED)
+        # Both were assigned, so both start at Tayinlangan; the one that has
+        # moved on is the one the filter has to be able to single out.
+        status = ArizaStatus.objects.get(name="Qabul qilingan")
         moving.set_status(status)
 
         response = self.client.get(page("tayinlangan"), {"holat": status.pk})
@@ -262,6 +266,62 @@ class FilterBarPageTests(SignedInAdminTestCase):
 
         self.assertContains(response, first.shartnoma_raqami)
         self.assertNotContains(response, second.shartnoma_raqami)
+
+    def a_sent_contract(self, inn: str, department=None) -> Contract:
+        """One contract standing on Tuzilgan, waiting for a decision."""
+        application = an_assigned_application(
+            self.admin, self.specialist, department=department
+        )
+        contract = Contract.raise_contract(
+            items=[
+                {
+                    "buyurtma_nomi": "Bolt",
+                    "part_number": "",
+                    "buyurtma_soni": Decimal("1"),
+                    "olchov_birligi": "ta",
+                    "narxi": Decimal("10"),
+                }
+            ],
+            created_by=self.admin,
+            application=application,
+            supplier=a_supplier(f"Firma {inn}", inn=inn),
+        )
+        contract.send_for_approval(by=self.admin)
+        return contract
+
+    def test_the_signed_contracts_page_filters_by_the_decision(self) -> None:
+        """What Tuzilgan is read for: what is waiting, and what was decided."""
+        waiting = self.a_sent_contract("111111111")
+        decided = self.a_sent_contract("222222222")
+        decided.accept(by=self.admin)
+
+        page_of_waiting = self.client.get(page("tuzilgan"), {"qaror": Contract.Stage.SENT})
+
+        self.assertContains(page_of_waiting, waiting.shartnoma_raqami)
+        self.assertNotContains(page_of_waiting, decided.shartnoma_raqami)
+        self.assertContains(page_of_waiting, "Qaror: barchasi")
+
+    def test_the_signed_contracts_page_filters_by_department_and_firma(self) -> None:
+        moliya = a_department("Moliya bo`limi")
+        texnik = self.a_sent_contract("111111111")
+        moliyaniki = self.a_sent_contract("222222222", department=moliya)
+
+        by_department = self.client.get(page("tuzilgan"), {"bolim": moliya.pk})
+        self.assertContains(by_department, moliyaniki.shartnoma_raqami)
+        self.assertNotContains(by_department, texnik.shartnoma_raqami)
+
+        by_firma = self.client.get(page("tuzilgan"), {"firma": texnik.supplier_id})
+        self.assertContains(by_firma, texnik.shartnoma_raqami)
+        self.assertNotContains(by_firma, moliyaniki.shartnoma_raqami)
+
+    def test_the_signed_contracts_page_offers_the_download_links(self) -> None:
+        self.a_sent_contract("111111111")
+
+        response = self.client.get(page("tuzilgan"), {"qaror": Contract.Stage.SENT})
+
+        # Carrying the filter, so the file holds the rows the page shows.
+        self.assertContains(response, "/tuzilgan/eksport/xlsx/?qaror=sent")
+        self.assertContains(response, "/tuzilgan/eksport/pdf/?qaror=sent")
 
     def test_the_purchase_page_filters_by_category(self) -> None:
         requester = make_user("requester", user_type=USERS, department=self.texnik)
@@ -432,20 +492,20 @@ class PeriodAndOrderPageTests(SignedInAdminTestCase):
     """The period and the ordering as a list page renders and applies them."""
 
     def test_the_incoming_page_narrows_to_the_chosen_period(self) -> None:
-        inside = arrived_on(date(2026, 2, 20))
-        outside = arrived_on(date(2026, 4, 1))
+        inside = raised_on(date(2026, 2, 20))
+        outside = raised_on(date(2026, 4, 1))
 
         response = self.client.get(
             page("kelib-arizalar"), {"dan": "2026-02-01", "gacha": "2026-02-28"}
         )
 
-        self.assertContains(response, inside.ariza_raqami)
-        self.assertNotContains(response, outside.ariza_raqami)
+        self.assertContains(response, inside.xarid_raqami)
+        self.assertNotContains(response, outside.xarid_raqami)
         self.assertContains(response, 'value="2026-02-01"')
         self.assertContains(response, "Tozalash")
 
     def test_a_refused_period_can_still_be_cleared(self) -> None:
-        arrived_on(date(2026, 2, 20))
+        raised_on(date(2026, 2, 20))
 
         response = self.client.get(
             page("kelib-arizalar"), {"dan": "2026-03-01", "gacha": "2026-01-01"}
@@ -455,7 +515,7 @@ class PeriodAndOrderPageTests(SignedInAdminTestCase):
         self.assertContains(response, "Tozalash")
 
     def test_an_unreadable_date_can_still_be_cleared(self) -> None:
-        arrived_on(date(2026, 2, 20))
+        raised_on(date(2026, 2, 20))
 
         response = self.client.get(page("kelib-arizalar"), {"dan": "kecha"})
 
@@ -463,7 +523,7 @@ class PeriodAndOrderPageTests(SignedInAdminTestCase):
         self.assertContains(response, "Tozalash")
 
     def test_an_untouched_page_offers_nothing_to_clear(self) -> None:
-        arrived_on(date(2026, 2, 20))
+        raised_on(date(2026, 2, 20))
 
         response = self.client.get(page("kelib-arizalar"))
 
@@ -476,32 +536,32 @@ class PeriodAndOrderPageTests(SignedInAdminTestCase):
         self.assertContains(response, 'name="gacha" id="f-gacha"')
 
     def test_the_incoming_page_refuses_an_inverted_period_with_a_message(self) -> None:
-        application = arrived_on(date(2026, 2, 20))
+        request = raised_on(date(2026, 2, 20))
 
         response = self.client.get(
             page("kelib-arizalar"), {"dan": "2026-03-01", "gacha": "2026-01-01"}
         )
 
         self.assertContains(response, REFUSED_INVERTED_PERIOD)
-        self.assertContains(response, application.ariza_raqami)
+        self.assertContains(response, request.xarid_raqami)
 
     def test_the_incoming_page_refuses_an_unreadable_date_with_a_message(self) -> None:
-        application = arrived_on(date(2026, 2, 20))
+        request = raised_on(date(2026, 2, 20))
 
         response = self.client.get(page("kelib-arizalar"), {"dan": "kecha"})
 
         self.assertContains(response, REFUSED_UNREADABLE_PERIOD)
-        self.assertContains(response, application.ariza_raqami)
+        self.assertContains(response, request.xarid_raqami)
 
     def test_the_incoming_page_reverses_its_rows_on_request(self) -> None:
-        older = arrived_on(date(2026, 1, 10))
-        newer = arrived_on(date(2026, 3, 5))
+        older = raised_on(date(2026, 1, 10))
+        newer = raised_on(date(2026, 3, 5))
 
         descending = self.client.get(page("kelib-arizalar")).content.decode()
         ascending = self.client.get(page("kelib-arizalar"), {"tartib": "osish"}).content.decode()
 
-        self.assertLess(descending.index(newer.ariza_raqami), descending.index(older.ariza_raqami))
-        self.assertLess(ascending.index(older.ariza_raqami), ascending.index(newer.ariza_raqami))
+        self.assertLess(descending.index(newer.xarid_raqami), descending.index(older.xarid_raqami))
+        self.assertLess(ascending.index(older.xarid_raqami), ascending.index(newer.xarid_raqami))
 
     def test_every_list_page_renders_the_period_and_the_ordering(self) -> None:
         for page_name in (
@@ -509,6 +569,7 @@ class PeriodAndOrderPageTests(SignedInAdminTestCase):
             "qabul-arizalar",
             "tayinlangan",
             "kelishinlingan",
+            "tuzilgan",
             "xarid-ariza",
         ):
             with self.subTest(page=page_name):

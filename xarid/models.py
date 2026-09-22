@@ -135,6 +135,31 @@ def next_position(model: type[models.Model]) -> int:
     return (last or UNPLACED) + POSITION_STEP
 
 
+def next_category_number(model: type[models.Model]) -> int:
+    """The six-digit number a new category takes when nobody typed one.
+
+    One past the highest in the table, counting deleted rows: DEC-009 keeps a
+    deleted category's row, it keeps its number with it, and the number is
+    unique across the table rather than across the visible part of it.
+
+    Once the highest is 999999 the count cannot go on, so the lowest number
+    nobody holds is taken instead - the gaps left by categories numbered by
+    hand. A table holding all nine hundred thousand of them is refused rather
+    than given a seventh digit, which is not a Category Raqami (DEC-023).
+    """
+    highest = model.objects.aggregate(models.Max("category_number"))["category_number__max"]
+    nominee = max(SMALLEST_CATEGORY_NUMBER, (highest or 0) + 1)
+    if nominee <= LARGEST_CATEGORY_NUMBER:
+        return nominee
+
+    taken = set(model.objects.values_list("category_number", flat=True))
+    for candidate in range(SMALLEST_CATEGORY_NUMBER, LARGEST_CATEGORY_NUMBER + 1):
+        if candidate not in taken:
+            return candidate
+
+    raise ValueError("Category raqamlari tugadi: barcha olti xonali raqamlar band.")
+
+
 def deactivate(record: MasterDataRecord) -> None:
     """Delete a master data record the way DEC-009 defines deletion.
 
@@ -254,11 +279,72 @@ class Department(MasterDataRecord):
     """
 
     name = models.CharField("Bo`lim Nomi", max_length=MASTER_DATA_NAME_LENGTH, unique=True)
+    is_purchasing = models.BooleanField(
+        "Xarid bo`limi",
+        default=False,
+        help_text=(
+            "The department that works the approved requests: its Bo`lim "
+            "Boshlig`i and Menejer are who Kelib Tushgan Arizalar is for. "
+            "One department at a time, set here rather than matched on a "
+            "name that anybody may rename."
+        ),
+    )
 
     class Meta:
         ordering = ("name",)
         verbose_name = "Bo`lim"
         verbose_name_plural = "Bo`limlar"
+        constraints = (
+            models.UniqueConstraint(
+                fields=["is_purchasing"],
+                condition=models.Q(is_purchasing=True),
+                name="only_one_purchasing_department",
+                violation_error_message="Xarid bo`limi bitta bo`lishi kerak.",
+            ),
+        )
+
+
+def purchasing_department_workers() -> list[AbstractBaseUser]:
+    """The people an approved request is handed to: Xarid Bo`limi's own.
+
+    Its Bo`lim Boshlig`i and its Menejer, the two who work Kelib Tushgan
+    Arizalar. Empty while no department is marked as the purchasing one,
+    because then there is nobody it could mean.
+    """
+    purchasing = purchasing_department()
+    if purchasing is None:
+        return []
+
+    return [
+        *users_of_type(BOLIM_BOSHLIGI, department=purchasing),
+        *users_of_type(MENEJER, department=purchasing),
+    ]
+
+
+def purchasing_department_head() -> list[AbstractBaseUser]:
+    """Xarid Bo`limi's Bo`lim Boshlig`i, on their own.
+
+    Narrower than purchasing_department_workers() on purpose: a status
+    moving is the head's business, and the Menejer hears about a contract
+    when it is sent rather than every time it advances a step. Empty while
+    no department is marked as the purchasing one, because then there is
+    nobody it could mean.
+    """
+    purchasing = purchasing_department()
+    if purchasing is None:
+        return []
+
+    return list(users_of_type(BOLIM_BOSHLIGI, department=purchasing))
+
+
+def purchasing_department() -> Department | None:
+    """The department that works arrived applications, or None while none is set.
+
+    None is an ordinary state, not a fault: nothing declares one until an
+    administrator ticks the box, and every page that asks has to keep working
+    until they do.
+    """
+    return Department.objects.filter(is_purchasing=True, is_active=True).first()
 
 
 class UserProfile(models.Model):
@@ -360,6 +446,30 @@ def has_user_type(
     return user_type.name in set(permitted_type_names)
 
 
+def users_of_type(type_name: str, department: Department | None = None) -> QuerySet:
+    """The accounts a step may be waiting for: this type, optionally this department.
+
+    The same two conditions has_user_type() and department_of() answer one
+    person with, asked of everybody instead: an inactive type is no type, and
+    a retired department is no department.
+
+    Deactivated accounts are left out. The permission checks never ask -
+    somebody who cannot sign in cannot reach a button either - but a list of
+    who is awaited must not name somebody who will never come.
+    """
+    users = get_user_model().objects.filter(
+        is_active=True,
+        profile__user_type__name=type_name,
+        profile__user_type__is_active=True,
+    )
+    if department is not None:
+        users = users.filter(
+            profile__department=department, profile__department__is_active=True
+        )
+
+    return users.order_by("first_name", "last_name", "username")
+
+
 def profile_of(user: AbstractBaseUser) -> UserProfile:
     """This user's profile, created on first use.
 
@@ -405,14 +515,22 @@ def assignable_specialists() -> QuerySet:
     """The active Katta Mutaxasis accounts an application may be given to.
 
     Katta Mutaxasis and nobody else (DEC-024): a manager who can pick anybody
-    can pick somebody with no Tayinlangan page to see the work on. Ordered by
-    name, because a drop-down of people is read rather than scanned.
+    can pick somebody with no Tayinlangan page to see the work on.
+
+    Xarid Bo`limi's own, and not every Katta Mutaxasis in the enterprise.
+    Accepting an arrived application and handing it out is the purchasing
+    department's work, so its head hands it to their own people; a specialist
+    in the department that asked for the purchase is not who does it.
+
+    Every active Katta Mutaxasis while no purchasing department is named,
+    which is an ordinary state rather than a fault - the page has to keep
+    working until an administrator ticks the box.
+
+    The answer is the drop-down on Qabul Qilingan Arizalar and the rule
+    assign() checks, which are the same question asked twice: a name that is
+    not offered must not be assignable by a request that names it anyway.
     """
-    return (
-        get_user_model()
-        .objects.filter(is_active=True, profile__user_type__name=KATTA_MUTAXASIS)
-        .order_by("first_name", "last_name", "username")
-    )
+    return users_of_type(KATTA_MUTAXASIS, department=purchasing_department())
 
 
 # ---------------------------------------------------------------------------
@@ -472,8 +590,12 @@ class ArizaStatus(OrderedStatus):
 class ShartnomaStatus(OrderedStatus):
     """A state a contract can be in (section 3.5).
 
-    The five seeded rows are examples (DEC-010); reports generate one column
-    per active status rather than assuming them.
+    The seeded rows are examples (DEC-010); reports generate one column per
+    active status rather than assuming them.
+
+    It carries no code column, deliberately and unlike ArizaStatus: DEC-010
+    makes these rows an administrator invents, renames and retires, so no
+    code here may name one.
     """
 
     name = models.CharField("Status Nomi", max_length=MASTER_DATA_NAME_LENGTH, unique=True)
@@ -552,14 +674,20 @@ class ShartnomaStatus(OrderedStatus):
 class MahsulotTuri(MasterDataRecord):
     """A product category (section 3.6).
 
-    Its category number is required and unique: the supplied form calls it a
-    code, and reports by category would merge two categories sharing one.
+    Its category number is unique, because the supplied form calls it a code
+    and reports by category would merge two categories sharing one. It is not
+    typed in unless somebody wants a particular number: left blank, the next
+    one is taken, as a status left unplaced goes to the end of its list.
     """
 
     category_number = models.PositiveIntegerField(
         "Category Raqami",
         unique=True,
-        help_text="Six digits, the code the department knows the category by.",
+        blank=True,
+        help_text=(
+            "Olti xonali kod, bo'lim kategoriyani shu raqam bilan taniydi. "
+            "Bo'sh qoldirilsa, keyingi raqam avtomatik beriladi."
+        ),
     )
     name = models.CharField("Category Nomi", max_length=MASTER_DATA_NAME_LENGTH, unique=True)
     description = models.TextField("Tavsif", blank=True)
@@ -568,6 +696,17 @@ class MahsulotTuri(MasterDataRecord):
         ordering = ("category_number",)
         verbose_name = "Mahsulot Turi"
         verbose_name_plural = "Mahsulot Turlari"
+
+    def save(self, *args, **kwargs) -> None:
+        """Number a new category when it was not numbered.
+
+        In the model rather than in the form, so that a category created from
+        the admin, from a shell or by a later page is numbered the same way as
+        one created from the Mahsulot Turlari page.
+        """
+        if self.category_number is None:
+            self.category_number = next_category_number(type(self))
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"{self.category_number} - {self.name}"
@@ -752,8 +891,10 @@ class Application(models.Model):
         blank=True,
         verbose_name="Status",
         help_text=(
-            "Nullable because DEC-017 lets an administrator delete every "
-            "status, and a master data page must not stop the workflow."
+            "The Ariza Status the work is in, which Tayinlangan Arizalar "
+            "shows and its holder moves along. Nullable because DEC-017 lets "
+            "an administrator delete every status, and a master data page "
+            "must not stop the workflow."
         ),
     )
     kelib_tushgan_sana = models.DateTimeField("Kelib tushgan sana", auto_now_add=True)
@@ -1000,6 +1141,11 @@ class Application(models.Model):
             raise ValueError(f"{self.ariza_raqami} is {self.stage}, so it cannot be assigned.")
 
         decided_at = timezone.now()
+        # Handing the work out is the first thing Tayinlangan Arizalar has to
+        # report, so the status starts there rather than at whatever the row
+        # carried on the page before. A re-assignment starts it again: the new
+        # holder has not taken it, and their column should not say they have.
+        status = ArizaStatus.with_code(ArizaStatus.Code.ASSIGNED)
 
         assigned = (
             type(self)
@@ -1010,6 +1156,7 @@ class Application(models.Model):
                 assigned_by=by,
                 tayinlangan_sana=decided_at,
                 xodim_qabul_qilgan_sana=None,
+                status=status,
             )
         )
 
@@ -1022,6 +1169,7 @@ class Application(models.Model):
         self.assigned_by = by
         self.tayinlangan_sana = decided_at
         self.xodim_qabul_qilgan_sana = None
+        self.status = status
 
         return True
 
@@ -1056,6 +1204,10 @@ class Application(models.Model):
             return False
 
         accepted_at = timezone.now()
+        # The second thing the page reports, and the last one the workflow
+        # sets by itself: from here the holder moves the row along the Ariza
+        # Statuses as the work actually reaches them.
+        status = ArizaStatus.with_code(ArizaStatus.Code.ACCEPTED)
 
         taken = (
             type(self)
@@ -1065,7 +1217,7 @@ class Application(models.Model):
                 assigned_to=by,
                 xodim_qabul_qilgan_sana__isnull=True,
             )
-            .update(xodim_qabul_qilgan_sana=accepted_at)
+            .update(xodim_qabul_qilgan_sana=accepted_at, status=status)
         )
 
         if not taken:
@@ -1073,6 +1225,7 @@ class Application(models.Model):
             return False
 
         self.xodim_qabul_qilgan_sana = accepted_at
+        self.status = status
 
         return True
 
@@ -1213,11 +1366,33 @@ class ApplicationItem(OrderLine):
 # ---------------------------------------------------------------------------
 
 
+class LiveContractManager(models.Manager):
+    """Contracts that have not been deleted, which is nearly always the ones meant.
+
+    Deleting a contract is reversible (TASK-UZK-064): the row stays and is
+    marked, so that O`chirilgan Shartnomalar can show it and Tiklash can put
+    it back. That only works if everything else stops seeing it, and there
+    are seven places outside this module that ask for contracts - the two
+    pages, the exports, the dashboard's three figures. Filtering here rather
+    than at each of them is the difference between a deleted contract
+    disappearing and a deleted contract disappearing from most places.
+
+    Contract.all_objects is the way to the deleted ones, named so that asking
+    for them is a decision rather than a default.
+    """
+
+    def get_queryset(self) -> models.QuerySet:
+        return super().get_queryset().filter(deleted_at__isnull=True)
+
+
 class Contract(models.Model):
     """One contract agreed against an application, as section 4.6 describes.
 
     Its value is the total of its priced rows (REQ-SHARTNOMA-006) and is
     computed by raise_contract() rather than supplied.
+
+    Deleting one is reversible and never loses the row (TASK-UZK-064): see
+    LiveContractManager above, and soft_delete() below.
     """
 
     class Stage(models.TextChoices):
@@ -1343,11 +1518,39 @@ class Contract(models.Model):
     izoh = models.TextField("Izoh", blank=True)
     pdf = contract_pdf_field()
     yaratilingan_sana = models.DateTimeField("Yaratilingan sana", auto_now_add=True)
+    deleted_at = models.DateTimeField(
+        "O`chirilgan sana",
+        null=True,
+        blank=True,
+        help_text=(
+            "When this contract was deleted. Null for a contract in use. "
+            "Deleting never removes the row (TASK-UZK-064): an Admin restores "
+            "it from O`chirilgan Shartnomalar, and a contract number that was "
+            "issued is not issued twice."
+        ),
+    )
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="deleted_contracts",
+        null=True,
+        blank=True,
+        verbose_name="Kim o`chirgan",
+    )
+
+    # all_objects first, so it is the base manager: reverse relations and
+    # refresh_from_db() go through that one, and a base manager that hides
+    # rows makes a deleted contract unreadable even to the page whose job is
+    # to show it. objects is the default for everything that queries.
+    all_objects = models.Manager()
+    objects = LiveContractManager()
 
     class Meta:
         ordering = ("-yaratilingan_sana", "-id")
         verbose_name = "Shartnoma"
         verbose_name_plural = "Shartnomalar"
+        base_manager_name = "all_objects"
+        default_manager_name = "objects"
 
     def __str__(self) -> str:
         return f"{self.shartnoma_raqami} - {self.supplier.name}"
@@ -1711,10 +1914,231 @@ class Contract(models.Model):
 
         return True
 
+    @transaction.atomic
+    def update_terms(self, items: Sequence[Mapping[str, object]], **fields) -> None:
+        """Rewrite this contract's terms and the goods it covers (TASK-UZK-064).
+
+        The rows are replaced rather than matched up one by one: what comes
+        back from the form is the contract's goods as they now stand, and a
+        row somebody removed is a row that is not in it. The value is
+        recomputed from what is left, never taken from a caller - the same
+        rule raise_contract() enforces, for the same reason.
+
+        Args:
+            items: one mapping of ContractItem fields per row of goods, as
+                the contract should now read.
+            **fields: the contract's own columns to change. A column left
+                out keeps what it has, which is how an edit that attaches no
+                new PDF keeps the one on file.
+
+        Raises:
+            ValueError: when items is empty, when qiymati is passed, or when
+                the contract has left the stages its terms may change in.
+        """
+        if "qiymati" in fields:
+            raise ValueError(
+                "A contract value is the sum of its rows (REQ-SHARTNOMA-006), "
+                "not a field a caller sets."
+            )
+
+        if not items:
+            raise ValueError("A contract needs at least one row of goods (REQ-SHARTNOMA-007).")
+
+        if not self.is_editable:
+            raise ValueError(
+                f"{self.shartnoma_raqami} tahrirlanmadi: shartnoma allaqachon "
+                "tasdiqlashga yuborilgan."
+            )
+
+        lines = [ContractItem(contract=self, **line) for line in items]
+
+        self.items.all().delete()
+        ContractItem.objects.bulk_create(lines)
+
+        for column, value in fields.items():
+            setattr(self, column, value)
+        self.qiymati = contract_value_of(lines)
+
+        self.save(update_fields=[*fields, "qiymati"])
+
+    @transaction.atomic
+    def undo_approval(self, by: AbstractBaseUser) -> bool:
+        """Take an approval back, leaving the contract awaiting one again.
+
+        Bekor Qilish beside the Tasdiqlangan badge (TASK-UZK-067). The
+        approval is undone, not the contract: it stays on Tuzilgan, at the
+        stage it was at before somebody decided, and can be approved or
+        rejected again. Who approved it and when are cleared, because they
+        describe a decision that no longer stands.
+
+        The send is untouched - yuborilgan_sana, yuborgan and the count of
+        sends are the specialist's act, not the approver's, and a contract
+        that had been sent once has still been sent once.
+
+        Args:
+            by: the person taking it back. Not recorded on the contract; the
+                audit log is where the act is kept.
+
+        Returns:
+            True when this call undid it, False when the contract was not
+            approved - a second click, or two arriving together.
+        """
+        self.refresh_from_db()
+
+        if not self.is_signed:
+            return False
+
+        # Conditional on the stage, for the reason set_status() gives: two
+        # clicks landing together undo one approval.
+        undone = (
+            type(self)
+            .objects.filter(pk=self.pk, stage=self.Stage.SIGNED)
+            .update(stage=self.Stage.SENT, tasdiqlagan=None, tasdiqlangan_sana=None)
+        )
+        if not undone:
+            self.refresh_from_db()
+            return False
+
+        self.stage = self.Stage.SENT
+        self.tasdiqlagan = None
+        self.tasdiqlangan_sana = None
+
+        return True
+
+    @property
+    def is_deleted(self) -> bool:
+        """Whether this contract has been deleted."""
+        return self.deleted_at is not None
+
+    def holders(self) -> list[AbstractBaseUser]:
+        """The people whose contract this is, for anything that must tell them.
+
+        The other side of own_contract_test(), which asks of one person
+        whether a contract is theirs; this asks of one contract who those
+        people are, and the two agree on purpose. A Katta Mutaxasis holds
+        the contract their application was assigned to them; a Menejer or a
+        Bo`lim Boshlig`i holds the one they entered. Both at once is
+        ordinary - usually they are two different people, sometimes one.
+
+        Returns:
+            The holders, without repeats and without the empty places an
+            unassigned application leaves.
+        """
+        by_id = {
+            person.pk: person
+            for person in (self.application.assigned_to, self.created_by)
+            if person is not None
+        }
+
+        return list(by_id.values())
+
+    @transaction.atomic
+    def soft_delete(self, by: AbstractBaseUser) -> bool:
+        """Take this contract off the working pages, keeping the row.
+
+        Only while it is still its specialist's: a contract awaiting a
+        decision, or one already approved, is not theirs to withdraw, and
+        deleting what somebody else is deciding on is how a decision is made
+        about a thing that is no longer there.
+
+        Args:
+            by: the person deleting it, recorded against the deletion.
+
+        Returns:
+            True when this call deleted it, False when it was already gone -
+            a second click, or two arriving together.
+
+        Raises:
+            ValueError: when the contract has left the stages its specialist
+                works in.
+        """
+        self.refresh_from_db()
+
+        if self.is_deleted:
+            return False
+
+        if not self.is_editable:
+            raise ValueError(
+                f"{self.shartnoma_raqami} o`chirilmadi: shartnoma allaqachon "
+                "tasdiqlashga yuborilgan."
+            )
+
+        deleted_at = timezone.now()
+        # Conditional on the row still being undeleted, for the reason
+        # set_status() gives: two clicks landing together delete once.
+        gone = (
+            type(self)
+            .all_objects.filter(
+                pk=self.pk, deleted_at__isnull=True, stage__in=self.EDITABLE_STAGES
+            )
+            .update(deleted_at=deleted_at, deleted_by=by)
+        )
+        if not gone:
+            self.refresh_from_db()
+            return False
+
+        self.deleted_at = deleted_at
+        self.deleted_by = by
+
+        return True
+
+    @transaction.atomic
+    def restore(self, by: AbstractBaseUser) -> bool:
+        """Put a deleted contract back on the page it came from.
+
+        The stage it was deleted at is the stage it returns to: deleting does
+        not move a contract along, so restoring does not either.
+
+        Args:
+            by: the person restoring it. Not recorded on the contract - the
+                two columns say who deleted it, and they are cleared - the
+                audit log is where the restore is kept.
+
+        Returns:
+            True when this call restored it, False when it was not deleted.
+        """
+        self.refresh_from_db()
+
+        if not self.is_deleted:
+            return False
+
+        back = (
+            type(self)
+            .all_objects.filter(pk=self.pk, deleted_at__isnull=False)
+            .update(deleted_at=None, deleted_by=None)
+        )
+        if not back:
+            self.refresh_from_db()
+            return False
+
+        self.deleted_at = None
+        self.deleted_by = None
+
+        return True
+
     @property
     def qiymati_display(self) -> str:
         """The contract value, grouped so a person can read it."""
         return money_display(self.qiymati)
+
+    @property
+    def buyurtma_xulosasi(self) -> str:
+        """The Buyurtma line of the Ko`rish dialog: one row, and how many more.
+
+        A contract of one row reads as that row's name. A contract of several
+        names the first and counts the rest, because the dialog lists them all
+        underneath and a card repeating the table is a card nobody reads.
+
+        Reads items.all() so a prefetched list is not thrown away.
+        """
+        rows = list(self.items.all())
+        if not rows:
+            return "—"
+
+        if len(rows) == 1:
+            return rows[0].buyurtma_nomi
+
+        return f"{rows[0].buyurtma_nomi} +{len(rows) - 1} ta"
 
     @classmethod
     @transaction.atomic
@@ -1893,6 +2317,45 @@ class ContractItem(OrderLine):
     def narxi_display(self) -> str:
         """The unit price, grouped the way the line total is."""
         return money_display(self.narxi)
+
+
+class ContractComment(models.Model):
+    """One thing somebody wrote about a contract (TASK-UZK-066).
+
+    The Izoh drawer shows three kinds of written text together: the note
+    entered on the contract form, the reasons decisions carried, and these.
+    Only these are written for their own sake - the other two are the
+    by-product of an act - which is why only these are a table.
+
+    Kept for the life of the contract and never edited: the drawer is read
+    as a record of what was said and when, and a record somebody can go back
+    and change is not one. Deleting the contract leaves them; restoring it
+    brings them back with it.
+    """
+
+    contract = models.ForeignKey(
+        Contract,
+        on_delete=models.CASCADE,
+        related_name="comments",
+        verbose_name="Shartnoma",
+    )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="contract_comments",
+        verbose_name="Kim yozgan",
+    )
+    matn = models.TextField("Izoh")
+    created_at = models.DateTimeField("Yozilgan sana", auto_now_add=True)
+
+    class Meta:
+        # Oldest first: a thread is read downwards.
+        ordering = ("created_at", "id")
+        verbose_name = "Shartnoma izohi"
+        verbose_name_plural = "Shartnoma izohlari"
+
+    def __str__(self) -> str:
+        return f"{self.contract.shartnoma_raqami}: {self.matn[:40]}"
 
 
 # ---------------------------------------------------------------------------
@@ -2096,6 +2559,22 @@ class PurchaseApplication(models.Model):
             return has_user_type(user, (DIREKTOR,))
 
         return False
+
+    def approval_chain(self) -> list[tuple[str, list[AbstractBaseUser]]]:
+        """DEC-016's two steps and who may take each one, in order.
+
+        The mirror of awaits(): that answers whether one person may decide
+        this, and this answers who all of those people are at every step, so
+        a document can name who is still to sign before any of them has.
+
+        The requester's *own* department head first, then any Direktor - the
+        same two conditions awaits() applies, asked the other way round. Each
+        step is named by the user type that takes it.
+        """
+        return [
+            (BOLIM_BOSHLIGI, list(users_of_type(BOLIM_BOSHLIGI, department=self.department))),
+            (DIREKTOR, list(users_of_type(DIREKTOR))),
+        ]
 
     def moved_past(self, user: AbstractBaseUser | AnonymousUser | None) -> bool:
         """Whether this request has gone beyond the step this person decides.
@@ -2356,9 +2835,58 @@ class Notification(models.Model):
         """What happened. The wording belongs to whatever renders it."""
 
         SPECIALIST_ACCEPTED = "specialist_accepted", "Xodim arizani qabul qildi"
-        PURCHASE_REJECTED = "purchase_rejected", "Xarid arizasi inkor etildi"
+        PURCHASE_REJECTED = "purchase_rejected", "Xarid arizangiz inkor etildi"
         APPLICATION_ACCEPTED = "application_accepted", "Arizangiz qabul qilindi"
         APPLICATION_REJECTED = "application_rejected", "Arizangiz inkor etildi"
+        # DEC-016's chain, told from both ends: the people a request has just
+        # landed on, and the requester watching it move.
+        PURCHASE_AWAITING_YOU = (
+            "purchase_awaiting_you",
+            "Yangi xarid arizasi tasdig`ingizni kutmoqda",
+        )
+        PURCHASE_ARRIVED = (
+            "purchase_arrived",
+            "Tasdiqlangan xarid arizasi xarid bo`limiga keldi",
+        )
+        PURCHASE_APPROVED_BY_HEAD = (
+            "purchase_approved_by_head",
+            "Xarid arizangiz bo`lim boshlig`i tomonidan tasdiqlandi",
+        )
+        PURCHASE_APPROVED = (
+            "purchase_approved",
+            "Xarid arizangiz tasdiqlandi",
+        )
+        # A contract leaving its specialist for the department head. Held
+        # against the contract's own application, because a notification is
+        # about an application or a purchase application and nothing else -
+        # the contract's number and firma are in the izoh line.
+        CONTRACT_SENT = (
+            "contract_sent",
+            "Shartnoma tasdiqlashga yuborildi",
+        )
+        # A contract advancing a step while its specialist still holds it.
+        # Held against the application for the same reason CONTRACT_SENT is.
+        CONTRACT_STATUS_CHANGED = (
+            "contract_status_changed",
+            "Shartnoma holati o`zgartirildi",
+        )
+        CONTRACT_COMMENTED = (
+            "contract_commented",
+            "Shartnoma bo`yicha yangi izoh",
+        )
+        # The decision, told to whoever the contract belongs to.
+        CONTRACT_APPROVED = (
+            "contract_approved",
+            "Shartnomangiz tasdiqlandi",
+        )
+        CONTRACT_RETURNED = (
+            "contract_returned",
+            "Shartnomangiz inkor qilindi",
+        )
+        CONTRACT_APPROVAL_UNDONE = (
+            "contract_approval_undone",
+            "Shartnoma tasdig`i bekor qilindi",
+        )
 
     recipient = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -2387,9 +2915,10 @@ class Notification(models.Model):
         "Izoh",
         blank=True,
         help_text=(
-            "The comment the decision carried, kept here rather than read "
-            "back from the record: what the sender was told is what the "
-            "decision said at the time."
+            "The line of detail under the heading: the comment a decision "
+            "carried, or what the notification is about. Kept here rather "
+            "than read back from the record, so what somebody was told is "
+            "what it said at the time."
         ),
     )
     created_at = models.DateTimeField(auto_now_add=True)
@@ -2420,22 +2949,38 @@ class Notification(models.Model):
         return f"{self.get_kind_display()}: {about}"
 
     @classmethod
-    def tell_admins_of_acceptance(cls, application: Application) -> list[Notification]:
-        """Tell every active Admin that a specialist took an application.
+    def tell_of_specialist_acceptance(cls, application: Application) -> list[Notification]:
+        """Tell the people whose work it was that a specialist took it up.
+
+        Every active Admin, and Xarid Bo`limi's own Bo`lim Boshlig`i and
+        Menejer - the two who handed the application out on Tayinlangan
+        Arizalar, and so the two waiting to hear it was taken.
+
+        Admin alone was the original rule, read from DEC-013's "Admin is the
+        Xarid bo`lim boshlig`i". Where that head holds a Bo`lim Boshlig`i
+        account rather than an Admin one, which is how the department is
+        actually set up, it left the message with nobody to reach.
 
         Returns:
-            The notifications produced; empty when there is no active Admin.
+            The notifications produced; empty when there is nobody to tell,
+            which is an ordinary state - no Admin, and no purchasing
+            department named yet.
         """
         admins = get_user_model().objects.filter(is_active=True, profile__user_type__name=ADMIN)
+
+        # By pk, so somebody who is both is told once.
+        recipients = {
+            person.pk: person for person in (*admins, *purchasing_department_workers())
+        }
 
         return cls.objects.bulk_create(
             [
                 cls(
-                    recipient=admin,
+                    recipient=person,
                     application=application,
                     kind=cls.Kind.SPECIALIST_ACCEPTED,
                 )
-                for admin in admins
+                for person in recipients.values()
             ]
         )
 
@@ -2443,11 +2988,16 @@ class Notification(models.Model):
     def tell_requester_of_rejection(
         cls, purchase_application: PurchaseApplication
     ) -> Notification:
-        """Tell a requester their purchase request was refused (REQ-ARIZA-020)."""
+        """Tell a requester their purchase request was refused (REQ-ARIZA-020).
+
+        The reason travels with it: a refusal a requester cannot read the
+        reason for is a message telling them to go and ask.
+        """
         return cls.objects.create(
             recipient=purchase_application.created_by,
             purchase_application=purchase_application,
             kind=cls.Kind.PURCHASE_REJECTED,
+            izoh=purchase_application.inkor_izohi,
         )
 
 

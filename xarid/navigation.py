@@ -7,11 +7,17 @@ from here so every entry points at a URL the application actually serves.
 Entries name the bare page name; the URL is reversed under the "xarid"
 namespace and the permission matrix in permissions.py is keyed by the same
 names.
+
+The labels are marked for translation and translated when they are drawn: the
+tree is built once at import, and the reader's language is not known until a
+request arrives.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from django.utils.translation import gettext_lazy
 
 
 @dataclass(frozen=True)
@@ -33,60 +39,64 @@ class NavigationGroup:
 
 SIDEBAR_NAVIGATION: tuple[NavigationGroup, ...] = (
     NavigationGroup(
-        "Umumiy",
-        (NavigationEntry("Dashboard", "bi-speedometer2", "dashboard"),),
+        gettext_lazy("Umumiy"),
+        (NavigationEntry(gettext_lazy("Dashboard"), "bi-speedometer2", "dashboard"),),
     ),
     NavigationGroup(
-        "Ma'lumotlar",
+        gettext_lazy("Ma'lumotlar"),
         (
-            NavigationEntry("User Specialty", "bi-mortarboard", "user-specialty"),
-            NavigationEntry("User Types", "bi-person-badge", "user-types"),
-            NavigationEntry("Foydalanuvchilar", "bi-people", "users"),
-            NavigationEntry("Ariza Status", "bi-flag", "ariza-status"),
-            NavigationEntry("Shartnoma Status", "bi-clipboard-check", "shartnoma-status"),
-            NavigationEntry("Mahsulot Turlari", "bi-collection", "mahsulot-turlari"),
-            NavigationEntry("Shartnoma Turi", "bi-file-earmark-text", "shartnoma-turi"),
+            NavigationEntry(gettext_lazy("User Specialty"), "bi-mortarboard", "user-specialty"),
+            NavigationEntry(gettext_lazy("User Types"), "bi-person-badge", "user-types"),
+            NavigationEntry(gettext_lazy("Foydalanuvchilar"), "bi-people", "users"),
+            NavigationEntry(gettext_lazy("Ariza Status"), "bi-flag", "ariza-status"),
+            NavigationEntry(gettext_lazy("Shartnoma Status"), "bi-clipboard-check", "shartnoma-status"),
+            NavigationEntry(gettext_lazy("Mahsulot Turlari"), "bi-collection", "mahsulot-turlari"),
+            NavigationEntry(gettext_lazy("Shartnoma Turi"), "bi-file-earmark-text", "shartnoma-turi"),
             # Not in the supplied sidebar: DEC-018 makes departments
             # Admin-maintained master data and the specification gives them
             # no page, so without this they could only be created from a shell.
-            NavigationEntry("Bo'limlar", "bi-diagram-3", "bolim-royhati"),
+            NavigationEntry(gettext_lazy("Bo'limlar"), "bi-diagram-3", "bolim-royhati"),
             # Likewise for suppliers (DEC-011).
-            NavigationEntry("Firmalar", "bi-shop", "firmalar"),
+            NavigationEntry(gettext_lazy("Firmalar"), "bi-shop", "firmalar"),
         ),
     ),
     NavigationGroup(
-        "Arizalar",
+        gettext_lazy("Arizalar"),
         (
-            NavigationEntry("Kelib Tushgan", "bi-inbox", "kelib-arizalar"),
-            NavigationEntry("Qabul Qilingan", "bi-check2-circle", "qabul-arizalar"),
-            NavigationEntry("Tayinlangan", "bi-pin-angle", "tayinlangan"),
+            NavigationEntry(gettext_lazy("Kelib Tushgan"), "bi-inbox", "kelib-arizalar"),
+            NavigationEntry(gettext_lazy("Qabul Qilingan"), "bi-check2-circle", "qabul-arizalar"),
+            NavigationEntry(gettext_lazy("Tayinlangan"), "bi-pin-angle", "tayinlangan"),
         ),
     ),
     NavigationGroup(
-        "Shartnomalar",
+        gettext_lazy("Shartnomalar"),
         (
-            NavigationEntry("Kelishinlingan", "bi-file-earmark-check", "kelishinlingan"),
-            NavigationEntry("Tuzilgan", "bi-journal-text", "tuzilgan"),
+            NavigationEntry(gettext_lazy("Kelishinlingan"), "bi-file-earmark-check", "kelishinlingan"),
+            NavigationEntry(gettext_lazy("Tuzilgan"), "bi-journal-text", "tuzilgan"),
+            # Admin alone sees this one; the sidebar draws what the reader
+            # may open, so for everybody else the group is two entries
+            # (TASK-UZK-064).
+            NavigationEntry(gettext_lazy("O'chirilgan"), "bi-trash", "ochirilgan-shartnomalar"),
         ),
     ),
     NavigationGroup(
-        "Hisobotlar",
+        gettext_lazy("Hisobotlar"),
         (
-            NavigationEntry("Xodimlar Yuklamasi", "bi-graph-up-arrow", "xodimlar-yuklamasi"),
-            NavigationEntry("Bo'limlar", "bi-buildings", "bolimlar"),
-            NavigationEntry("Mahsulot Turi", "bi-box-seam", "mahsulot-tur"),
-            NavigationEntry("Mahsulotlar", "bi-search", "mahsulotlar"),
+            NavigationEntry(gettext_lazy("Xodimlar Yuklamasi"), "bi-graph-up-arrow", "xodimlar-yuklamasi"),
+            NavigationEntry(gettext_lazy("Bo'limlar"), "bi-buildings", "bolimlar"),
+            NavigationEntry(gettext_lazy("Mahsulot Turi"), "bi-box-seam", "mahsulot-tur"),
+            NavigationEntry(gettext_lazy("Mahsulotlar"), "bi-search", "mahsulotlar"),
             # Not in the supplied sidebar: REQ-DASH-005 asks for Top suppliers
             # as a page of its own, and the dashboard panel links to it.
-            NavigationEntry("Top Yetkazib beruvchilar", "bi-trophy", "top-suppliers"),
-            NavigationEntry("Xarid Arizasi", "bi-cart3", "xarid-ariza"),
+            NavigationEntry(gettext_lazy("Top Yetkazib beruvchilar"), "bi-trophy", "top-suppliers"),
+            NavigationEntry(gettext_lazy("Xarid Arizasi"), "bi-cart3", "xarid-ariza"),
         ),
     ),
     NavigationGroup(
-        "Tizim",
+        gettext_lazy("Tizim"),
         (
-            NavigationEntry("1C Integratsiya", "bi-plug", "integration"),
-            NavigationEntry("Logs", "bi-journal-code", "logs"),
+            NavigationEntry(gettext_lazy("1C Integratsiya"), "bi-plug", "integration"),
+            NavigationEntry(gettext_lazy("Logs"), "bi-journal-code", "logs"),
         ),
     ),
 )

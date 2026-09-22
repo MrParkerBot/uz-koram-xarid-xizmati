@@ -10,7 +10,7 @@ the DEC-015 matrix; the two exceptions say why below.
 from django.urls import path
 
 from xarid import views
-from xarid.permissions import require_page_permission
+from xarid.permissions import page_or_landing, require_page_permission
 
 app_name = "xarid"
 
@@ -48,6 +48,7 @@ incoming = require_page_permission("kelib-arizalar")
 accepted = require_page_permission("qabul-arizalar")
 assigned = require_page_permission("tayinlangan")
 contracts = require_page_permission("kelishinlingan")
+deleted_contracts = require_page_permission("ochirilgan-shartnomalar")
 workload = require_page_permission("xodimlar-yuklamasi")
 signed = require_page_permission("tuzilgan")
 departments_report = require_page_permission("bolimlar")
@@ -62,8 +63,10 @@ urlpatterns = [
     # alone: the DEC-015 matrix answers which pages a user type may open,
     # and this is not one of those - it is the signed-in person's own.
     path("bildirishnomalar/", views.notifications_page, name="notifications"),
-    # The dashboard answers at the site root.
-    path("", require_page_permission("dashboard")(views.dashboard), name="dashboard"),
+    # The dashboard answers at the site root, for everybody who may open it;
+    # for everybody else the root is a way in rather than a refusal, so it
+    # sends them to the first page that is theirs (page_or_landing).
+    path("", page_or_landing("dashboard")(views.dashboard), name="dashboard"),
     # Top suppliers, which REQ-DASH-005 asks for as a page of its own.
     path(
         "top-suppliers/",
@@ -130,6 +133,8 @@ urlpatterns = [
     # currently shows this application (DEC-019). login_required is on the
     # view itself.
     path("arizalar/<int:pk>/pdf/", views.application_pdf, name="ariza-pdf"),
+    # Drawn from the record rather than uploaded, so it is always there.
+    path("arizalar/<int:pk>/ariza-pdf/", views.application_document, name="ariza-hujjat-pdf"),
     # Contracts.
     path("kelishinlingan/", contracts(views.agreed_contracts_list), name="kelishinlingan"),
     path(
@@ -146,6 +151,50 @@ urlpatterns = [
         "kelishinlingan/yaratish/",
         contracts(views.contract_create),
         name="shartnoma-yaratish",
+    ),
+    path(
+        "kelishinlingan/<int:pk>/tahrirlash/",
+        contracts(views.contract_edit),
+        name="shartnoma-tahrirlash",
+    ),
+    path(
+        "kelishinlingan/<int:pk>/ochirish/",
+        contracts(views.contract_delete),
+        name="shartnoma-ochirish",
+    ),
+    path(
+        "kelishinlingan/<int:pk>/izoh/",
+        contracts(views.contract_comment),
+        name="shartnoma-izoh",
+    ),
+    # What O`chirish takes off the page, and the way back. Admin alone opens
+    # it (TASK-UZK-064).
+    path(
+        "ochirilgan-shartnomalar/",
+        deleted_contracts(views.deleted_contracts_list),
+        name="ochirilgan-shartnomalar",
+    ),
+    path(
+        "ochirilgan-shartnomalar/<int:pk>/tiklash/",
+        deleted_contracts(views.contract_restore),
+        name="shartnoma-tiklash",
+    ),
+    # The Ko`rish dialog and its attachment. Neither is decorated with a page
+    # permission: a contract moves between the two contract pages, so the
+    # view asks about whichever one shows it now (TASK-UZK-063).
+    path(
+        "shartnomalar/<int:pk>/tafsilot/",
+        views.contract_detail,
+        name="shartnoma-tafsilot",
+    ),
+    path("shartnomalar/<int:pk>/pdf/", views.contract_pdf, name="shartnoma-pdf"),
+    # The contract drawn from the record, beside the attachment above it. The
+    # permission is the one the details dialog asks, because it is the same
+    # contract: readable_contract() answers through the page it is on.
+    path(
+        "shartnomalar/<int:pk>/shartnoma-pdf/",
+        views.contract_document,
+        name="shartnoma-hujjat-pdf",
     ),
     # Purchase applications and the approval chain.
     path("xarid-ariza/", purchases(views.purchase_application_list), name="xarid-ariza"),
@@ -168,6 +217,11 @@ urlpatterns = [
         "xarid-ariza/<int:pk>/pdf/",
         purchases(views.purchase_application_pdf),
         name="xarid-ariza-pdf",
+    ),
+    path(
+        "xarid-ariza/<int:pk>/ariza-pdf/",
+        purchases(views.purchase_application_document),
+        name="xarid-ariza-hujjat-pdf",
     ),
     path(
         "xarid-ariza/<int:pk>/asl-pdf/",
@@ -221,6 +275,11 @@ urlpatterns = [
         name="tuzilgan-tasdiqlash",
     ),
     path(
+        "tuzilgan/<int:pk>/bekor/",
+        signed(views.contract_undo_approval),
+        name="tuzilgan-bekor",
+    ),
+    path(
         "tuzilgan/<int:pk>/inkor/",
         signed(views.contract_reject),
         name="tuzilgan-inkor",
@@ -248,6 +307,11 @@ urlpatterns = [
         "kelishinlingan/eksport/<str:file_format>/",
         contracts(views.contracts_export),
         name="kelishinlingan-eksport",
+    ),
+    path(
+        "tuzilgan/eksport/<str:file_format>/",
+        signed(views.signed_contracts_export),
+        name="tuzilgan-eksport",
     ),
     path(
         "xarid-ariza/eksport/<str:file_format>/",

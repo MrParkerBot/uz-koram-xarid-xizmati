@@ -1,5 +1,6 @@
 {% extends "xarid/base.html" %}
 {% from "xarid/_filters.html" import filter_bar with context %}
+{% from "xarid/_pagination.html" import pagination_bar with context %}
 {#
 The Logs page (section 10, REQ-LOG-001). Reads the audit table TASK-UZK-052
 writes; nothing here writes to it.
@@ -11,15 +12,15 @@ rather than printing a label for nothing.
 No export: DEC-029 says section 10 is the one page that does not ask for a
 download, and the prototype's Export button raised a toast.
 #}
-{% block title %}Logs{% endblock %}
-{% block breadcrumb %}Tizim / Logs{% endblock %}
-{% block page_heading %}Logs{% endblock %}
+{% block title %}{{ _("Logs") }}{% endblock %}
+{% block breadcrumb %}{{ _("Tizim / Logs") }}{% endblock %}
+{% block page_heading %}{{ _("Logs") }}{% endblock %}
 {% block content %}
 
     <div class="page-header">
       <div>
-        <h1 class="page-title">Tizim Loglari</h1>
-        <div class="muted">Yaratilgan, tahrirlangan va o'chirilgan yozuvlar, hamda ularning tasdiqlari.</div>
+        <h1 class="page-title">{{ _("Tizim Loglari") }}</h1>
+        <div class="muted">{{ _("Yaratilgan, tahrirlangan va o'chirilgan yozuvlar, hamda ularning tasdiqlari.") }}</div>
       </div>
       <div class="page-actions">
         <span class="badge badge-soft">Jami: {{ entry_count }} ta yozuv</span>
@@ -32,40 +33,41 @@ download, and the prototype's Export button raised a toast.
         <table class="table-app" id="logs-table">
           <thead><tr>
             <th style="width:36px;">#</th>
-            <th>Foydalanuvchi</th>
-            <th>Foydalanuvchi Bo'limi</th>
-            <th>Forma Nomi</th>
-            <th style="width:150px;">Sana/Soat</th>
-            <th style="width:110px;text-align:center;">Amal</th>
-            <th>Tasdiqlovchi</th>
-            <th>Tasdiqlovchi Bo'lim</th>
-            <th>Tasdiq comment</th>
-            <th style="width:150px;">Tasdiq Sanasi/Vaqti</th>
+            <th>{{ _("Foydalanuvchi") }}</th>
+            <th>{{ _("Foydalanuvchi Bo'limi") }}</th>
+            <th>{{ _("Forma Nomi") }}</th>
+            <th style="width:150px;">{{ _("Sana/Soat") }}</th>
+            <th style="width:110px;text-align:center;">{{ _("Amal") }}</th>
+            <th>{{ _("Tasdiqlovchi") }}</th>
+            <th>{{ _("Tasdiqlovchi Bo'lim") }}</th>
+            <th>{{ _("Tasdiq comment") }}</th>
+            <th style="width:150px;">{{ _("Tasdiq Sanasi/Vaqti") }}</th>
           </tr></thead>
           <tbody id="logs-tbody">
           {% for entry in entries %}
             <tr>
-              <td>{{ loop.index }}</td>
+              <td>{{ table_page.start_index + loop.index0 }}</td>
               <td>{{ display_name(entry.actor) }}</td>
               <td>{{ entry.actor_department.name if entry.actor_department else "" }}</td>
               <td><span class="fw-semibold">{{ entry.form_name }}</span><div class="muted small">{{ entry.record_label }}</div></td>
-              <td class="mono">{{ entry.created_at|date("Y-m-d H:i") }}</td>
+              <td class="mono">{{ entry.created_at|date("d/m/Y H:i") }}</td>
               <td style="text-align:center;"><span class="badge badge-soft">{{ entry.get_action_display() }}</span></td>
               {# The approval half. Empty cells, not labelled ones: an entry
                  nobody has decided has no approver, not an unknown one. #}
               <td>{% if entry.was_decided %}{{ display_name(entry.approver) }}{% endif %}</td>
               <td>{% if entry.was_decided and entry.approver_department %}{{ entry.approver_department.name }}{% endif %}</td>
               <td>{{ entry.approval_comment }}</td>
-              <td class="mono">{% if entry.was_decided %}{{ entry.approved_at|date("Y-m-d H:i") }}{% endif %}</td>
+              <td class="mono">{% if entry.was_decided %}{{ entry.approved_at|date("d/m/Y H:i") }}{% endif %}</td>
             </tr>
           {% else %}
-            <tr><td colspan="10" class="muted" style="text-align:center;">Log yozuvlari topilmadi.</td></tr>
+            <tr><td colspan="10" class="muted" style="text-align:center;">{{ _("Log yozuvlari topilmadi.") }}</td></tr>
           {% endfor %}
           </tbody>
         </table>
       </div>
+      {{ pagination_bar(table_page, url('xarid:logs')) }}
       <div class="panel-body footer-note">
-        Yozuvlar muddatsiz saqlanadi va tizim orqali tahrirlanmaydi yoki o'chirilmaydi (DEC-029).
+        {{ _("Yozuvlar muddatsiz saqlanadi va tizim orqali tahrirlanmaydi yoki o'chirilmaydi (DEC-029).") }}
       </div>
     </div>
 

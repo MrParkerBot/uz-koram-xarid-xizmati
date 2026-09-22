@@ -8,15 +8,22 @@ person may touch is decided per view where the page alone cannot say.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+import operator
+from collections.abc import Callable, Mapping, Sequence
+from datetime import datetime
+from dataclasses import dataclass
+from functools import reduce
+from typing import NamedTuple
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import AbstractBaseUser
+from django.contrib.auth.views import LoginView
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import F, Prefetch, QuerySet
+from django.db.models import F, Prefetch, Q, QuerySet
 from django.http import (
     FileResponse,
     Http404,
@@ -24,14 +31,20 @@ from django.http import (
     HttpResponse,
     HttpResponseForbidden,
 )
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
 
-from xarid.attachments import attachment_response
-from xarid.audit import record_created, record_decision, record_deleted, record_edited
+from xarid.attachments import attachment_name, attachment_response
+from xarid.audit import (
+    decisions_for,
+    record_created,
+    record_decision,
+    record_deleted,
+    record_edited,
+)
 from xarid.dashboard import (
     BY_DARAJA,
     DASHBOARD_TOP_SUPPLIERS,
@@ -44,6 +57,11 @@ from xarid.dashboard import (
     supplier_categories,
     top_suppliers,
 )
+from xarid.documents import (
+    application_response,
+    contract_response,
+    purchase_application_response,
+)
 from xarid.exports import ExportColumn, TableExport, export_response, lines_of, local_date
 from xarid.filters import (
     DateColumn,
@@ -52,7 +70,10 @@ from xarid.filters import (
     newest_and_oldest_first,
     report_invalid_filters,
 )
+from xarid.pagination import TablePage
 from xarid.forms import (
+    ContractEditForm,
+    ContractItemEditFormSet,
     SUGGESTED_UNITS,
     ApplicationForm,
     ApplicationItemFormSet,
@@ -76,11 +97,13 @@ from xarid.models import (
     BOLIM_BOSHLIGI,
     DIREKTOR,
     PAGE_SHOWING_CONTRACT,
+    USERS,
     Application,
     ApplicationItem,
     ArizaStatus,
     AuditEntry,
     Contract,
+    ContractComment,
     ContractItem,
     ContractStatusChange,
     Department,
@@ -100,17 +123,31 @@ from xarid.models import (
     department_of,
     has_user_type,
 )
-from xarid.notifications import tell_sender_of_acceptance, tell_sender_of_refusal
+from xarid.notifications import (
+    tell_head_of_status_change,
+    tell_holders_of_decision,
+    tell_thread_of_comment,
+    tell_of_contract_sent,
+    tell_requester_of_progress,
+    tell_sender_of_acceptance,
+    tell_sender_of_refusal,
+    tell_whoever_it_now_waits_for,
+)
 from xarid.permissions import (
     acts_on_own_work_only,
+    moves_status_on_tuzilgan,
     contract_editor,
     decides_on_contracts,
     first_page_for,
+    may_be_sent_to,
     grant_contract_editing,
     held_contract,
     may_open,
     own_contract_test,
+    reads_own_requests_only,
     revoke_contract_editing,
+    sees_own_approvals,
+    works_arrived_applications,
 )
 from xarid.reports import (
     category_purchasing,
@@ -122,6 +159,7 @@ from xarid.reports import (
 USERS_TEMPLATE = "xarid/pages/users.html"
 INCOMING_TEMPLATE = "xarid/pages/kelib-arizalar.html"
 ACCEPTED_TEMPLATE = "xarid/pages/qabul-arizalar.html"
+APPROVED_TEMPLATE = "xarid/pages/tasdiqlangan-arizalar.html"
 ASSIGNED_TEMPLATE = "xarid/pages/tayinlangan.html"
 AGREED_CONTRACTS_TEMPLATE = "xarid/pages/kelishinlingan.html"
 PURCHASE_TEMPLATE = "xarid/pages/xarid-ariza.html"
@@ -209,12 +247,16 @@ def top_suppliers_page(request: HttpRequest) -> HttpResponse:
     table_filter = top_suppliers_filter(request.GET)
     report_invalid_filters(request, table_filter)
 
+    ranking = top_suppliers(table_filter.period, table_filter.fields[0].selected)
+    table_page = TablePage(ranking, request.GET, kept=table_filter.selections)
+
     return render(
         request,
         TOP_SUPPLIERS_TEMPLATE,
         {
-            "ranking": top_suppliers(table_filter.period, table_filter.fields[0].selected),
+            "ranking": table_page.rows,
             "table_filter": table_filter,
+            "table_page": table_page,
         },
     )
 
@@ -280,17 +322,18 @@ def logs_page(request: HttpRequest) -> HttpResponse:
     """
     table_filter = TableFilter(LOGS_FILTERS, logged_events(), request.GET, date_column=LOGS_PERIOD)
     report_invalid_filters(request, table_filter)
-    # Evaluated once: the page prints the rows and how many of them there are,
-    # and counting them again would be a second pass over the same table.
-    entries = list(table_filter.apply())
+    # The page slices what it prints and counts the rest: the count beside the
+    # table is the whole filtered log, not the page of it being read.
+    table_page = TablePage(table_filter.apply(), request.GET, kept=table_filter.selections)
 
     return render(
         request,
         LOGS_TEMPLATE,
         {
-            "entries": entries,
-            "entry_count": len(entries),
+            "entries": table_page.rows,
+            "entry_count": table_page.total,
             "table_filter": table_filter,
+            "table_page": table_page,
         },
     )
 
@@ -332,7 +375,39 @@ def notifications_page(request: HttpRequest) -> HttpResponse:
         read_at=timezone.now()
     )
 
-    return render(request, NOTIFICATIONS_TEMPLATE, {"notifications": shown})
+    # Every one of them is marked read, and a page of them is shown: what the
+    # bell counts is what arrived, not what fitted on the first page.
+    table_page = TablePage(shown, request.GET)
+
+    return render(
+        request,
+        NOTIFICATIONS_TEMPLATE,
+        {"notifications": table_page.rows, "table_page": table_page},
+    )
+
+
+class SignInView(LoginView):
+    """The sign-in form, and where it lets somebody out.
+
+    Django sends a visitor to ?next= after they sign in, which is how a person
+    turned away from a page arrives back at it. The address is checked for
+    being this site's, and not for being a page this account may open - so one
+    person signing out of a page and another signing in on the same browser
+    lands the second one on the first one's page, and that is a 403 for
+    signing in correctly. That is the report this exists to answer.
+
+    A next nobody may open is dropped rather than obeyed, and they go where a
+    sign-in with no next goes: the first page their type may open.
+    """
+
+    redirect_authenticated_user = True
+
+    def get_success_url(self) -> str:
+        asked = self.get_redirect_url()
+        if asked and may_be_sent_to(self.request.user, asked):
+            return asked
+
+        return resolve_url(settings.LOGIN_REDIRECT_URL)
 
 
 @login_required
@@ -401,11 +476,17 @@ class MasterDataPage:
         form: MasterDataForm,
         edited_record: MasterDataRecord | None = None,
     ) -> HttpResponse:
+        # One page of the rows, for every master data table at once: they are
+        # lists an administrator adds to for as long as the application runs,
+        # and a hundred product types is a page nobody reads the end of.
+        table_page = TablePage(self.model.objects.active(), request.GET)
+
         return render(
             request,
             self.template_name,
             {
-                self.context_object_name: self.model.objects.active(),
+                self.context_object_name: table_page.rows,
+                "table_page": table_page,
                 "form": form,
                 "edited_record": edited_record,
             },
@@ -573,11 +654,14 @@ def render_users_page(
     form: UserAdministrationForm,
     edited_user_id: int | None = None,
 ) -> HttpResponse:
+    table_page = TablePage(listed_users(), request.GET)
+
     return render(
         request,
         USERS_TEMPLATE,
         {
-            "users": listed_users(),
+            "users": table_page.rows,
+            "table_page": table_page,
             "contract_editor": contract_editor(),
             "form": form,
             "edited_user_id": edited_user_id,
@@ -670,6 +754,26 @@ PAGE_SHOWING_STAGE: dict[str, str] = {
     Application.Stage.ASSIGNED: "tayinlangan",
 }
 
+
+def page_showing_application(
+    application: Application, user: AbstractBaseUser
+) -> str | None:
+    """Which page shows this application to this reader, or None.
+
+    The stage decides it, with one exception: qabul-arizalar is one page name
+    and two pages. To whoever approves rather than accepts, it is Tasdiqlangan
+    Arizalar - a table of purchase requests - so an accepted application is on
+    no page of theirs, and holding the page name is not having seen the row.
+    """
+    page_name = PAGE_SHOWING_STAGE.get(application.stage)
+
+    if page_name == PAGE_SHOWING_STAGE[Application.Stage.ACCEPTED] and sees_own_approvals(
+        user
+    ):
+        return None
+
+    return page_name
+
 # The four columns one order line is made of, named once so the creation
 # views and the line models cannot drift apart.
 ORDER_LINE_FIELDS = ("mahsulot_turi", "buyurtma_nomi", "buyurtma_soni", "olchov_birligi")
@@ -696,6 +800,24 @@ BY_SPECIALIST = FilterColumn(
 )
 BY_STATUS = FilterColumn("holat", "Holati", "status_id", ("status__name",))
 
+# What became of a request this head approved, and who had asked for it. The
+# stage is a code rather than a name, so the drop-down is given the words the
+# table prints instead of "awaiting_direktor".
+BY_CHAIN_STAGE = FilterColumn(
+    "bosqich",
+    "Holati",
+    "stage",
+    ("stage",),
+    option_labels=dict(PurchaseApplication.Stage.choices),
+)
+BY_REQUESTER = FilterColumn(
+    "buyurtmachi",
+    "Buyurtmachi",
+    "created_by_id",
+    ("created_by__first_name", "created_by__last_name"),
+    label_fallback_lookup="created_by__username",
+)
+
 # The Mahsulotlar report filters rows that are order lines rather than
 # applications, so the same two columns are reached by a different path. The
 # parameter names are the page's contract: the Bo`limlar report already links
@@ -715,28 +837,64 @@ BY_LINE_CATEGORY = FilterColumn(
 )
 BY_SUPPLIER = FilterColumn("firma", "Firma", "supplier_id", ("supplier__name",))
 
+# Tuzilgan Shartnomalar reaches an application's department across the
+# contract, and narrows by the decision the page exists to take: a contract
+# here is either waiting for one or has had one, and "what is waiting for me"
+# is the first question its reader asks. The stage is a code rather than a
+# name, so the drop-down is given the words the page prints.
+BY_CONTRACT_DEPARTMENT = FilterColumn(
+    "bolim",
+    "Bo'lim",
+    "application__department_id",
+    ("application__department__name",),
+)
+BY_DECISION = FilterColumn(
+    "qaror",
+    "Qaror",
+    "stage",
+    ("stage",),
+    option_labels=dict(Contract.Stage.choices),
+)
+
 # The period each list page narrows by and the ordering its drop-down offers
 # (REQ-YUKLAMA-001). Each page names the date it already shows in a column,
 # and orders by that same date so the drop-down reorders what is on screen.
-INCOMING_PERIOD = DateColumn("Kelib tushgan sana", "kelib_tushgan_sana")
-INCOMING_SORTS = newest_and_oldest_first(INCOMING_PERIOD.lookup)
 ACCEPTED_PERIOD = DateColumn("Qabul qilingan sana", "qabul_qilingan_sana")
 ACCEPTED_SORTS = newest_and_oldest_first(ACCEPTED_PERIOD.lookup)
 ASSIGNED_PERIOD = DateColumn("Tayinlangan sana", "tayinlangan_sana")
 ASSIGNED_SORTS = newest_and_oldest_first(ASSIGNED_PERIOD.lookup)
 CONTRACT_PERIOD = DateColumn("Yaratilgan sana", "yaratilingan_sana")
 CONTRACT_SORTS = newest_and_oldest_first(CONTRACT_PERIOD.lookup)
+# Tuzilgan shows when a contract was sent rather than when it was drawn up,
+# and narrows and orders by that same date, as every page narrows by the date
+# it prints.
+SIGNED_PERIOD = DateColumn("Yuborilgan sana", "yuborilgan_sana")
+SIGNED_SORTS = newest_and_oldest_first(SIGNED_PERIOD.lookup)
 PURCHASE_PERIOD = DateColumn("Yaratilgan sana", "yaratilingan_sana")
+APPROVED_PERIOD = DateColumn("Tasdiqlangan sana", "bolim_boshligi_sanasi")
+# The same page read by a Direktor narrows by their own step of the chain:
+# every request they approved carries the head's date too, and narrowing by
+# that one would answer a question they did not ask.
+DIREKTOR_APPROVED_PERIOD = DateColumn("Tasdiqlangan sana", "direktor_sanasi")
 # The Mahsulotlar report narrows by the date its line's application
 # arrived, the one date every line has.
 PRODUCTS_PERIOD = DateColumn("Kelib tushgan sana", "application__kelib_tushgan_sana")
 PURCHASE_SORTS = newest_and_oldest_first(PURCHASE_PERIOD.lookup)
+APPROVED_SORTS = newest_and_oldest_first(APPROVED_PERIOD.lookup)
+DIREKTOR_APPROVED_SORTS = newest_and_oldest_first(DIREKTOR_APPROVED_PERIOD.lookup)
 
 INCOMING_FILTERS = (BY_DEPARTMENT, BY_ORDERED_CATEGORY)
 ACCEPTED_FILTERS = (BY_DEPARTMENT, BY_SPECIALIST)
 ASSIGNED_FILTERS = (BY_DEPARTMENT, BY_STATUS)
 CONTRACT_FILTERS = (BY_SUPPLIER,)
+SIGNED_FILTERS = (BY_DECISION, BY_CONTRACT_DEPARTMENT, BY_SUPPLIER, BY_STATUS)
 PURCHASE_FILTERS = (BY_ORDERED_CATEGORY,)
+# No Bo`lim filter: a head only ever approves their own department's.
+APPROVED_FILTERS = (BY_CHAIN_STAGE, BY_REQUESTER, BY_ORDERED_CATEGORY)
+# And no Holati filter for a Direktor: theirs is the chain's last approval,
+# so every row of their table is approved and the choice would offer a reader
+# two ways of emptying it.
+DIREKTOR_APPROVED_FILTERS = (BY_REQUESTER, BY_ORDERED_CATEGORY)
 PRODUCTS_FILTERS = (BY_LINE_DEPARTMENT, BY_LINE_CATEGORY)
 
 
@@ -750,22 +908,17 @@ def filled_in_rows(formset, fields: tuple[str, ...]) -> list[dict[str, object]]:
     return [
         {field: row.cleaned_data[field] for field in fields}
         for row in formset.forms
-        if row.cleaned_data
+        # DELETE is only on the editing formset, where a row is removed by
+        # being ticked rather than by being emptied. An emptied row of that
+        # formset fails its required fields instead of going away, which is
+        # why the tick exists.
+        if row.cleaned_data and not row.cleaned_data.get("DELETE")
     ]
 
 
 def application_lines() -> Prefetch:
     """The order lines of an application, with the category each names."""
     return Prefetch("items", queryset=ApplicationItem.objects.select_related("mahsulot_turi"))
-
-
-def incoming_applications() -> QuerySet[Application]:
-    """The applications still waiting to be accepted or rejected."""
-    return (
-        Application.objects.filter(stage=Application.Stage.INCOMING)
-        .select_related("department")
-        .prefetch_related(application_lines())
-    )
 
 
 def accepted_applications() -> QuerySet[Application]:
@@ -809,21 +962,125 @@ def all_assigned_applications() -> QuerySet[Application]:
 
 
 def incoming_list(request: HttpRequest) -> HttpResponse:
-    """The table of applications that have arrived and not been decided."""
+    """One table: every purchase request standing at this person's step.
+
+    A request moves along the chain rather than off the page - from the
+    department head to the Direktor to the purchasing department - so the
+    page's one table answers "what is waiting for me" whoever is asking.
+    """
     table_filter = TableFilter(
         INCOMING_FILTERS,
-        incoming_applications(),
+        approvals_for(request.user),
         request.GET,
-        date_column=INCOMING_PERIOD,
-        sort_choices=INCOMING_SORTS,
+        date_column=PURCHASE_PERIOD,
+        sort_choices=PURCHASE_SORTS,
     )
     report_invalid_filters(request, table_filter)
+    table_page = TablePage(table_filter.apply(), request.GET, kept=table_filter.selections)
+    queue = table_page.rows
 
     return render(
         request,
         INCOMING_TEMPLATE,
-        {"applications": table_filter.apply(), "table_filter": table_filter},
+        {
+            "queue": queue,
+            "table_filter": table_filter,
+            "table_page": table_page,
+            "step_of": queue_step_of,
+            # What the Izoh column's panel shows: every step of the DEC-016
+            # chain already taken, which only the log kept. A request standing
+            # at the Direktor carries the head's words with it, so whoever
+            # decides next reads why it got this far.
+            "decisions": decisions_for(queue),
+        },
     )
+
+
+@dataclass(frozen=True)
+class ApprovalStep:
+    """One of DEC-016's two approvals, read from the side of who took it.
+
+    Tasdiqlangan Arizalar is one page for both: a Bo`lim Boshlig`i reads the
+    requests they let through the first step, a Direktor the ones they let
+    through the second. What differs is which column records the approval,
+    which date is theirs, and - since the Direktor's is the chain's last -
+    whether a Holati filter has anything to narrow.
+
+    Attributes:
+        approver_field: the column holding who took this step.
+        role: what to call them on the page they read.
+    """
+
+    approver_field: str
+    role: str
+    period: DateColumn
+    sorts: tuple
+    filters: tuple
+
+
+HEAD_APPROVAL = ApprovalStep(
+    approver_field="tasdiqlagan_bolim_boshligi",
+    role="Bo`lim Boshlig`i",
+    period=APPROVED_PERIOD,
+    sorts=APPROVED_SORTS,
+    filters=APPROVED_FILTERS,
+)
+DIREKTOR_APPROVAL = ApprovalStep(
+    approver_field="tasdiqlagan_direktor",
+    role="Direktor",
+    period=DIREKTOR_APPROVED_PERIOD,
+    sorts=DIREKTOR_APPROVED_SORTS,
+    filters=DIREKTOR_APPROVED_FILTERS,
+)
+
+
+def approval_step_of(user: AbstractBaseUser) -> ApprovalStep:
+    """Which approval of the chain this reader takes."""
+    if has_user_type(user, (DIREKTOR,)):
+        return DIREKTOR_APPROVAL
+
+    return HEAD_APPROVAL
+
+
+def approved_by(user: AbstractBaseUser, step: ApprovalStep) -> QuerySet[PurchaseApplication]:
+    """The purchase requests this person approved (REQ-ARIZA-016).
+
+    Every one they let through, whatever became of it afterwards: a request
+    the Direktor went on to refuse is still one its head approved, and a
+    list that quietly dropped it would be a record of the outcome rather
+    than of what they did.
+
+    The date of their own step is annotated as tasdiqlagan_sana, so the
+    table and the export read one name whichever step is being read.
+    """
+    return (
+        PurchaseApplication.objects.filter(**{step.approver_field: user})
+        .annotate(tasdiqlagan_sana=F(step.period.lookup))
+        .select_related("department", "status", "created_by", "raised_application")
+        .prefetch_related(purchase_lines())
+    )
+
+
+def approved_page(user: AbstractBaseUser, chosen_filters: Mapping[str, str]) -> dict[str, object]:
+    """Everything Tasdiqlangan Arizalar renders."""
+    step = approval_step_of(user)
+    table_filter = TableFilter(
+        step.filters,
+        approved_by(user, step),
+        chosen_filters,
+        date_column=step.period,
+        sort_choices=step.sorts,
+    )
+    table_page = TablePage(table_filter.apply(), chosen_filters, kept=table_filter.selections)
+    applications = table_page.rows
+
+    return {
+        "applications": applications,
+        "table_filter": table_filter,
+        "table_page": table_page,
+        "decisions": decisions_for(applications),
+        "approver_role": step.role,
+    }
 
 
 def accepted_page(
@@ -845,9 +1102,16 @@ def accepted_page(
         date_column=ACCEPTED_PERIOD,
         sort_choices=ACCEPTED_SORTS,
     )
+    table_page = TablePage(table_filter.apply(), chosen_filters, kept=table_filter.selections)
+    applications = table_page.rows
+
     return {
-        "applications": table_filter.apply(),
+        "applications": applications,
         "table_filter": table_filter,
+        "table_page": table_page,
+        # What the Izoh column's panel shows: who accepted the application and
+        # who refused one, which only the log kept.
+        "decisions": decisions_for(applications),
         "form": form if form is not None else ApplicationForm(),
         "item_formset": (
             items
@@ -860,7 +1124,18 @@ def accepted_page(
 
 
 def accepted_list(request: HttpRequest) -> HttpResponse:
-    """The Qabul qilingan Arizalar table and the creation form (REQ-ARIZA-006)."""
+    """The Qabul qilingan Arizalar table and the creation form (REQ-ARIZA-006).
+
+    One page name, two pages. A Bo`lim Boshlig`i outside the purchasing
+    department has nothing to accept and reads their own approvals here
+    instead, under the name that describes them.
+    """
+    if sees_own_approvals(request.user):
+        page_context = approved_page(request.user, request.GET)
+        report_invalid_filters(request, page_context["table_filter"])
+
+        return render(request, APPROVED_TEMPLATE, page_context)
+
     page_context = accepted_page(request.GET)
     report_invalid_filters(request, page_context["table_filter"])
 
@@ -916,14 +1191,19 @@ def assigned_list(request: HttpRequest) -> HttpResponse:
         sort_choices=ASSIGNED_SORTS,
     )
     report_invalid_filters(request, table_filter)
+    table_page = TablePage(table_filter.apply(), request.GET, kept=table_filter.selections)
 
     return render(
         request,
         ASSIGNED_TEMPLATE,
         {
-            "applications": table_filter.apply(),
+            "applications": table_page.rows,
             "table_filter": table_filter,
+            "table_page": table_page,
             "shows_the_holder": not own_work_only,
+            # The two halves of the same rule: whoever hands the work out
+            # reads the status, and whoever does it says what it is.
+            "may_set_status": own_work_only,
             "statuses": ArizaStatus.objects.active(),
         },
     )
@@ -950,7 +1230,7 @@ def accept_assigned_application(request: HttpRequest, pk: int) -> HttpResponse:
     """The holder takes the work assigned to them (REQ-ARIZA-013).
 
     Recorded against the holder rather than whoever pressed the button, and
-    Admin is told inside the same transaction.
+    the people who handed it out are told inside the same transaction.
     """
     application = held_application(request, pk)
 
@@ -958,7 +1238,7 @@ def accept_assigned_application(request: HttpRequest, pk: int) -> HttpResponse:
         with transaction.atomic():
             taken = application.accept_as_specialist(by=application.assigned_to)
             if taken:
-                Notification.tell_admins_of_acceptance(application)
+                Notification.tell_of_specialist_acceptance(application)
     except ValueError:
         messages.error(
             request, f"{application.ariza_raqami} qabul qilinmadi: ariza tayinlanmagan."
@@ -976,8 +1256,23 @@ def accept_assigned_application(request: HttpRequest, pk: int) -> HttpResponse:
 
 @require_POST
 def set_application_status(request: HttpRequest, pk: int) -> HttpResponse:
-    """Mark the state an assigned application is currently in (REQ-ARIZA-013)."""
+    """Mark the state an assigned application is currently in (REQ-ARIZA-013).
+
+    The holder's to say and nobody else's. Xarid bo`limi's head hands the
+    work out and reads the column to see where it has got to; how far it has
+    got is known to whoever is doing it, so the page shows them a badge and
+    the specialist a drop-down. Asked here as well as in the template,
+    because a control that is not drawn is not a control that cannot be
+    posted to.
+    """
     application = held_application(request, pk)
+
+    if not acts_on_own_work_only(request.user):
+        raise PermissionDenied(
+            f"{request.user} does not do the work on {application.ariza_raqami}, "
+            "so its status is not theirs to set."
+        )
+
     chosen = request.POST.get("status")
     status = (
         ArizaStatus.objects.filter(pk=int(chosen), is_active=True).first()
@@ -1010,26 +1305,50 @@ def set_application_status(request: HttpRequest, pk: int) -> HttpResponse:
     return redirect("xarid:tayinlangan")
 
 
-@login_required
-def application_pdf(request: HttpRequest, pk: int) -> FileResponse:
-    """Download one application's PDF (DEC-019).
+def readable_application(request: HttpRequest, pk: int) -> Application:
+    """The application whose documents this person may download (DEC-019).
 
-    Asks the permission matrix about the page that currently shows the
-    application, so the attachment stops being reachable at the same moment
-    the row stops being visible.
+    Asks the permission matrix about the page that currently shows it, so a
+    document stops being reachable at the same moment the row stops being
+    visible.
 
     Raises:
         PermissionDenied: when the caller may not open the page this
             application is on, or the application is at a stage no page shows.
-        Http404: when the application does not exist or has no attachment.
+        Http404: when there is no such application.
     """
     application = get_object_or_404(Application, pk=pk)
 
-    page_name = PAGE_SHOWING_STAGE.get(application.stage)
+    page_name = page_showing_application(application, request.user)
     if page_name is None or not may_open(request.user, page_name):
         raise PermissionDenied(f"{request.user} may not see {application.ariza_raqami}.")
 
-    return attachment_response(application.pdf, f"{application.ariza_raqami}.pdf")
+    return application
+
+
+@login_required
+def application_pdf(request: HttpRequest, pk: int) -> FileResponse:
+    """Download one application's attachment as it was uploaded (DEC-019).
+
+    Raises:
+        Http404: when the application does not exist or has no attachment.
+    """
+    application = readable_application(request, pk)
+
+    return attachment_response(application.pdf, attachment_name(application.ariza_raqami))
+
+
+@login_required
+def application_document(request: HttpRequest, pk: int) -> HttpResponse:
+    """Download the application itself as a PDF, drawn from the record.
+
+    The Ariza PDF column beside the Ilova PDF one: the attachment is what
+    arrived with the request, and this is what the department knows, so a row
+    is readable on paper even when nothing was ever attached to it.
+    """
+    application = readable_application(request, pk)
+
+    return application_response(application)
 
 
 @require_POST
@@ -1146,6 +1465,109 @@ def assign_application(request: HttpRequest, pk: int) -> HttpResponse:
 # ---------------------------------------------------------------------------
 
 
+CONTRACT_DETAIL_TEMPLATE = "xarid/_shartnoma_tafsilot.html"
+
+# Which contract page shows a contract at each stage. The Ko`rish dialog and
+# the attachment behind it are readable exactly while the row is, which is
+# the rule readable_application() follows for the other half of the workflow.
+PAGE_SHOWING_CONTRACT_STAGE = {
+    Contract.Stage.AGREED: "kelishinlingan",
+    Contract.Stage.REJECTED: "kelishinlingan",
+    Contract.Stage.SENT: "tuzilgan",
+    Contract.Stage.SIGNED: "tuzilgan",
+}
+
+
+def readable_contract(request: HttpRequest, pk: int) -> Contract:
+    """The contract this person may read the details of.
+
+    Asked through the page that currently shows it rather than through a
+    page permission named here: a contract moves between the two tables, and
+    a check naming one of them would answer the wrong question the moment it
+    moved.
+
+    Raises:
+        PermissionDenied: when the caller may not open the page this contract
+            is on.
+        Http404: when there is no such contract.
+    """
+    contract = get_object_or_404(
+        Contract.all_objects.select_related(
+            "application", "application__department", "supplier", "created_by"
+        ).prefetch_related("items"),
+        pk=pk,
+    )
+
+    # A deleted contract is on one page and one only, whatever stage it was
+    # deleted at: O`chirilgan Shartnomalar draws Ko`rish beside Tiklash, so
+    # an Admin can read a contract in full before putting it back.
+    page_name = (
+        "ochirilgan-shartnomalar"
+        if contract.is_deleted
+        else PAGE_SHOWING_CONTRACT_STAGE.get(contract.stage)
+    )
+    if page_name is None or not may_open(request.user, page_name):
+        raise PermissionDenied(f"{request.user} may not see {contract.shartnoma_raqami}.")
+
+    return contract
+
+
+@login_required
+def contract_detail(request: HttpRequest, pk: int) -> HttpResponse:
+    """One contract's details, as the fragment the Ko`rish dialog shows.
+
+    A fragment and not a page: the two contract tables fetch it when the
+    button is pressed, so each page carries one dialog rather than one per
+    row.
+    """
+    contract = readable_contract(request, pk)
+
+    return render(
+        request,
+        CONTRACT_DETAIL_TEMPLATE,
+        {"shartnoma": contract, "qatorlar": list(contract.items.all())},
+    )
+
+
+@login_required
+def contract_pdf(request: HttpRequest, pk: int) -> FileResponse:
+    """Download the contract's attachment as it was uploaded (DEC-019).
+
+    Raises:
+        Http404: when the contract has no attachment. Every contract entered
+            since TASK-UZK-036A has one; the ones before it do not, and the
+            dialog draws no button for those.
+    """
+    contract = readable_contract(request, pk)
+
+    return attachment_response(contract.pdf, attachment_name(contract.shartnoma_raqami))
+
+
+@login_required
+def contract_document(request: HttpRequest, pk: int) -> HttpResponse:
+    """Download the contract itself as a PDF, drawn from the record.
+
+    The Shartnoma PDF beside the Shartnoma Ilova: the attachment is the
+    document the department drew up, and this is what the application knows
+    about it - the terms, the priced goods and the signature that settled it.
+
+    Only once it is settled. A contract still waiting for a decision has no
+    signature to print, and a sheet that looked like a contract while nobody
+    had agreed to it is the one document this must never hand over. The
+    control is drawn muted in that case, and this answers the same thing to
+    anybody who asks for the URL anyway.
+
+    Raises:
+        Http404: when there is no such contract, or it has not been approved.
+    """
+    contract = readable_contract(request, pk)
+
+    if not contract.is_signed:
+        raise Http404(f"{contract.shartnoma_raqami} hali tasdiqlanmagan.")
+
+    return contract_response(contract)
+
+
 def agreed_contracts() -> QuerySet[Contract]:
     """The contracts on the Kelishinlingan page: agreed ones and rejected ones.
 
@@ -1181,6 +1603,14 @@ def contractable_applications(user: AbstractBaseUser) -> QuerySet[Application]:
 
     A Katta Mutaxasis forms a contract on the basis of the application
     assigned to them (REQ-ROLE-007); everybody else sees all assigned ones.
+    An application that already has a contract stays on the list: a second
+    one against the same request is the department's business, not this
+    function's.
+
+    The suggestions and the POST are the same queryset, so a number this
+    leaves out cannot be submitted either - the field matches what is typed
+    against these rows and nothing else, which is what keeps a specialist
+    from contracting against somebody else's work by typing its number.
     """
     applications = (
         Application.objects.filter(stage=Application.Stage.ASSIGNED)
@@ -1194,13 +1624,165 @@ def contractable_applications(user: AbstractBaseUser) -> QuerySet[Application]:
     return applications
 
 
+class Suggestion(NamedTuple):
+    """One row of a type-ahead list.
+
+    Attributes:
+        value: what typing is matched against, and what lands in the box.
+        description: what the value is recognised by, shown beside it.
+        detail: a fact the page needs about the chosen row and the reader
+            does not, such as the INN a chosen firm fills in. Empty when
+            there is none.
+    """
+
+    value: str
+    description: str
+    detail: str = ""
+
+
+def application_suggestions(form: ContractForm) -> list[Suggestion]:
+    """What the Ariza raqami box offers: each number, and what it is known by.
+
+    Read off the form's own field rather than gathered separately, so the
+    list somebody is shown and the list their typing is matched against
+    cannot come apart.
+    """
+    field = form.fields["application"]
+
+    return [
+        Suggestion(application.ariza_raqami, field.describe(application))
+        for application in field.queryset
+    ]
+
+
+def supplier_suggestions(form: ContractForm) -> list[Suggestion]:
+    """What the Firma nomi box offers: each firm, with the INN it carries.
+
+    The INN rides along as the detail rather than being fetched again when
+    one is chosen (DEC-011): the page fills its read-only box from the row
+    the reader picked, so the two can never be of different firms.
+    """
+    field = form.fields["supplier"]
+
+    return [
+        Suggestion(supplier.name, field.describe(supplier), supplier.inn)
+        for supplier in field.queryset
+    ]
+
+
+class ContractNote(NamedTuple):
+    """One thing written about a contract, whatever wrote it.
+
+    Attributes:
+        by: who wrote it. None only where a record somehow has no author.
+        text: what they wrote.
+        act: what the writing belongs to - entering the contract, deciding
+            on it, or saying something about it. A comment without its act
+            reads as an opinion rather than as a decision.
+        badge: the class that act is drawn with.
+        at: when, which is what the thread is ordered by.
+    """
+
+    by: AbstractBaseUser | None
+    text: str
+    act: str
+    badge: str
+    at: datetime
+
+
+# What each kind of written text is called in the drawer, and how it looks.
+NOTE_ENTERED = ("Kiritdi", "badge-soft")
+NOTE_APPROVED = ("Tasdiqladi", "badge-approved")
+NOTE_REJECTED = ("Inkor etdi", "badge-danger")
+NOTE_COMMENT = ("Izoh", "badge-primary")
+
+
+def contract_notes(contracts: Sequence[Contract]) -> dict[int, list[ContractNote]]:
+    """Everything written about these contracts, oldest first, by contract id.
+
+    Three sources in one thread: the note typed on the contract form, the
+    reason each decision carried, and the comments people have added. They
+    are one list because a reader wants the contract's story in order, not
+    three lists to interleave by eye.
+
+    Two queries for the whole page whatever the number of rows, which is
+    what decisions_for() exists for and what the comments are fetched in
+    one go for.
+    """
+    contracts = list(contracts)
+    if not contracts:
+        return {}
+
+    decisions = decisions_for(contracts)
+    threads: dict[int, list[ContractNote]] = {}
+
+    for contract in contracts:
+        notes = []
+        if contract.izoh:
+            notes.append(
+                ContractNote(
+                    contract.created_by,
+                    contract.izoh,
+                    *NOTE_ENTERED,
+                    contract.yaratilingan_sana,
+                )
+            )
+        for decision in decisions.get(contract.pk, []):
+            act = NOTE_APPROVED if decision.approved else NOTE_REJECTED
+            notes.append(
+                ContractNote(decision.by, decision.comment, *act, decision.at)
+            )
+        threads[contract.pk] = notes
+
+    written = ContractComment.objects.filter(
+        contract_id__in=threads
+    ).select_related("author")
+    for comment in written:
+        threads[comment.contract_id].append(
+            ContractNote(
+                comment.author, comment.matn, *NOTE_COMMENT, comment.created_at
+            )
+        )
+
+    for notes in threads.values():
+        notes.sort(key=lambda note: note.at)
+
+    return threads
+
+
+def opened_thread(chosen_filters: Mapping[str, str] | None) -> int | None:
+    """The contract whose comment drawer should already be open, or None.
+
+    Posting a comment reloads the page, and a reader put back at the top of
+    a table they were reading a thread in has lost their place. The comment
+    action redirects with the contract in the query string, and this reads
+    it back.
+    """
+    asked = (chosen_filters or {}).get("izoh")
+
+    return int(asked) if asked and str(asked).isdigit() else None
+
+
 def contract_page(
     user: AbstractBaseUser,
     chosen_filters: Mapping[str, str] | None = None,
     form: ContractForm | None = None,
     items: ContractItemFormSet | None = None,
+    editing: Contract | None = None,
 ) -> dict[str, object]:
-    """Everything the Kelishinlingan Shartnoma page renders."""
+    """Everything the Kelishinlingan Shartnoma page renders.
+
+    Args:
+        user: who is looking, which decides what is theirs to act on.
+        chosen_filters: the query string the table is narrowed by.
+        form: a form to render in place of an empty one - a submission that
+            came back with errors, or a contract opened for editing.
+        items: its rows, likewise.
+        editing: the contract that form belongs to, when it is an edit. It
+            opens the same dialog Shartnoma Kiritish opens, pointed at the
+            edit action: TASK-UZK-065 asks for one way of filling a contract
+            in, not two that drift apart.
+    """
     table_filter = TableFilter(
         CONTRACT_FILTERS,
         agreed_contracts(),
@@ -1208,24 +1790,55 @@ def contract_page(
         date_column=CONTRACT_PERIOD,
         sort_choices=CONTRACT_SORTS,
     )
+    contract_form = (
+        form if form is not None else ContractForm(applications=contractable_applications(user))
+    )
+
+    # A page of them, as a list: the page walks it twice - once for the table
+    # and once for the drawers behind it - and the notes are read from it. A
+    # drawer is built per row drawn, so paging the table pages them too.
+    table_page = TablePage(table_filter.apply(), chosen_filters, kept=table_filter.selections)
+    contracts = list(table_page.rows)
+
     return {
-        "contracts": table_filter.apply(),
+        "contracts": contracts,
         "table_filter": table_filter,
+        "table_page": table_page,
         "shartnoma_statuslari": ShartnomaStatus.objects.active(),
         "is_own_contract": own_contract_test(user),
-        "form": (
-            form
-            if form is not None
-            else ContractForm(applications=contractable_applications(user))
-        ),
+        "contract_notes": contract_notes(contracts),
+        "opened_thread": opened_thread(chosen_filters),
+        "form": contract_form,
+        "ariza_suggestions": application_suggestions(contract_form),
+        "firma_suggestions": supplier_suggestions(contract_form),
         "item_formset": (
             items
             if items is not None
             else ContractItemFormSet(queryset=ContractItem.objects.none())
         ),
         "open_form": form is not None,
+        # What the dialog is for. The form partial reads it to decide the two
+        # read-only boxes at the top, and the page to decide where the form
+        # posts and what its buttons say.
+        "shartnoma": editing,
         "suggested_units": SUGGESTED_UNITS,
     }
+
+
+# The contract columns an edit may change. The attachment is not among
+# them: it is only written when a new file was chosen, so that an empty box
+# keeps the one on record rather than clearing it.
+CONTRACT_EDITABLE_COLUMNS = (
+    "application",
+    "supplier",
+    "shartnoma_turi",
+    "status",
+    "shartnoma_sanasi",
+    "tolash_muddati",
+    "muddat_talabi",
+    "invoice_sanasi",
+    "izoh",
+)
 
 
 def agreed_contracts_list(request: HttpRequest) -> HttpResponse:
@@ -1311,27 +1924,85 @@ def purchase_applications() -> QuerySet[PurchaseApplication]:
     )
 
 
-def approvals_for(user: AbstractBaseUser) -> QuerySet[PurchaseApplication]:
-    """The purchase requests waiting for this person to decide (DEC-016).
+def visible_purchase_applications(
+    user: AbstractBaseUser | None,
+) -> QuerySet[PurchaseApplication]:
+    """The purchase requests this person reads on Xarid Arizasi.
 
-    A Bo`lim Boshlig`i sees the first step from their own department only; a
-    Direktor sees the second step from anywhere; everybody else sees none.
+    Everybody reads the ones they raised and nobody else's: this is the page
+    a request is raised on and followed from, and the approvers' other two
+    pages carry the requests they decide and have decided. An Admin reads all
+    of them, being the one account that maintains the rest.
+
+    Applied to the query rather than to the template, so the rows somebody
+    may not see are never fetched, exported or counted.
     """
-    waiting = PurchaseApplication.objects.select_related(
-        "department", "status", "created_by"
+    applications = purchase_applications()
+    if reads_own_requests_only(user):
+        return applications.filter(created_by=user)
+
+    return applications
+
+
+def approvals_for(user: AbstractBaseUser) -> QuerySet[PurchaseApplication]:
+    """Every purchase request standing at this person's step of the chain.
+
+    Three steps, one table (DEC-016). The requester's own Bo`lim Boshlig`i
+    first, then any Direktor, and then the purchasing department, which takes
+    an approved request up as the application it raised. Whoever is waited
+    for sees what waits for them and nothing else.
+
+    The third step is what Kelib Tushgan Arizalar used to list separately as
+    arrived applications: the same records at the same moment of their life,
+    read through the request they came from so that one table can carry the
+    whole chain.
+
+    Somebody at none of the steps - a requester, a Katta Mutaxasis - gets an
+    empty queue rather than the whole of it.
+    """
+    queue = PurchaseApplication.objects.select_related(
+        "department", "status", "created_by", "raised_application"
     ).prefetch_related(purchase_lines())
+
+    steps: list[Q] = []
 
     if has_user_type(user, (BOLIM_BOSHLIGI,)):
         department = department_of(user)
-        if department is None:
-            return waiting.none()
-
-        return waiting.filter(stage=PurchaseApplication.Stage.AWAITING_HEAD, department=department)
+        if department is not None:
+            steps.append(
+                Q(stage=PurchaseApplication.Stage.AWAITING_HEAD, department=department)
+            )
 
     if has_user_type(user, (DIREKTOR,)):
-        return waiting.filter(stage=PurchaseApplication.Stage.AWAITING_DIREKTOR)
+        steps.append(Q(stage=PurchaseApplication.Stage.AWAITING_DIREKTOR))
 
-    return waiting.none()
+    if works_arrived_applications(user):
+        steps.append(
+            Q(
+                stage=PurchaseApplication.Stage.APPROVED,
+                raised_application__stage=Application.Stage.INCOMING,
+            )
+        )
+
+    if not steps:
+        return queue.none()
+
+    return queue.filter(reduce(operator.or_, steps))
+
+
+def queue_step_of(application: PurchaseApplication) -> str:
+    """Which of the chain's three steps this row is standing at.
+
+    A word for the column rather than the stage's own label: the table is a
+    list of things waiting for somebody, and what a reader needs is who.
+    """
+    if application.stage == PurchaseApplication.Stage.AWAITING_HEAD:
+        return "Bo`lim boshlig`i"
+
+    if application.stage == PurchaseApplication.Stage.AWAITING_DIREKTOR:
+        return "Direktor"
+
+    return "Xarid bo`limi"
 
 
 def awaiting_approval(request: HttpRequest, pk: int) -> PurchaseApplication:
@@ -1362,10 +2033,12 @@ def approve_purchase_application(request: HttpRequest, pk: int) -> HttpResponse:
         approved = application.approve(by=request.user)
     except ValueError:
         messages.info(request, f"{application.xarid_raqami} allaqachon hal qilingan.")
-        return redirect("xarid:xarid-ariza")
+        return redirect("xarid:kelib-arizalar")
 
     if approved:
         record_decision(request.user, application, approved=True)
+        tell_requester_of_progress(application)
+        tell_whoever_it_now_waits_for(application)
 
     if approved and application.stage == PurchaseApplication.Stage.APPROVED:
         messages.success(
@@ -1380,7 +2053,7 @@ def approve_purchase_application(request: HttpRequest, pk: int) -> HttpResponse:
     else:
         messages.info(request, f"{application.xarid_raqami} allaqachon tasdiqlangan.")
 
-    return redirect("xarid:xarid-ariza")
+    return redirect("xarid:kelib-arizalar")
 
 
 @require_POST
@@ -1399,7 +2072,7 @@ def reject_purchase_application(request: HttpRequest, pk: int) -> HttpResponse:
                 f"{application.xarid_raqami} inkor etilmadi: izoh kiritilishi shart.",
             )
 
-        return redirect("xarid:xarid-ariza")
+        return redirect("xarid:kelib-arizalar")
 
     if rejected:
         record_decision(
@@ -1412,12 +2085,11 @@ def reject_purchase_application(request: HttpRequest, pk: int) -> HttpResponse:
     else:
         messages.info(request, f"{application.xarid_raqami} allaqachon inkor etilgan.")
 
-    return redirect("xarid:xarid-ariza")
+    return redirect("xarid:kelib-arizalar")
 
 
 def purchase_page(
     signed_in_department: Department | None = None,
-    approvals: QuerySet[PurchaseApplication] | None = None,
     chosen_filters: Mapping[str, str] | None = None,
     form: PurchaseApplicationForm | None = None,
     items: PurchaseApplicationItemFormSet | None = None,
@@ -1425,22 +2097,33 @@ def purchase_page(
 ) -> dict[str, object]:
     """Everything the Xarid Arizasi page renders.
 
+    The page a request is raised on and tracked from. Deciding one happens on
+    Kelib Tushgan Arizalar instead: a request waiting for somebody belongs on
+    the page they work, beside the applications that came through the same
+    chain, rather than on the page it was typed into.
+
     Args:
-        viewer: who is reading it, which decides whether the status cell may
-            name the contract a state came from.
+        viewer: who is reading it, which decides which requests the table
+            holds and whether the status cell may name the contract a state
+            came from.
     """
     table_filter = TableFilter(
         PURCHASE_FILTERS,
-        purchase_applications(),
+        visible_purchase_applications(viewer),
         chosen_filters,
         date_column=PURCHASE_PERIOD,
         sort_choices=PURCHASE_SORTS,
     )
+    table_page = TablePage(table_filter.apply(), chosen_filters, kept=table_filter.selections)
+    applications = list(table_page.rows)
     return {
-        "applications": table_filter.apply(),
+        "applications": applications,
         "table_filter": table_filter,
+        "table_page": table_page,
         "signed_in_department": signed_in_department,
-        "approvals": approvals,
+        # What the Izoh column's panel shows: every step of the DEC-016 chain
+        # in the order it was taken, which only the log kept.
+        "decisions": decisions_for(applications),
         # Whether this viewer may be told which contract a status came from.
         # DEC-015 gives Users this page and no contract page at all, so the
         # explanation must not hand them a fact from a page they cannot open -
@@ -1461,7 +2144,6 @@ def purchase_application_list(request: HttpRequest) -> HttpResponse:
     """The Xarid Arizasi table, the approval queue and the creation form."""
     page_context = purchase_page(
         signed_in_department=department_of(request.user),
-        approvals=approvals_for(request.user),
         chosen_filters=request.GET,
         viewer=request.user,
     )
@@ -1511,7 +2193,6 @@ def purchase_application_create(request: HttpRequest) -> HttpResponse:
             PURCHASE_TEMPLATE,
             purchase_page(
                 department,
-                approvals_for(request.user),
                 form=form,
                 items=items,
                 viewer=request.user,
@@ -1525,7 +2206,6 @@ def purchase_application_create(request: HttpRequest) -> HttpResponse:
             PURCHASE_TEMPLATE,
             purchase_page(
                 department,
-                approvals_for(request.user),
                 form=form,
                 items=items,
                 viewer=request.user,
@@ -1545,9 +2225,42 @@ def purchase_application_create(request: HttpRequest) -> HttpResponse:
         )
 
     record_created(request.user, application)
+    tell_whoever_it_now_waits_for(application)
     messages.success(request, f"{application.xarid_raqami} yaratildi.")
 
     return redirect("xarid:xarid-ariza")
+
+
+def readable_purchase_application(request: HttpRequest, pk: int) -> PurchaseApplication:
+    """The purchase application whose attachments this person may download.
+
+    DEC-019's rule, applied to a record: somebody may open what a page of
+    theirs would show them and nothing else, so the route answers 404 rather
+    than handing over the file of a row no table of theirs ever held.
+
+    A Users account: the requests it raised. A Bo`lim Boshlig`i: those, plus
+    the ones standing at their step of DEC-016's chain and the ones they have
+    already approved - the rows of Kelib Tushgan Arizalar and Tasdiqlangan
+    Arizalar. Narrowing a head to their own would leave them deciding a
+    request without being able to read what was attached to it.
+    """
+    applications = PurchaseApplication.objects.all()
+
+    if has_user_type(request.user, (USERS,)):
+        return get_object_or_404(applications.filter(created_by=request.user), pk=pk)
+
+    if has_user_type(request.user, (BOLIM_BOSHLIGI,)):
+        theirs = (
+            Q(created_by=request.user)
+            | Q(tasdiqlagan_bolim_boshligi=request.user)
+            | Q(
+                stage=PurchaseApplication.Stage.AWAITING_HEAD,
+                department=department_of(request.user),
+            )
+        )
+        return get_object_or_404(applications.filter(theirs), pk=pk)
+
+    return get_object_or_404(applications, pk=pk)
 
 
 def purchase_application_pdf(request: HttpRequest, pk: int) -> FileResponse:
@@ -1556,9 +2269,21 @@ def purchase_application_pdf(request: HttpRequest, pk: int) -> FileResponse:
     The permission is on the route: a purchase application is on one page for
     its whole life.
     """
-    application = get_object_or_404(PurchaseApplication, pk=pk)
+    application = readable_purchase_application(request, pk)
 
-    return attachment_response(application.pdf, f"{application.xarid_raqami}.pdf")
+    return attachment_response(application.pdf, attachment_name(application.xarid_raqami))
+
+
+def purchase_application_document(request: HttpRequest, pk: int) -> HttpResponse:
+    """Download the request itself as a PDF, drawn from the record.
+
+    The Ariza PDF column beside the Ilova PDF one: the attachment is what the
+    requester uploaded, and this is what the system knows, so a row is
+    readable on paper even when nothing was ever attached to it.
+    """
+    application = readable_purchase_application(request, pk)
+
+    return purchase_application_response(application)
 
 
 def purchase_application_original_pdf(request: HttpRequest, pk: int) -> FileResponse:
@@ -1569,9 +2294,11 @@ def purchase_application_original_pdf(request: HttpRequest, pk: int) -> FileResp
             every application that has not been approved, since until then
             pdf is the original.
     """
-    application = get_object_or_404(PurchaseApplication, pk=pk)
+    application = readable_purchase_application(request, pk)
 
-    return attachment_response(application.asl_pdf, f"{application.xarid_raqami}-asl.pdf")
+    return attachment_response(
+        application.asl_pdf, attachment_name(application.xarid_raqami, "asl")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1597,12 +2324,23 @@ ORDER_LINE_EXPORT_COLUMNS = (
     ExportColumn("O'lchov", lambda record, line: line.olchov_birligi),
 )
 
-INCOMING_EXPORT_COLUMNS = (
-    ExportColumn("Ariza raqami", lambda ariza, line: ariza.ariza_raqami),
+QUEUE_EXPORT_COLUMNS = (
+    ExportColumn("Ariza raqami", lambda ariza, line: ariza.xarid_raqami),
+    ExportColumn("Ariza nomi", lambda ariza, line: ariza.shartnoma_nomi),
     ExportColumn("Bo'lim", lambda ariza, line: ariza.department.name),
-    *ORDER_LINE_EXPORT_COLUMNS,
+    ExportColumn("Buyurtmachi", lambda ariza, line: display_name(ariza.created_by)),
+    ExportColumn("Bosqich", lambda ariza, line: queue_step_of(ariza)),
     ExportColumn("Izoh", lambda ariza, line: ariza.izoh),
-    ExportColumn("Kelib tushgan", lambda ariza, line: local_date(ariza.kelib_tushgan_sana)),
+    ExportColumn("Yaratilgan", lambda ariza, line: local_date(ariza.yaratilingan_sana)),
+)
+
+APPROVED_EXPORT_COLUMNS = (
+    ExportColumn("Ariza raqami", lambda ariza, line: ariza.xarid_raqami),
+    ExportColumn("Ariza nomi", lambda ariza, line: ariza.shartnoma_nomi),
+    ExportColumn("Buyurtmachi", lambda ariza, line: display_name(ariza.created_by)),
+    ExportColumn("Holati", lambda ariza, line: ariza.get_stage_display()),
+    ExportColumn("Izoh", lambda ariza, line: ariza.izoh),
+    ExportColumn("Tasdiqlangan sana", lambda ariza, line: local_date(ariza.tasdiqlagan_sana)),
 )
 
 ACCEPTED_EXPORT_COLUMNS = (
@@ -1645,6 +2383,26 @@ CONTRACT_EXPORT_COLUMNS = (
     ExportColumn("Izoh", lambda shartnoma, line: shartnoma.inkor_izohi),
 )
 
+# What Tuzilgan adds to a contract download: the decision the page takes.
+SIGNED_EXPORT_COLUMNS = (
+    *CONTRACT_EXPORT_COLUMNS,
+    ExportColumn(
+        "Yuborilgan sana", lambda shartnoma, line: local_date(shartnoma.yuborilgan_sana)
+    ),
+    ExportColumn("Qaror", lambda shartnoma, line: shartnoma.get_stage_display()),
+    # Empty rather than display_name(None), which answers "Foydalanuvchi":
+    # a contract nobody has decided on has no decider to name.
+    ExportColumn(
+        "Kim tasdiqlagan",
+        lambda shartnoma, line: display_name(shartnoma.tasdiqlagan)
+        if shartnoma.tasdiqlagan
+        else "",
+    ),
+    ExportColumn(
+        "Tasdiqlangan sana", lambda shartnoma, line: local_date(shartnoma.tasdiqlangan_sana)
+    ),
+)
+
 PURCHASE_EXPORT_COLUMNS = (
     ExportColumn("Ariza raqami", lambda ariza, line: ariza.xarid_raqami),
     ExportColumn("Shartnoma nomi", lambda ariza, line: ariza.shartnoma_nomi),
@@ -1671,20 +2429,48 @@ PURCHASE_EXPORT_COLUMNS = (
 
 
 def incoming_export(request: HttpRequest, file_format: str) -> HttpResponse:
-    """Download the Kelib tushgan table, filtered as the page is."""
+    """Download the Kelib tushgan table, filtered as the page is.
+
+    The reader's own queue, not everybody's: a download must not hand over
+    rows the table it came from would not show (DEC-019's rule, applied to a
+    file rather than to an attachment).
+
+    One row per request rather than per order line, because that is how this
+    table renders - a row is something waiting for somebody, not a line item.
+    """
     table_filter = TableFilter(
         INCOMING_FILTERS,
-        incoming_applications(),
+        approvals_for(request.user),
         request.GET,
-        date_column=INCOMING_PERIOD,
-        sort_choices=INCOMING_SORTS,
+        date_column=PURCHASE_PERIOD,
+        sort_choices=PURCHASE_SORTS,
     )
-    export = TableExport("kelib-arizalar", INCOMING_EXPORT_COLUMNS, lines_of(table_filter.apply()))
+    rows = [(application, None) for application in table_filter.apply()]
+    export = TableExport("kelib-arizalar", QUEUE_EXPORT_COLUMNS, rows)
     return export_response(export, file_format)
 
 
 def accepted_export(request: HttpRequest, file_format: str) -> HttpResponse:
-    """Download the Qabul qilingan table, filtered as the page is."""
+    """Download the Qabul qilingan table, filtered as the page is.
+
+    Whichever table that is: a head reading their own approvals downloads
+    those, not the accepted applications they never see.
+    """
+    if sees_own_approvals(request.user):
+        step = approval_step_of(request.user)
+        own = TableFilter(
+            step.filters,
+            approved_by(request.user, step),
+            request.GET,
+            date_column=step.period,
+            sort_choices=step.sorts,
+        )
+        rows = [(application, None) for application in own.apply()]
+
+        return export_response(
+            TableExport("tasdiqlangan-arizalar", APPROVED_EXPORT_COLUMNS, rows), file_format
+        )
+
     table_filter = TableFilter(
         ACCEPTED_FILTERS,
         accepted_applications(),
@@ -1729,11 +2515,30 @@ def contracts_export(request: HttpRequest, file_format: str) -> HttpResponse:
     return export_response(export, file_format)
 
 
+def signed_contracts_export(request: HttpRequest, file_format: str) -> HttpResponse:
+    """Download the Tuzilgan table, filtered as the page is.
+
+    The contract columns every contract download carries, and after them what
+    this page is about: when it was sent, what was decided, and by whom.
+    """
+    table_filter = TableFilter(
+        SIGNED_FILTERS,
+        signed_contracts(),
+        request.GET,
+        date_column=SIGNED_PERIOD,
+        sort_choices=SIGNED_SORTS,
+    )
+    export = TableExport(
+        "tuzilgan", SIGNED_EXPORT_COLUMNS, lines_of(table_filter.apply())
+    )
+    return export_response(export, file_format)
+
+
 def purchase_export(request: HttpRequest, file_format: str) -> HttpResponse:
     """Download the Xarid Arizasi table, filtered as the page is."""
     table_filter = TableFilter(
         PURCHASE_FILTERS,
-        purchase_applications(),
+        visible_purchase_applications(request.user),
         request.GET,
         date_column=PURCHASE_PERIOD,
         sort_choices=PURCHASE_SORTS,
@@ -1779,10 +2584,16 @@ def staff_workload_report(request: HttpRequest) -> HttpResponse:
     table_filter = workload_filter(request.GET)
     report_invalid_filters(request, table_filter)
 
+    # The report whole, and a page of its rows: the totals row under the
+    # table is the report's, not this page's, so it is the same figure
+    # whichever page it is read on - as the exported file is.
+    report = staff_workload(table_filter.period)
+    table_page = TablePage(report.rows, request.GET, kept=table_filter.selections)
+
     return render(
         request,
         WORKLOAD_TEMPLATE,
-        {"report": staff_workload(table_filter.period), "table_filter": table_filter},
+        {"report": report, "table_filter": table_filter, "table_page": table_page},
     )
 
 
@@ -1836,15 +2647,13 @@ def department_purchasing_report(request: HttpRequest) -> HttpResponse:
     table_filter = department_report_filter(request.GET)
     report_invalid_filters(request, table_filter)
 
+    report = department_purchasing(table_filter.period, table_filter.fields[0].selected)
+    table_page = TablePage(report.rows, request.GET, kept=table_filter.selections)
+
     return render(
         request,
         DEPARTMENTS_REPORT_TEMPLATE,
-        {
-            "report": department_purchasing(
-                table_filter.period, table_filter.fields[0].selected
-            ),
-            "table_filter": table_filter,
-        },
+        {"report": report, "table_filter": table_filter, "table_page": table_page},
     )
 
 
@@ -1905,12 +2714,15 @@ def products_list(request: HttpRequest) -> HttpResponse:
     table_filter = products_filter(request.GET)
     report_invalid_filters(request, table_filter)
 
+    table_page = TablePage(table_filter.apply(), request.GET, kept=table_filter.selections)
+
     return render(
         request,
         PRODUCTS_TEMPLATE,
         {
-            "lines": table_filter.apply(),
+            "lines": table_page.rows,
             "table_filter": table_filter,
+            "table_page": table_page,
             # The row asks before drawing a link, so it never offers one that
             # would answer 403.
             "pdf_is_reachable": pdf_is_reachable,
@@ -1980,15 +2792,13 @@ def category_purchasing_report(request: HttpRequest) -> HttpResponse:
     table_filter = category_report_filter(request.GET)
     report_invalid_filters(request, table_filter)
 
+    report = category_purchasing(table_filter.period, table_filter.fields[0].selected)
+    table_page = TablePage(report.rows, request.GET, kept=table_filter.selections)
+
     return render(
         request,
         CATEGORY_REPORT_TEMPLATE,
-        {
-            "report": category_purchasing(
-                table_filter.period, table_filter.fields[0].selected
-            ),
-            "table_filter": table_filter,
-        },
+        {"report": report, "table_filter": table_filter, "table_page": table_page},
     )
 
 
@@ -2029,6 +2839,11 @@ def contract_set_status(request: HttpRequest, pk: int) -> HttpResponse:
     actually happens is a race - somebody sending the contract while this
     page was open - and a person told their change was not saved needs to
     know why; a 404 does not say.
+
+    A move that happened tells Xarid Bo`limi's Bo`lim Boshlig`i, from
+    whichever of the two contract pages it was made on: the head handed the
+    work out and a step forward is theirs to hear about. A press that moved
+    nothing tells nobody.
     """
     contract = get_object_or_404(Contract, pk=pk)
 
@@ -2049,6 +2864,7 @@ def contract_set_status(request: HttpRequest, pk: int) -> HttpResponse:
 
     if moved:
         record_edited(request.user, contract)
+        tell_head_of_status_change(contract, by=request.user)
         messages.success(
             request,
             f"{contract.shartnoma_raqami} holati o`zgartirildi: {status.name}.",
@@ -2062,13 +2878,280 @@ def contract_set_status(request: HttpRequest, pk: int) -> HttpResponse:
     return back_to_contract_page(request)
 
 
+def save_status_before_sending(
+    request: HttpRequest, contract: Contract
+) -> bool:
+    """Apply the status the send form carried, and say whether to carry on.
+
+    The Kelishinlingan page has no Saqlash of its own since this task: the
+    drop-down sits in its own column and rides along with Yuborish, so one
+    click saves the status and sends. Sending is the step that cannot be
+    taken back - the contract leaves the page - so a status that will not
+    save stops the send rather than being sent with the wrong one.
+
+    A form that carried no status at all is not a refusal. A contract with no
+    status yet offers a blank first option, and choosing nothing there means
+    "send it as it is", not "clear the status".
+
+    Returns:
+        True when the send should go ahead. False when the status was refused
+        and a message saying so has been added.
+    """
+    requested = request.POST.get("holat")
+    if not requested:
+        return True
+
+    try:
+        contract.set_status(chosen_status(requested), by=request.user)
+    except ValueError as refusal:
+        messages.error(request, f"{refusal} Shartnoma yuborilmadi.")
+        return False
+
+    return True
+
+
+def contract_to_act_on(request: HttpRequest, pk: int) -> Contract | None:
+    """The contract this row action is about, or None with the reason said.
+
+    One check for Tahrirlash and O`chirish: both are the row's to perform,
+    both refuse a contract that has gone for approval, and both answer with
+    a message rather than a 403 - the caller had the page, and what stops
+    them is which contract they picked.
+
+    Returns:
+        The contract, or None when a message has been added saying why not.
+    """
+    # all_objects, so that a row somebody deleted while this page was open
+    # is answered with the sentence saying so rather than with a 404 - the
+    # page cannot show what became of it, and a 404 does not say.
+    contract = get_object_or_404(Contract.all_objects, pk=pk)
+
+    if contract.is_deleted:
+        messages.info(
+            request,
+            f"{contract.shartnoma_raqami} allaqachon o`chirilgan. Admin uni "
+            "O`chirilgan Shartnomalar sahifasidan tiklashi mumkin.",
+        )
+        return None
+
+    if not held_contract(request.user, contract):
+        messages.error(
+            request,
+            f"{contract.shartnoma_raqami} sizning ishingizga tegishli emas.",
+        )
+        return None
+
+    if not contract.is_editable:
+        messages.error(
+            request,
+            f"{contract.shartnoma_raqami} allaqachon tasdiqlashga yuborilgan, "
+            "o`zgartirib bo`lmaydi.",
+        )
+        return None
+
+    return contract
+
+
+def contract_edit(request: HttpRequest, pk: int) -> HttpResponse:
+    """The Shartnoma Kiritish dialog again, filled in, for one contract.
+
+    The same dialog on the same page, pointed at the edit action, which is
+    how the page already comes back when a new contract fails validation.
+    One way of filling a contract in rather than two, and the row adder, the
+    calculator and the type-ahead boxes all bind at load over a page that
+    was loaded - which a form fetched into a dialog afterwards would not be.
+    """
+    contract = contract_to_act_on(request, pk)
+    if contract is None:
+        return redirect("xarid:kelishinlingan")
+
+    applications = contractable_applications(request.user)
+    rows = ContractItem.objects.filter(contract=contract)
+
+    if request.method != "POST":
+        return render(
+            request,
+            AGREED_CONTRACTS_TEMPLATE,
+            contract_page(
+                request.user,
+                form=ContractEditForm(instance=contract, applications=applications),
+                items=ContractItemEditFormSet(queryset=rows),
+                editing=contract,
+            ),
+        )
+
+    form = ContractEditForm(
+        request.POST, request.FILES, instance=contract, applications=applications
+    )
+    items = ContractItemEditFormSet(request.POST, queryset=rows)
+
+    if not (form.is_valid() and items.is_valid()):
+        messages.error(request, "Shartnoma saqlanmadi: formani tekshiring.")
+        return render(
+            request,
+            AGREED_CONTRACTS_TEMPLATE,
+            contract_page(request.user, form=form, items=items, editing=contract),
+        )
+
+    terms = {
+        column: form.cleaned_data[column]
+        for column in CONTRACT_EDITABLE_COLUMNS
+    }
+    # An empty box keeps the file on record: the edit form does not demand a
+    # PDF, and "no new file" must not mean "remove the one there".
+    if form.cleaned_data["pdf"]:
+        terms["pdf"] = form.cleaned_data["pdf"]
+
+    try:
+        contract.update_terms(
+            items=filled_in_rows(items, CONTRACT_LINE_FIELDS), **terms
+        )
+    except ValueError as refusal:
+        messages.error(request, str(refusal))
+        return render(
+            request,
+            AGREED_CONTRACTS_TEMPLATE,
+            contract_page(request.user, form=form, items=items, editing=contract),
+        )
+
+    record_edited(request.user, contract)
+    messages.success(
+        request,
+        f"{contract.shartnoma_raqami} saqlandi. "
+        f"Shartnoma qiymati: {contract.qiymati_display} UZS.",
+    )
+
+    return redirect("xarid:kelishinlingan")
+
+
+@require_POST
+def contract_comment(request: HttpRequest, pk: int) -> HttpResponse:
+    """Add one comment to a contract's thread (TASK-UZK-066).
+
+    Anybody who may open the page may write on any contract it shows.
+    Commenting is not acting on the contract - Tahrirlash, Yuborish and
+    O`chirish still ask whose it is - and a thread only its holder may
+    write to is a thread a head cannot ask a question in.
+    """
+    contract = get_object_or_404(Contract, pk=pk)
+
+    written = (request.POST.get("matn") or "").strip()
+    if not written:
+        messages.error(request, "Izoh yozilmadi: matn bo`sh.")
+        return back_to_thread(contract)
+
+    comment = ContractComment.objects.create(
+        contract=contract, author=request.user, matn=written
+    )
+    tell_thread_of_comment(contract, comment)
+    messages.success(request, f"{contract.shartnoma_raqami} uchun izoh qo`shildi.")
+
+    return back_to_thread(contract)
+
+
+def back_to_thread(contract: Contract) -> HttpResponse:
+    """Back to the table, with this contract's drawer open where it was."""
+    return redirect(f"{reverse('xarid:kelishinlingan')}?izoh={contract.pk}")
+
+
+@require_POST
+def contract_delete(request: HttpRequest, pk: int) -> HttpResponse:
+    """Take one contract off the page, keeping the row (TASK-UZK-064).
+
+    Deleting is reversible and says so: the message names the page an Admin
+    puts it back from, because a row vanishing with no way back is the thing
+    people are afraid of when they do not press the button.
+    """
+    contract = contract_to_act_on(request, pk)
+    if contract is None:
+        return redirect("xarid:kelishinlingan")
+
+    try:
+        deleted = contract.soft_delete(by=request.user)
+    except ValueError as refusal:
+        messages.error(request, str(refusal))
+        return redirect("xarid:kelishinlingan")
+
+    if deleted:
+        # After, not before. record_deleted() says to call it first, while
+        # the record can still say what it was - that is for a deletion that
+        # destroys the row, and this one keeps it. Calling it first would
+        # log a deletion that the line above can still refuse.
+        record_deleted(request.user, contract)
+        messages.success(
+            request,
+            f"{contract.shartnoma_raqami} o`chirildi va O`chirilgan "
+            "Shartnomalar sahifasiga o`tdi.",
+        )
+    else:
+        messages.info(request, f"{contract.shartnoma_raqami} allaqachon o`chirilgan.")
+
+    return redirect("xarid:kelishinlingan")
+
+
+DELETED_CONTRACTS_TEMPLATE = "xarid/pages/ochirilgan-shartnomalar.html"
+
+
+def deleted_contracts() -> QuerySet[Contract]:
+    """The contracts that were deleted, newest deletion first.
+
+    all_objects, because the ordinary manager is the one that hides them.
+    """
+    return (
+        Contract.all_objects.filter(deleted_at__isnull=False)
+        .select_related(
+            "application",
+            "application__department",
+            "supplier",
+            "status",
+            "created_by",
+            "deleted_by",
+        )
+        .prefetch_related("items")
+        .order_by("-deleted_at", "-id")
+    )
+
+
+def deleted_contracts_list(request: HttpRequest) -> HttpResponse:
+    """O`chirilgan Shartnomalar: what was deleted, and the way back."""
+    table_page = TablePage(deleted_contracts(), request.GET)
+
+    return render(
+        request,
+        DELETED_CONTRACTS_TEMPLATE,
+        {"contracts": list(table_page.rows), "table_page": table_page},
+    )
+
+
+@require_POST
+def contract_restore(request: HttpRequest, pk: int) -> HttpResponse:
+    """Put a deleted contract back where it was (TASK-UZK-064)."""
+    contract = get_object_or_404(Contract.all_objects, pk=pk)
+
+    if contract.restore(by=request.user):
+        record_edited(request.user, contract)
+        messages.success(
+            request,
+            f"{contract.shartnoma_raqami} tiklandi va Kelishinlingan "
+            "sahifasiga qaytdi.",
+        )
+    else:
+        messages.info(request, f"{contract.shartnoma_raqami} o`chirilmagan edi.")
+
+    return redirect("xarid:ochirilgan-shartnomalar")
+
+
 @require_POST
 def contract_send_for_approval(request: HttpRequest, pk: int) -> HttpResponse:
-    """Send one contract to the department head (REQ-SHARTNOMA-005).
+    """Save the chosen status and send one contract on (REQ-SHARTNOMA-005).
 
     The message names where the contract went, not only that it went. Sending
     takes it off this page, and a row disappearing with no explanation is how
     somebody concludes they deleted something.
+
+    A send that happened tells Xarid Bo`limi's Bo`lim Boshlig`i and Menejer
+    that the contract now waits for them, after the transition reported
+    success - so a refused send tells nobody.
     """
     contract = get_object_or_404(Contract, pk=pk)
 
@@ -2080,6 +3163,9 @@ def contract_send_for_approval(request: HttpRequest, pk: int) -> HttpResponse:
         )
         return redirect("xarid:kelishinlingan")
 
+    if not save_status_before_sending(request, contract):
+        return redirect("xarid:kelishinlingan")
+
     try:
         sent = contract.send_for_approval(by=request.user)
     except ValueError as refusal:
@@ -2088,6 +3174,7 @@ def contract_send_for_approval(request: HttpRequest, pk: int) -> HttpResponse:
 
     if sent:
         record_edited(request.user, contract)
+        tell_of_contract_sent(contract, by=request.user)
         messages.success(
             request,
             f"{contract.shartnoma_raqami} tasdiqlashga yuborildi va "
@@ -2148,17 +3235,33 @@ def signed_contracts() -> QuerySet[Contract]:
 
 def signed_contracts_list(request: HttpRequest) -> HttpResponse:
     """Tuzilgan Shartnomalar (REQ-SHARTNOMA-001, REQ-SHARTNOMA-002)."""
+    table_filter = TableFilter(
+        SIGNED_FILTERS,
+        signed_contracts(),
+        request.GET,
+        date_column=SIGNED_PERIOD,
+        sort_choices=SIGNED_SORTS,
+    )
+    report_invalid_filters(request, table_filter)
+    table_page = TablePage(table_filter.apply(), request.GET, kept=table_filter.selections)
+
     return render(
         request,
         SIGNED_CONTRACTS_TEMPLATE,
         {
-            "contracts": signed_contracts(),
+            "contracts": table_page.rows,
+            "table_filter": table_filter,
+            "table_page": table_page,
             "may_decide": decides_on_contracts(request.user),
             # The status control asks the same question here as on
             # Kelishinlingan: a specialist may open this page, and offering
             # them a control for somebody else's contract only produces a
             # refusal they could have been spared.
             "is_own_contract": own_contract_test(request.user),
+            # And one more question, which Kelishinlingan does not ask: a
+            # Katta Mutaxasis reads this page rather than working it
+            # (TASK-UZK-068).
+            "may_move_status": moves_status_on_tuzilgan(request.user),
             "shartnoma_statuslari": ShartnomaStatus.objects.active(),
         },
     )
@@ -2182,9 +3285,12 @@ def contract_accept(request: HttpRequest, pk: int) -> HttpResponse:
 
     if approved:
         record_decision(request.user, contract, approved=True)
-        messages.success(request, f"{contract.shartnoma_raqami} tasdiqlandi.")
+        tell_holders_of_decision(
+            contract, by=request.user, kind=Notification.Kind.CONTRACT_APPROVED
+        )
+        messages.success(request, f"{contract.shartnoma_raqami} qabul qilindi.")
     else:
-        messages.info(request, f"{contract.shartnoma_raqami} allaqachon tasdiqlangan.")
+        messages.info(request, f"{contract.shartnoma_raqami} allaqachon qabul qilingan.")
 
     return redirect("xarid:tuzilgan")
 
@@ -2212,12 +3318,56 @@ def contract_reject(request: HttpRequest, pk: int) -> HttpResponse:
             approved=False,
             comment=contract.inkor_izohi,
         )
+        tell_holders_of_decision(
+            contract,
+            by=request.user,
+            kind=Notification.Kind.CONTRACT_RETURNED,
+            comment=contract.inkor_izohi,
+        )
         messages.success(
             request,
             f"{contract.shartnoma_raqami} inkor qilindi va mutaxassisga qaytarildi.",
         )
     else:
         messages.info(request, f"{contract.shartnoma_raqami} allaqachon hal qilingan.")
+
+    return redirect("xarid:tuzilgan")
+
+
+@require_POST
+def contract_undo_approval(request: HttpRequest, pk: int) -> HttpResponse:
+    """Take back an approval, leaving the contract awaiting one (TASK-UZK-067).
+
+    The approval is undone, not the contract: it stays on Tuzilgan and can
+    be decided again. Whoever may decide may undo - the one who approved it
+    is often not the one at the desk when the mistake is noticed, and a
+    button only its presser can use is one that cannot fix anything.
+
+    The holders are told, because they were told it was approved and a
+    correction nobody hears is how somebody goes on believing the first
+    thing they were told.
+    """
+    contract = get_object_or_404(Contract, pk=pk)
+
+    if not decides_on_contracts(request.user):
+        raise PermissionDenied(
+            f"{request.user} may not decide on {contract.shartnoma_raqami}."
+        )
+
+    if contract.undo_approval(by=request.user):
+        record_edited(request.user, contract)
+        tell_holders_of_decision(
+            contract,
+            by=request.user,
+            kind=Notification.Kind.CONTRACT_APPROVAL_UNDONE,
+        )
+        messages.success(
+            request,
+            f"{contract.shartnoma_raqami} tasdig`i bekor qilindi, shartnoma "
+            "yana qarorni kutmoqda.",
+        )
+    else:
+        messages.info(request, f"{contract.shartnoma_raqami} tasdiqlanmagan edi.")
 
     return redirect("xarid:tuzilgan")
 

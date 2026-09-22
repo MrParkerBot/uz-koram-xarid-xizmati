@@ -9,29 +9,29 @@ including a period that was refused and therefore never applied.
 #}
 {% macro filter_bar(table_filter, action_url) -%}
 <form method="get" action="{{ action_url }}" class="toolbar-group" data-filter-bar>
-  {% if table_filter.fields %}<span class="toolbar-label">Filter:</span>{% endif %}
+  {% if table_filter.fields %}<span class="toolbar-label">{{ _("Filter:") }}</span>{% endif %}
   {% for field in table_filter.fields %}
   <select class="form-control" name="{{ field.column.parameter }}" id="f-{{ field.column.parameter }}" aria-label="{{ field.column.label }}">
-    <option value="">{{ field.column.label }}: barchasi</option>
+    <option value="">{{ field.column.label }}: {{ _("barchasi") }}</option>
     {% for option in field.options %}<option value="{{ option.value }}"{% if option.value == field.selected %} selected{% endif %}>{{ option.label }}</option>{% endfor %}
   </select>
   {% endfor %}
   {% if table_filter.period %}
-  <span class="toolbar-label">Sana:</span>
+  <span class="toolbar-label">{{ _("Sana:") }}</span>
   <input class="form-control" type="date" style="width:140px;" name="{{ table_filter.period.column.start_parameter }}" id="f-{{ table_filter.period.column.start_parameter }}"
          value="{{ table_filter.period.start.isoformat() if table_filter.period.start else '' }}"
-         aria-label="{{ table_filter.period.column.label }}: davr boshi"/>
+         aria-label="{{ table_filter.period.column.label }}: {{ _("davr boshi") }}"/>
   <input class="form-control" type="date" style="width:140px;" name="{{ table_filter.period.column.end_parameter }}" id="f-{{ table_filter.period.column.end_parameter }}"
          value="{{ table_filter.period.end.isoformat() if table_filter.period.end else '' }}"
-         aria-label="{{ table_filter.period.column.label }}: davr oxiri"/>
+         aria-label="{{ table_filter.period.column.label }}: {{ _("davr oxiri") }}"/>
   {% endif %}
   {% if table_filter.sort.is_offered %}
-  <select class="form-control" style="width:180px;" name="{{ table_filter.sort.parameter }}" id="f-sort" aria-label="Tartib">
+  <select class="form-control" style="width:180px;" name="{{ table_filter.sort.parameter }}" id="f-sort" aria-label="{{ _("Tartib") }}">
     {% for choice in table_filter.sort.choices %}<option value="{{ choice.value }}"{% if choice.value == table_filter.sort.selected %} selected{% endif %}>{{ choice.label }}</option>{% endfor %}
   </select>
   {% endif %}
-  <button type="submit" class="btn btn-primary-custom btn-sm"><i class="bi bi-search" aria-hidden="true"></i> Qidirish</button>
-  {% if table_filter.can_be_cleared %}<a class="btn btn-outline-custom btn-sm" href="{{ action_url }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Tozalash</a>{% endif %}
+  <button type="submit" class="btn btn-primary-custom btn-sm"><i class="bi bi-search" aria-hidden="true"></i> {{ _("Qidirish") }}</button>
+  {% if table_filter.can_be_cleared %}<a class="btn btn-outline-custom btn-sm" href="{{ action_url }}"><i class="bi bi-x-lg" aria-hidden="true"></i> {{ _("Tozalash") }}</a>{% endif %}
 </form>
 {%- endmacro %}
 
@@ -42,6 +42,6 @@ order it shows them (REQ-ARIZA-002).
 #}
 {% macro export_links(page_name, table_filter) -%}
 {% set query = ("?" ~ table_filter.query_string) if table_filter.is_active else "" %}
-<a class="btn btn-outline-custom btn-sm" href="{{ url('xarid:' ~ page_name ~ '-eksport', 'xlsx') }}{{ query }}"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</a>
-<a class="btn btn-outline-custom btn-sm" href="{{ url('xarid:' ~ page_name ~ '-eksport', 'pdf') }}{{ query }}"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</a>
+<a class="btn btn-outline-custom btn-sm" href="{{ url('xarid:' ~ page_name ~ '-eksport', 'xlsx') }}{{ query }}"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> {{ _("Excel") }}</a>
+<a class="btn btn-outline-custom btn-sm" href="{{ url('xarid:' ~ page_name ~ '-eksport', 'pdf') }}{{ query }}"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> {{ _("PDF") }}</a>
 {%- endmacro %}

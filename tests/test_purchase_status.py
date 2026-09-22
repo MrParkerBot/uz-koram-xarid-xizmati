@@ -132,8 +132,14 @@ class WhoIsToldWhichContractTests(SignedInAdminTestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        cls.direktor = make_user("told.direktor", user_type=DIREKTOR)
         cls.texnik = a_department("Texnik bo`lim")
+        # Given a department because the Direktor raises a request of their
+        # own below: Xarid Arizasi shows each reader only what they raised, so
+        # a test about what the page tells a Direktor needs a row that is
+        # theirs. A second Direktor takes the chain's own step, to keep
+        # approving separate from raising.
+        cls.direktor = make_user("told.direktor", user_type=DIREKTOR, department=cls.texnik)
+        cls.approving_direktor = make_user("told.direktor2", user_type=DIREKTOR)
         cls.head = make_user(
             "told.head", user_type=BOLIM_BOSHLIGI, department=cls.texnik
         )
@@ -141,11 +147,13 @@ class WhoIsToldWhichContractTests(SignedInAdminTestCase):
         cls.requester = make_user("told.requester", user_type=USERS, department=cls.texnik)
         cls.status = ShartnomaStatus.objects.active().first()
 
-    def a_contracted_request(self) -> PurchaseApplication:
-        request = a_purchase_application(self.requester, self.texnik, with_pdf=False)
+    def a_contracted_request(self, raised_by=None) -> PurchaseApplication:
+        request = a_purchase_application(
+            raised_by or self.requester, self.texnik, with_pdf=False
+        )
         request.approve(by=self.head)
         request.refresh_from_db()
-        request.approve(by=self.direktor)
+        request.approve(by=self.approving_direktor)
         request.refresh_from_db()
         application = request.raised_application
         # The raised application arrives as any other does: accepted, then
@@ -182,7 +190,7 @@ class WhoIsToldWhichContractTests(SignedInAdminTestCase):
 
     def test_the_number_appears_for_direktor_once_the_contract_is_signed(self) -> None:
         """Direktor has Tuzilgan and not Kelishinlingan, so it depends on where it is."""
-        request = self.a_contracted_request()
+        request = self.a_contracted_request(raised_by=self.direktor)
         contract = request.contract
         self.client.force_login(self.direktor)
 

@@ -1,31 +1,70 @@
 """Django settings for the Uz-Koram Xarid Xizmati Bo'limi application.
 
 Values that differ between machines are read from the environment so that no
-deployment secret is ever committed. See README.md for the variables a real
-deployment must set.
+deployment secret is ever committed. A `.env` beside manage.py is loaded into
+that environment first, so configuring a development machine is filling in one
+file; a variable the real environment already carries always wins over it. See
+README.md for the variables a real deployment must set.
 """
 
 from __future__ import annotations
 
 import mimetypes
 import os
+import warnings
 from pathlib import Path
 
 from django.core.management.utils import get_random_secret_key
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Everything below reads the process environment, so the project's own .env
+# goes into it first: filling in one file is then the whole of configuring a
+# development machine, with nothing to export by hand and nothing to forget in
+# the second terminal. The path is spelled out rather than searched for, so
+# this can never pick up a .env belonging to some parent directory, and it is
+# read as utf-8-sig because Notepad writes a BOM that the parser would
+# otherwise read as part of the first variable's name.
+#
+# override=False is python-dotenv's default, written out because it is a
+# decision and not an accident: a variable the environment already carries
+# wins, so a .env that was copied onto a server by mistake cannot quietly
+# replace what that deployment configured for itself.
+load_dotenv(BASE_DIR / ".env", override=False, encoding="utf-8-sig")
+
+
+# The spellings a boolean variable may be written in, kept as two sets rather
+# than one so that a value which is neither can be told apart from a
+# deliberate "off" and reported instead of being read as one.
+TRUE_SPELLINGS = frozenset({"1", "true", "yes", "on"})
+FALSE_SPELLINGS = frozenset({"0", "false", "no", "off"})
 
 
 def read_boolean_setting(variable_name: str, default: bool) -> bool:
     """Read a boolean from the environment, accepting the usual spellings.
 
     Anything unrecognised falls back to `default` rather than being treated as
-    true, so a typo cannot silently switch debugging on in production.
+    true, so a typo cannot silently switch debugging on in production. It does
+    not pass unremarked, though: a misspelt DJANGO_DEBUG reads as "off" and
+    leaves every /static/ request a 404, which looks like a broken application
+    rather than a broken setting, so an unreadable value says so on stderr.
     """
     raw_value = os.environ.get(variable_name)
     if raw_value is None:
         return default
-    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+    spelling = raw_value.strip().lower()
+    if spelling in TRUE_SPELLINGS:
+        return True
+    if spelling in FALSE_SPELLINGS or not spelling:
+        return False
+    warnings.warn(
+        f"{variable_name}={raw_value!r} is not a value this application can read, "
+        f"so it is being ignored and {variable_name} is treated as unset. Write one of: "
+        f"{', '.join(sorted(TRUE_SPELLINGS | FALSE_SPELLINGS))}.",
+        stacklevel=2,
+    )
+    return default
 
 
 def read_list_setting(variable_name: str, default: list[str]) -> list[str]:
@@ -60,6 +99,10 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    # After the session and before anything that renders: the chosen language
+    # is kept in the session, so it follows a person from page to page and
+    # from one device to the next rather than living in one browser.
+    "django.middleware.locale.LocaleMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -136,7 +179,20 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
+# The three languages the pages are written in, Uzbek first because it is
+# what the department works in and what every string is authored in. The
+# codes are the ones the browser sends: "uz" is Uzbek in the Latin script,
+# which is the only Uzbek this application is written in.
 LANGUAGE_CODE = "uz"
+LANGUAGES = [
+    ("uz", "O`zbekcha"),
+    ("ru", "Русский"),
+    ("en", "English"),
+]
+# Where the catalogues live. One directory per language, each holding the
+# django.po a translator edits and the django.mo the runtime reads, which
+# `manage.py translations` compiles from it.
+LOCALE_PATHS = [BASE_DIR / "locale"]
 TIME_ZONE = "Asia/Tashkent"
 USE_I18N = True
 USE_TZ = True

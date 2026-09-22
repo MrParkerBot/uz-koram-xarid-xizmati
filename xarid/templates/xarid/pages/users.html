@@ -1,31 +1,32 @@
 {% extends "xarid/base.html" %}
 {% from "xarid/_forms.html" import text_input, select, errors, required_mark with context %}
+{% from "xarid/_pagination.html" import pagination_bar with context %}
 {#
 The Users page (section 3.3). Passwords are hashed and never rendered
 (DEC-020); deleting deactivates (DEC-009); the Edit Permission column is the
 exclusive contract-editing lock of DEC-021 and posts to its own action.
 #}
-{% block title %}Foydalanuvchilar{% endblock %}
-{% block breadcrumb %}Ma'lumotlar / Foydalanuvchilar{% endblock %}
-{% block page_heading %}Foydalanuvchilar{% endblock %}
+{% block title %}{{ _("Foydalanuvchilar") }}{% endblock %}
+{% block breadcrumb %}{{ _("Ma'lumotlar / Foydalanuvchilar") }}{% endblock %}
+{% block page_heading %}{{ _("Foydalanuvchilar") }}{% endblock %}
 {% block content %}
 
     <div class="page-header">
-      <div><h1 class="page-title">Foydalanuvchilar</h1><div class="muted">Tizim foydalanuvchilari boshqaruvi</div></div>
-      <div class="page-actions"><span class="role-tag role-admin">Admin only</span></div>
+      <div><h1 class="page-title">{{ _("Foydalanuvchilar") }}</h1><div class="muted">{{ _("Tizim foydalanuvchilari boshqaruvi") }}</div></div>
+      <div class="page-actions"><span class="role-tag role-admin">{{ _("Admin only") }}</span></div>
     </div>
 
     <div class="alert alert-warning" style="margin-bottom:20px;">
       <span><i class="bi bi-exclamation-triangle" aria-hidden="true"></i></span>
-      <div><strong>Tahrirlash ruxsati:</strong> Faqat bitta foydalanuvchi tahrirlash ruxsatiga ega bo'lishi mumkin. Boshqa foydalanuvchiga ruxsat berilganda, avvalgisinikini avtomatik o'chiriladi.
+      <div><strong>{{ _("Tahrirlash ruxsati:") }}</strong> Faqat bitta foydalanuvchi tahrirlash ruxsatiga ega bo'lishi mumkin. Boshqa foydalanuvchiga ruxsat berilganda, avvalgisinikini avtomatik o'chiriladi.
         {% if contract_editor %}Hozir: <strong>{{ display_name(contract_editor.user) }}</strong>.{% else %}Hozircha hech kimda yo'q.{% endif %}
       </div>
     </div>
 
     <div class="panel" style="margin-bottom:20px;">
       <div class="panel-header">
-        <div class="panel-title">Foydalanuvchilar Ro'yhati</div>
-        <button type="button" class="btn btn-primary-custom btn-sm" data-open-modal="user-modal">+ Yangi qo'shish</button>
+        <div class="panel-title">{{ _("Foydalanuvchilar Ro'yhati") }}</div>
+        <button type="button" class="btn btn-primary-custom btn-sm" data-open-modal="user-modal">{{ _("+ Yangi qo'shish") }}</button>
       </div>
       <div class="toolbar">
         <div class="toolbar-group">
@@ -36,18 +37,18 @@ exclusive contract-editing lock of DEC-021 and posts to its own action.
         <table class="table-app" id="users-table">
           <thead><tr>
             <th style="width:40px;">#</th>
-            <th>To'liq Ism</th>
-            <th>Telefon</th>
-            <th>User Type</th>
-            <th>Bo'lim</th>
-            <th style="text-align:center;">Tahrirlash ruxsati</th>
-            <th style="text-align:center;">Amallar</th>
+            <th>{{ _("To'liq Ism") }}</th>
+            <th>{{ _("Telefon") }}</th>
+            <th>{{ _("User Type") }}</th>
+            <th>{{ _("Bo'lim") }}</th>
+            <th style="text-align:center;">{{ _("Tahrirlash ruxsati") }}</th>
+            <th style="text-align:center;">{{ _("Amallar") }}</th>
           </tr></thead>
           <tbody id="users-tbody">
           {% for listed_user in users %}
             {% set profile = profile_for(listed_user) %}
             <tr>
-              <td>{{ loop.index }}</td>
+              <td>{{ table_page.start_index + loop.index0 }}</td>
               <td>
                 <div class="user-avatar-cell">
                   <div class="user-avatar">{{ user_initials(listed_user) }}</div>
@@ -57,9 +58,9 @@ exclusive contract-editing lock of DEC-021 and posts to its own action.
                   </div>
                 </div>
               </td>
-              <td class="mono-cell">{% if profile and profile.phone_number %}+998 {{ profile.phone_number }}{% endif %}</td>
-              <td>{% if profile and profile.user_type %}<span class="badge badge-primary">{{ profile.user_type.name }}</span>{% else %}<span class="muted small">Belgilanmagan</span>{% endif %}</td>
-              <td>{% if profile and profile.department %}{{ profile.department.name }}{% else %}<span class="muted small">Belgilanmagan</span>{% endif %}</td>
+              <td class="mono-cell">{% if profile and profile.phone_number %}+998 {{ profile.phone_number|phone_number }}{% endif %}</td>
+              <td>{% if profile and profile.user_type %}<span class="badge badge-primary">{{ profile.user_type.name }}</span>{% else %}<span class="muted small">{{ _("Belgilanmagan") }}</span>{% endif %}</td>
+              <td>{% if profile and profile.department %}{{ profile.department.name }}{% else %}<span class="muted small">{{ _("Belgilanmagan") }}</span>{% endif %}</td>
               <td style="text-align:center;">
                 <form method="post" action="{{ url('xarid:user-contract-editing', listed_user.pk) }}" id="contract-editing-{{ listed_user.pk }}">
                   {{ csrf_input }}
@@ -67,7 +68,7 @@ exclusive contract-editing lock of DEC-021 and posts to its own action.
                     <input type="checkbox" class="edit-permission-toggle" name="may_edit_contracts" onchange="this.form.submit();"{% if profile and profile.may_edit_contracts %} checked{% endif %}/>
                     <span class="toggle-slider"></span>
                   </label>
-                  <noscript><button type="submit" class="btn btn-outline-custom btn-xs">Saqlash</button></noscript>
+                  <noscript><button type="submit" class="btn btn-outline-custom btn-xs">{{ _("Saqlash") }}</button></noscript>
                 </form>
               </td>
               <td style="text-align:center;">
@@ -79,14 +80,12 @@ exclusive contract-editing lock of DEC-021 and posts to its own action.
               </td>
             </tr>
           {% else %}
-            <tr><td colspan="7" class="muted" style="text-align:center;">Hozircha foydalanuvchi yo'q.</td></tr>
+            <tr><td colspan="7" class="muted" style="text-align:center;">{{ _("Hozircha foydalanuvchi yo'q.") }}</td></tr>
           {% endfor %}
           </tbody>
         </table>
       </div>
-      <div class="pagination-wrap">
-        <div class="pagination-info"><span>Jami: <span class="count">{{ users|length }}</span> ta</span></div>
-      </div>
+      {{ pagination_bar(table_page, url('xarid:users')) }}
     </div>
 
 {% endblock %}
@@ -105,7 +104,7 @@ exclusive contract-editing lock of DEC-021 and posts to its own action.
           <label class="form-label" for="{{ form.password.id_for_label }}">Parol {% if not edited_user_id %}{{ required_mark() }}{% endif %}</label>
           <div class="input-group">
             <input type="password" class="form-control pwd-strength-input" name="{{ form.password.html_name }}" id="{{ form.password.id_for_label }}" placeholder="{% if edited_user_id %}O'zgartirmaslik uchun bo'sh qoldiring{% else %}Parolni kiriting{% endif %}"/>
-            <button type="button" class="input-group-icon pwd-toggle" aria-label="Parolni ko'rsatish"><i class="bi bi-eye" aria-hidden="true"></i></button>
+            <button type="button" class="input-group-icon pwd-toggle" aria-label="Parolni ko'rsatish" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button>
           </div>
           <div class="pwd-strength">
             <div class="pwd-strength-bar"></div>
@@ -116,11 +115,11 @@ exclusive contract-editing lock of DEC-021 and posts to its own action.
         </div>
         <div class="form-group">
           <label class="form-label" for="{{ form.phone_number.id_for_label }}">Telefon Raqam {{ required_mark() }}</label>
-          <div class="input-group">
-            <input type="text" class="form-control" name="{{ form.phone_number.html_name }}" id="{{ form.phone_number.id_for_label }}" value="{{ form.phone_number.value() or '' }}" placeholder="90 123 45 67" maxlength="12" required/>
-            <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--color-text-muted);font-family:var(--mono);">+998</span>
+          <div class="input-group has-prefix">
+            <span class="input-prefix">+998</span>
+            <input type="text" class="form-control mono" name="{{ form.phone_number.html_name }}" id="{{ form.phone_number.id_for_label }}" value="{{ form.phone_number.value() or '' }}" placeholder="__-___-__-__" inputmode="numeric" autocomplete="tel-national" data-phone-mask required/>
           </div>
-          <div class="form-hint">Format: 90 123 45 67</div>
+          <div class="form-hint">Format: +998 90-123-45-67</div>
           {{ errors(form.phone_number) }}
         </div>
       </div>
@@ -130,15 +129,15 @@ exclusive contract-editing lock of DEC-021 and posts to its own action.
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Tahrirlash Ruxsati</label>
+          <label class="form-label">{{ _("Tahrirlash Ruxsati") }}</label>
           <div class="toggle-wrap" style="margin-top:10px;">
-            <span class="toggle-label muted">Jadvaldagi kalit orqali beriladi.</span>
+            <span class="toggle-label muted">{{ _("Jadvaldagi kalit orqali beriladi.") }}</span>
           </div>
         </div>
       </div>
       <div class="modal-footer">
-        <a class="btn btn-outline-custom" href="{{ url('xarid:users') }}">Bekor</a>
-        <button type="submit" class="btn btn-primary-custom"><i class="bi bi-save" aria-hidden="true"></i> Saqlash</button>
+        <a class="btn btn-outline-custom" href="{{ url('xarid:users') }}">{{ _("Bekor") }}</a>
+        <button type="submit" class="btn btn-primary-custom"><i class="bi bi-save" aria-hidden="true"></i> {{ _("Saqlash") }}</button>
       </div>
     </form>
   </div>

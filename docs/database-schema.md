@@ -102,6 +102,18 @@ removed by the application.
 | `izoh` | TextField |  |  |
 | `pdf` | FileField |  |  |
 | `yaratilingan_sana` | DateTimeField |  |  |
+| `deleted_at` | DateTimeField | null |  |
+| `deleted_by_id` | ForeignKey | null | -> `auth_user` |
+
+## `xarid_contractcomment` - Shartnoma izohi
+
+| Column | Type | Rules | References |
+| --- | --- | --- | --- |
+| `id` | BigAutoField | primary key |  |
+| `contract_id` | ForeignKey |  | -> `xarid_contract` |
+| `author_id` | ForeignKey |  | -> `auth_user` |
+| `matn` | TextField |  |  |
+| `created_at` | DateTimeField |  |  |
 
 ## `xarid_contractitem` - Shartnoma qatori
 
@@ -135,6 +147,7 @@ removed by the application.
 | `is_active` | BooleanField |  |  |
 | `created_at` | DateTimeField |  |  |
 | `name` | CharField | unique |  |
+| `is_purchasing` | BooleanField |  |  |
 
 ## `xarid_mahsulotturi` - Mahsulot Turi
 

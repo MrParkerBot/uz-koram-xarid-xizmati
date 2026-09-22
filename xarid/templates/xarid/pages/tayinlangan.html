@@ -1,22 +1,27 @@
 {% extends "xarid/base.html" %}
 {% from "xarid/_filters.html" import filter_bar, export_links with context %}
 {% from "xarid/_forms.html" import pdf_badge with context %}
+{% from "xarid/_pagination.html" import pagination_bar with context %}
 {#
 The Tayinlangan Arizalar page (REQ-ARIZA-012). A Katta Mutaxasis sees what was
 assigned to them; everybody else sees all of it with the holder column. The
 Holat drop-down has a Save button rather than submitting on change, so
 keyboard users are not reloaded on every arrow key.
+
+No Izoh column: the note an application was raised with is on the pages the
+request is decided on, and the icon this table carried opened nothing. The
+Ariza PDF beside it holds the note for anyone who needs it here.
 #}
-{% block title %}Tayinlangan Arizalar{% endblock %}
-{% block breadcrumb %}Arizalar / Tayinlangan{% endblock %}
-{% block page_heading %}Tayinlangan{% endblock %}
+{% block title %}{{ _("Tayinlangan Arizalar") }}{% endblock %}
+{% block breadcrumb %}{{ _("Arizalar / Tayinlangan") }}{% endblock %}
+{% block page_heading %}{{ _("Tayinlangan") }}{% endblock %}
 {% block content %}
 
     <div class="page-header">
-      <div><h1 class="page-title">Tayinlangan Arizalar</h1><div class="muted">Assigned Applications — Specialist View</div></div>
+      <div><h1 class="page-title">{{ _("Tayinlangan Arizalar") }}</h1><div class="muted">{{ _("Assigned Applications — Specialist View") }}</div></div>
       <div class="page-actions">
-        <span class="role-tag role-manager">Manager</span>
-        <span class="role-tag role-specialist">Specialist</span>
+        <span class="role-tag role-manager">{{ _("Manager") }}</span>
+        <span class="role-tag role-specialist">{{ _("Specialist") }}</span>
       </div>
     </div>
 
@@ -30,18 +35,18 @@ keyboard users are not reloaded on every arrow key.
         <table class="table-app" id="tayinlangan-table">
           <thead><tr>
             <th style="width:36px;">#</th>
-            <th>Ariza №</th>
-            <th>Bo'lim</th>
-            <th>Mahsulot Turi</th>
-            <th>Buyurtma nomi</th>
-            <th>Soni</th>
-            <th>O'lchov</th>
-            <th>Izoh</th>
-            <th>PDF</th>
-            <th>Qabul qilingan sana</th>
-            {% if shows_the_holder %}<th>Tayinlangan xodim</th>{% endif %}
-            <th style="text-align:center;width:120px;">Qabul</th>
-            <th style="width:180px;">Holat</th>
+            <th>{{ _("Ariza №") }}</th>
+            <th>{{ _("Bo'lim") }}</th>
+            <th>{{ _("Mahsulot Turi") }}</th>
+            <th>{{ _("Buyurtma nomi") }}</th>
+            <th>{{ _("Soni") }}</th>
+            <th>{{ _("O'lchov") }}</th>
+            <th>{{ _("Ariza PDF") }}</th>
+            <th>{{ _("Ilova PDF") }}</th>
+            <th>{{ _("Qabul qilingan sana") }}</th>
+            {% if shows_the_holder %}<th>{{ _("Tayinlangan xodim") }}</th>{% endif %}
+            <th style="text-align:center;width:120px;">{{ _("Qabul") }}</th>
+            <th style="width:180px;">{{ _("Holat") }}</th>
           </tr></thead>
           <tbody id="tayinlangan-tbody">
           {% for ariza in applications %}
@@ -50,7 +55,7 @@ keyboard users are not reloaded on every arrow key.
             {% for qator in lines %}
             <tr data-id="{{ ariza.pk }}">
               {% if loop.first %}
-              <td rowspan="{{ lines|length }}">{{ application_row.index }}</td>
+              <td rowspan="{{ lines|length }}">{{ table_page.start_index + application_row.index0 }}</td>
               <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.ariza_raqami }}</td>
               <td rowspan="{{ lines|length }}">{{ ariza.department.name }}</td>
               {% endif %}
@@ -59,43 +64,56 @@ keyboard users are not reloaded on every arrow key.
               <td style="font-weight:600;color:var(--color-primary);">{{ qator.soni_display }}</td>
               <td>{{ qator.olchov_birligi }}</td>
               {% if loop.first %}
-              <td style="font-size:11px;color:var(--color-text-muted);" rowspan="{{ lines|length }}">{{ ariza.izoh or "—" }}</td>
+              {# Drawn from the record, so it is always there to read. #}
               <td rowspan="{{ lines|length }}">
-                {% if ariza.pdf %}{{ pdf_badge(url('xarid:ariza-pdf', ariza.pk), ariza.ariza_raqami ~ ".pdf") }}{% else %}<span class="muted small">—</span>{% endif %}
+                {{ pdf_badge(url('xarid:ariza-hujjat-pdf', ariza.pk), ariza.ariza_raqami ~ "-ariza.pdf") }}
               </td>
-              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.qabul_qilingan_sana|date("Y-m-d") }}</td>
+              <td rowspan="{{ lines|length }}">
+                {% if ariza.pdf %}{{ pdf_badge(url('xarid:ariza-pdf', ariza.pk), ariza.ariza_raqami ~ "-Ilova.pdf") }}{% else %}<span class="muted small">—"</span>{% endif %}
+              </td>
+              <td class="mono-cell" rowspan="{{ lines|length }}">{{ ariza.qabul_qilingan_sana|date("d/m/Y") }}</td>
               {% if shows_the_holder %}
               <td rowspan="{{ lines|length }}"><span class="badge badge-info">{{ display_name(ariza.assigned_to) }}</span></td>
               {% endif %}
               <td style="text-align:center;white-space:nowrap;" rowspan="{{ lines|length }}">
                 {% if ariza.is_taken %}
-                  <span class="badge badge-success" title="{{ ariza.xodim_qabul_qilgan_sana|date('Y-m-d H:i') }}"><i class="bi bi-check-lg" aria-hidden="true"></i> Qabul qilingan</span>
+                  <span class="badge badge-approved" title="{{ ariza.xodim_qabul_qilgan_sana|date('d/m/Y H:i') }}"><i class="bi bi-check-lg" aria-hidden="true"></i> {{ _("Qabul qilingan") }}</span>
                 {% else %}
                   <form method="post" action="{{ url('xarid:tayinlangan-qabul', ariza.pk) }}" style="display:inline;" data-confirm="{{ ariza.ariza_raqami }} qabul qilinsinmi?">
                     {{ csrf_input }}
-                    <button type="submit" class="btn btn-outline-custom text-success btn-xs"><i class="bi bi-check-lg" aria-hidden="true"></i> Qabul</button>
+                    <button type="submit" class="btn btn-outline-custom text-success btn-xs"><i class="bi bi-check-lg" aria-hidden="true"></i> {{ _("Qabul") }}</button>
                   </form>
                 {% endif %}
               </td>
+              {# The holder says how far the work has got; whoever handed it
+                 out reads it. set_application_status() asks the same thing,
+                 so this decides what is drawn and not what may be done. #}
               <td rowspan="{{ lines|length }}">
+                {% if may_set_status %}
                 <form method="post" action="{{ url('xarid:tayinlangan-holat', ariza.pk) }}">
                   {{ csrf_input }}
                   <select class="form-control" name="status" style="width:160px;padding:5px 8px;font-size:11px;">
                     <option value="">— {{ ariza.status.name if ariza.status else "Tanlang" }} —</option>
                     {% for holat in statuses %}<option value="{{ holat.pk }}"{% if holat.pk == ariza.status_id %} selected{% endif %}>{{ holat.name }}</option>{% endfor %}
                   </select>
-                  <button type="submit" class="btn btn-outline-custom btn-xs" style="margin-top:4px;">Saqlash</button>
+                  <button type="submit" class="btn btn-outline-custom btn-xs" style="margin-top:4px;">{{ _("Saqlash") }}</button>
                 </form>
+                {% elif ariza.status %}
+                <span class="badge {{ ariza.status.badge_class }}">{{ ariza.status.name }}</span>
+                {% else %}
+                <span class="muted small">{{ _("Holat belgilanmagan") }}</span>
+                {% endif %}
               </td>
               {% endif %}
             </tr>
             {% endfor %}
           {% else %}
-            <tr><td colspan="{{ 13 if shows_the_holder else 12 }}" class="muted" style="text-align:center;">Hozircha tayinlangan ariza yo'q.</td></tr>
+            <tr><td colspan="{{ 13 if shows_the_holder else 12 }}" class="muted" style="text-align:center;">{{ _("Hozircha tayinlangan ariza yo'q.") }}</td></tr>
           {% endfor %}
           </tbody>
         </table>
       </div>
+      {{ pagination_bar(table_page, url('xarid:tayinlangan')) }}
     </div>
 
 {% endblock %}

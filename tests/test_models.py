@@ -22,6 +22,7 @@ from tests.support import (
     an_assigned_application,
     make_user,
 )
+from xarid.forms import DepartmentForm
 from xarid.models import (
     BOLIM_BOSHLIGI,
     DEPARTMENT_USER_TYPES,
@@ -48,6 +49,7 @@ from xarid.models import (
     has_user_type,
     money_display,
     next_number,
+    purchasing_department,
     user_type_of,
 )
 from xarid.permissions import (
@@ -73,7 +75,17 @@ class SeededMasterDataTests(TestCase):
         )
 
     def test_the_contract_statuses_and_types_are_seeded(self) -> None:
-        self.assertEqual(ShartnomaStatus.objects.count(), 5)
+        """The five states DEC-010 names, and nothing the workflow finds by code."""
+        self.assertEqual(
+            list(ShartnomaStatus.objects.values_list("name", flat=True)),
+            [
+                "Boshlang`ich xolatda",
+                "Birjaga qo`yilgan",
+                "Shartnoma tuzilgan",
+                "Yetkazib berilgan",
+                "Bekor qilingan",
+            ],
+        )
         self.assertEqual(
             list(ShartnomaTuri.objects.values_list("name", flat=True)),
             ["Import", "Mahalliy (Local)"],
@@ -132,6 +144,64 @@ class MasterDataTests(TestCase):
             MahsulotTuri.objects.create(category_number=100042, name="Boshqa")
 
 
+class PurchasingDepartmentTests(TestCase):
+    """Which Bo`lim works the arrived applications, and the one-at-a-time rule."""
+
+    def test_none_is_marked_until_somebody_marks_one(self) -> None:
+        a_department("Ishlab chiqarish")
+
+        self.assertIsNone(purchasing_department())
+
+    def test_the_marked_one_is_the_one_that_comes_back(self) -> None:
+        a_department("Ishlab chiqarish")
+        purchasing = a_department("Xarid bo`limi")
+        purchasing.is_purchasing = True
+        purchasing.save(update_fields=["is_purchasing"])
+
+        self.assertEqual(purchasing_department(), purchasing)
+
+    def test_a_retired_department_stops_being_the_purchasing_one(self) -> None:
+        """DEC-009 keeps the row for what points at it, not to keep using it."""
+        purchasing = a_department("Xarid bo`limi")
+        purchasing.is_purchasing = True
+        purchasing.is_active = False
+        purchasing.save(update_fields=["is_purchasing", "is_active"])
+
+        self.assertIsNone(purchasing_department())
+
+    def test_two_purchasing_departments_are_refused(self) -> None:
+        first = a_department("Xarid bo`limi")
+        first.is_purchasing = True
+        first.save(update_fields=["is_purchasing"])
+        second = a_department("Ikkinchi xarid")
+
+        second.is_purchasing = True
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            second.save(update_fields=["is_purchasing"])
+
+    def test_the_form_refuses_a_second_one_by_name_instead_of_by_crashing(self) -> None:
+        held_by = a_department("Xarid bo`limi")
+        held_by.is_purchasing = True
+        held_by.save(update_fields=["is_purchasing"])
+
+        form = DepartmentForm({"name": "Ikkinchi xarid", "is_purchasing": True})
+
+        self.assertFalse(form.is_valid())
+        self.assertIn(held_by.name, form.errors["is_purchasing"][0])
+
+    def test_the_form_lets_the_one_that_holds_it_keep_it(self) -> None:
+        """Editing the purchasing department must not trip over its own mark."""
+        purchasing = a_department("Xarid bo`limi")
+        purchasing.is_purchasing = True
+        purchasing.save(update_fields=["is_purchasing"])
+
+        form = DepartmentForm(
+            {"name": purchasing.name, "is_purchasing": True}, instance=purchasing
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+
 class RoleTests(TestCase):
     """Reading a user's type and department."""
 
@@ -176,6 +246,41 @@ class RoleTests(TestCase):
         former.save()
 
         self.assertEqual(list(assignable_specialists()), [specialist])
+
+    def test_only_xarid_bolimi_s_own_specialists_are_assignable(self) -> None:
+        """The department that hands the work out hands it to its own people."""
+        purchasing = a_department("Xarid bo`limi")
+        purchasing.is_purchasing = True
+        purchasing.save(update_fields=["is_purchasing"])
+        ours = make_user("ours", user_type=KATTA_MUTAXASIS, department=purchasing)
+        theirs = make_user(
+            "theirs", user_type=KATTA_MUTAXASIS, department=a_department("IT bo`lim")
+        )
+
+        self.assertEqual(list(assignable_specialists()), [ours])
+        self.assertNotIn(theirs, assignable_specialists())
+
+    def test_a_specialist_elsewhere_cannot_be_assigned_by_naming_them(self) -> None:
+        """The drop-down and the rule are the same question asked twice."""
+        purchasing = a_department("Xarid bo`limi")
+        purchasing.is_purchasing = True
+        purchasing.save(update_fields=["is_purchasing"])
+        head = make_user("assign.head", user_type=BOLIM_BOSHLIGI, department=purchasing)
+        theirs = make_user(
+            "assign.theirs", user_type=KATTA_MUTAXASIS, department=a_department("IT bo`lim")
+        )
+        application = an_accepted_application(head)
+
+        with self.assertRaises(ValueError):
+            application.assign(by=head, specialist=theirs)
+
+    def test_everybody_is_assignable_while_no_purchasing_department_is_named(self) -> None:
+        """An ordinary state: the page keeps working until the box is ticked."""
+        anywhere = make_user(
+            "anywhere", user_type=KATTA_MUTAXASIS, department=a_department("IT bo`lim")
+        )
+
+        self.assertEqual(list(assignable_specialists()), [anywhere])
 
 
 class ContractEditingTests(TestCase):
@@ -398,8 +503,11 @@ class ApplicationAssignmentTests(TestCase):
             accepted.set_status(status)
 
         assigned = an_assigned_application(self.manager, self.specialist)
-        self.assertTrue(assigned.set_status(status))
-        self.assertFalse(assigned.set_status(status))
+        # Assigning already put it at Tayinlangan, so moving it there again
+        # would report no change; the holder's first move is the one after.
+        onwards = ArizaStatus.with_code(ArizaStatus.Code.ACCEPTED)
+        self.assertTrue(assigned.set_status(onwards))
+        self.assertFalse(assigned.set_status(onwards))
         with self.assertRaises(ValueError):
             assigned.set_status(None)
 
@@ -514,6 +622,39 @@ class PurchaseApplicationTests(TemporaryAttachmentsMixin, TestCase):
         self.assertFalse(request.awaits(self.direktor))
         self.assertFalse(request.awaits(self.requester))
 
+    def test_the_chain_names_the_people_each_step_may_be_taken_by(self) -> None:
+        """approval_chain() is awaits() asked the other way round."""
+        request = a_purchase_application(self.requester, self.department, with_pdf=False)
+
+        chain = request.approval_chain()
+
+        self.assertEqual([step for step, _ in chain], [BOLIM_BOSHLIGI, DIREKTOR])
+        heads, direktors = (people for _, people in chain)
+        self.assertEqual(heads, [self.head])
+        self.assertEqual(direktors, [self.direktor])
+
+    def test_the_chain_leaves_out_somebody_who_could_not_sign_in_to_sign(self) -> None:
+        """A deactivated account is named by nothing that says who is awaited."""
+        request = a_purchase_application(self.requester, self.department, with_pdf=False)
+        self.head.is_active = False
+        self.head.save(update_fields=["is_active"])
+
+        heads = request.approval_chain()[0][1]
+
+        self.assertEqual(heads, [])
+
+    def test_the_chain_leaves_out_somebody_whose_type_was_retired(self) -> None:
+        """An inactive type is no type, the rule user_type_of() already applies."""
+        request = a_purchase_application(self.requester, self.department, with_pdf=False)
+        retired = UserType.objects.get(name=DIREKTOR)
+        retired.is_active = False
+        retired.save(update_fields=["is_active"])
+
+        direktors = request.approval_chain()[1][1]
+
+        self.assertEqual(direktors, [])
+        self.assertFalse(request.awaits(self.direktor))
+
     def test_the_head_approves_first_and_only_one_step(self) -> None:
         request = a_purchase_application(self.requester, self.department, with_pdf=False)
 
@@ -591,13 +732,51 @@ class NotificationTests(TestCase):
         make_user("admin2", user_type=ADMIN)
         application = an_assigned_application(manager, specialist)
 
-        produced = Notification.tell_admins_of_acceptance(application)
+        produced = Notification.tell_of_specialist_acceptance(application)
 
         self.assertEqual(len(produced), 2)
         self.assertEqual(
             str(Notification.objects.filter(recipient=first_admin).get()),
             f"Xodim arizani qabul qildi: {application.ariza_raqami}",
         )
+
+    def test_xarid_bolimi_is_told_of_a_specialist_acceptance_too(self) -> None:
+        """The application was handed out on their page, so it is their news."""
+        purchasing = a_department("Xarid bo`limi")
+        purchasing.is_purchasing = True
+        purchasing.save(update_fields=["is_purchasing"])
+        head = make_user("xarid.head", user_type=BOLIM_BOSHLIGI, department=purchasing)
+        manager = make_user("xarid.manager", user_type=MENEJER, department=purchasing)
+        elsewhere = make_user("other.manager", user_type=MENEJER, department=a_department())
+        specialist = make_user(
+            "spec.two", user_type=KATTA_MUTAXASIS, department=purchasing
+        )
+        application = an_assigned_application(manager, specialist)
+
+        Notification.tell_of_specialist_acceptance(application)
+
+        told = set(
+            Notification.objects.filter(
+                kind=Notification.Kind.SPECIALIST_ACCEPTED
+            ).values_list("recipient__username", flat=True)
+        )
+        self.assertEqual(told, {head.get_username(), manager.get_username()})
+        self.assertNotIn(elsewhere.get_username(), told)
+
+    def test_nobody_is_told_twice_of_one_acceptance(self) -> None:
+        """An Admin who also works the purchasing department is one person."""
+        purchasing = a_department("Xarid bo`limi")
+        purchasing.is_purchasing = True
+        purchasing.save(update_fields=["is_purchasing"])
+        both = make_user("admin.head", user_type=ADMIN, department=purchasing)
+        specialist = make_user(
+            "spec.three", user_type=KATTA_MUTAXASIS, department=purchasing
+        )
+        application = an_assigned_application(both, specialist)
+
+        produced = Notification.tell_of_specialist_acceptance(application)
+
+        self.assertEqual([one.recipient for one in produced], [both])
 
     def test_a_notification_is_about_exactly_one_record(self) -> None:
         recipient = make_user("someone")

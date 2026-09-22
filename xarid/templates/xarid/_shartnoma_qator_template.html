@@ -1,0 +1,26 @@
+{#
+The blank row the "+ Qator qo'shish" button clones, on both the creation
+dialog and the editing page (TASK-UZK-064). A <template> is inert, so its
+fields are not submitted until the button copies one into the form.
+
+The delete tick is here too when the formset has one, so that a row added
+by mistake can be taken out again before saving without reloading the page.
+#}
+<template id="sht-row-template">
+  <div class="form-row-items-4 js-sht-qator" style="margin-bottom:10px;">
+    {{ item_formset.empty_form.id }}
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">{{ _("Buyurtma Nomi") }}</label>{{ item_formset.empty_form.buyurtma_nomi }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">{{ _("Part Number") }}</label>{{ item_formset.empty_form.part_number }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">{{ _("Miqdori") }}</label>{{ item_formset.empty_form.buyurtma_soni }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">{{ _("Birligi") }}</label>{{ item_formset.empty_form.olchov_birligi }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">{{ _("Narxi") }}</label>{{ item_formset.empty_form.narxi }}</div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">{{ _("Umumiy Narx") }}</label><input type="text" class="form-control mono js-qator-jami" value="0,00" readonly/></div>
+    {% if item_formset.can_delete %}
+    <div class="form-group qator-ochirish" style="margin-bottom:0;">
+      <span class="form-label">&nbsp;</span>
+      <button type="button" class="qator-ochirish-btn" data-remove-row aria-label="Qatorni o'chirish" title="Qatorni o'chirish"><i class="bi bi-trash" aria-hidden="true"></i></button>
+      {{ item_formset.empty_form.DELETE }}
+    </div>
+    {% endif %}
+  </div>
+</template>

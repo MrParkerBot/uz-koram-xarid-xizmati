@@ -2,6 +2,11 @@
 # what was validated.
 Django==5.1.1
 
+# Reads the .env beside manage.py into the environment, which config/settings
+# then reads like any other variable. A runtime dependency and not a
+# development one: settings imports it on every start, in every environment.
+python-dotenv==1.2.3
+
 # The template engine every application page renders through.
 Jinja2==3.1.6
 

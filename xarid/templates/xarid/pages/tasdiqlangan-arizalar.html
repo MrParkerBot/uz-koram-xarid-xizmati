@@ -1,0 +1,127 @@
+{% extends "xarid/base.html" %}
+{% from "xarid/_filters.html" import filter_bar, export_links with context %}
+{% from "xarid/_forms.html" import pdf_badge with context %}
+{% from "xarid/_pagination.html" import pagination_bar with context %}
+{#
+Tasdiqlangan Arizalar: what Qabul Qilingan Arizalar is for whoever approves
+rather than accepts. Accepting an arrived application is the purchasing
+department's work, so a Bo`lim Boshlig`i outside it, and the Direktor, read
+the other half of the word here - the purchase requests they themselves let
+through their step of DEC-016's chain.
+
+Every one they approved, whatever became of it afterwards. The Holati column
+is what happened next, so a request the Direktor went on to refuse is still
+listed to its head, marked as refused, rather than quietly dropped. The
+Direktor's own step is the chain's last, so their rows are all approved.
+#}
+{% block title %}{{ _("Tasdiqlangan Arizalar") }}{% endblock %}
+{% block breadcrumb %}{{ _("Arizalar / Tasdiqlangan") }}{% endblock %}
+{% block page_heading %}{{ _("Tasdiqlangan") }}{% endblock %}
+{% block content %}
+
+    <div class="page-header">
+      <div><h1 class="page-title">{{ _("Tasdiqlangan Arizalar") }}</h1><div class="muted">{{ _("Siz tasdiqlagan xarid arizalari") }}</div></div>
+      <div class="page-actions">
+        <span class="role-tag role-manager">{{ approver_role }}</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar">{{ filter_bar(table_filter, url('xarid:qabul-arizalar')) }}<div class="toolbar-group">
+          {{ export_links('qabul-arizalar', table_filter) }}
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table-app" id="tasdiqlangan-table">
+          <thead><tr>
+            <th style="width:36px;">#</th>
+            <th class="sortable">Ariza №<span class="sort-icon"></span></th>
+            <th class="sortable">Ariza nomi<span class="sort-icon"></span></th>
+            <th>{{ _("Buyurtmachi") }}</th>
+            <th class="sortable">Holati<span class="sort-icon"></span></th>
+            <th>{{ _("Izoh") }}</th>
+            <th>{{ _("Ariza PDF") }}</th>
+            <th>{{ _("Ilova PDF") }}</th>
+            <th class="sortable">{{ _("Tasdiqlagan sanangiz") }}<span class="sort-icon"></span></th>
+          </tr></thead>
+          <tbody id="tasdiqlangan-tbody">
+          {% for ariza in applications %}
+            <tr data-id="{{ ariza.pk }}">
+              <td>{{ table_page.start_index + loop.index0 }}</td>
+              <td class="mono-cell">{{ ariza.xarid_raqami }}</td>
+              <td style="font-weight:500;">{{ ariza.shartnoma_nomi }}</td>
+              <td>{{ display_name(ariza.created_by) }}</td>
+              <td>
+                {% if ariza.stage == "rejected" %}
+                <span class="badge badge-danger">{{ _("Inkor etilgan") }}</span>
+                {% elif ariza.stage == "approved" %}
+                <span class="badge badge-approved">{{ _("Tasdiqlangan") }}</span>
+                {% else %}
+                <span class="badge badge-soft">{{ _("Direktor tasdig'ini kutmoqda") }}</span>
+                {% endif %}
+              </td>
+              <td style="font-size:11px;color:var(--color-text-muted);">
+                {{ ariza.izoh }}
+                {% set qarorlar = decisions[ariza.pk] %}
+                <button type="button" class="comment-open" data-open-drawer="ta-izoh-{{ ariza.pk }}"
+                        title="Qaror izohlari" aria-label="{{ ariza.xarid_raqami }} bo'yicha qaror izohlari">
+                  <i class="bi bi-chat-left-text" aria-hidden="true"></i>
+                  {% if qarorlar %}<span class="comment-count">{{ qarorlar|length }}</span>{% endif %}
+                </button>
+              </td>
+              <td>
+                {{ pdf_badge(url('xarid:xarid-ariza-hujjat-pdf', ariza.pk), ariza.xarid_raqami ~ "-ariza.pdf") }}
+              </td>
+              <td>
+                {% if ariza.pdf %}{{ pdf_badge(url('xarid:xarid-ariza-pdf', ariza.pk), ariza.xarid_raqami ~ "-Ilova.pdf") }}{% else %}<span class="muted small">—"</span>{% endif %}
+              </td>
+              <td class="mono-cell">{{ ariza.tasdiqlagan_sana|date("d/m/Y") }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="9" class="muted" style="text-align:center;">{{ _("Siz hali ariza tasdiqlamagansiz.") }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {{ pagination_bar(table_page, url('xarid:qabul-arizalar')) }}
+    </div>
+
+{% endblock %}
+{% block scripts %}
+{% for ariza in applications %}
+<div id="ta-izoh-{{ ariza.pk }}-overlay" class="drawer-overlay hidden">
+  <div class="drawer-panel" role="dialog" aria-modal="true" aria-label="{{ ariza.xarid_raqami }} qaror izohlari">
+    <div class="drawer-header">
+      <div class="drawer-title"><i class="bi bi-chat-left-text" aria-hidden="true"></i> {{ _("Qaror izohlari") }}</div>
+      <button type="button" class="drawer-close" data-close-drawer="ta-izoh-{{ ariza.pk }}" aria-label="Yopish">
+        <i class="bi bi-x-lg" aria-hidden="true"></i>
+      </button>
+    </div>
+    <div class="drawer-body">
+      <div class="muted small" style="margin-bottom:16px;">
+        <span class="mono-cell">{{ ariza.xarid_raqami }}</span> — {{ ariza.shartnoma_nomi }}
+      </div>
+      {% for qaror in decisions[ariza.pk] %}
+      <div class="comment-entry">
+        <div class="comment-entry-head">
+          <span class="comment-author">{{ display_name(qaror.by) }}</span>
+          <span class="badge {{ 'badge-approved' if qaror.approved else 'badge-danger' }}">
+            {{ "Tasdiqladi" if qaror.approved else "Inkor etdi" }}
+          </span>
+        </div>
+        {% if qaror.comment %}
+        <div class="comment-text">{{ qaror.comment }}</div>
+        {% else %}
+        <div class="comment-text muted">{{ _("Izoh qoldirilmagan.") }}</div>
+        {% endif %}
+        <div class="comment-date mono-cell">{{ qaror.at|date("d/m/Y H:i") }}</div>
+      </div>
+      {% else %}
+      <div class="muted small">{{ _("Bu ariza bo'yicha hali qaror qabul qilinmagan.") }}</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

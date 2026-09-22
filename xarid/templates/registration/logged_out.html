@@ -12,14 +12,14 @@
         <p class="mb-0 muted small">Xarid Xizmati Bo'limi</p>
       </div>
     </div>
-    <div class="section-title mb-3">Tizimdan chiqdingiz</div>
-    <p class="muted mb-4">Sessiya yakunlandi. Davom etish uchun qaytadan kiring.</p>
+    <div class="section-title mb-3">{{ _("Tizimdan chiqdingiz") }}</div>
+    <p class="muted mb-4">{{ _("Sessiya yakunlandi. Davom etish uchun qaytadan kiring.") }}</p>
   </div>
 
   <div class="login-card">
-    <h1 class="page-title">Xayr!</h1>
-    <p class="muted mb-4">Siz tizimdan muvaffaqiyatli chiqdingiz.</p>
-    <a class="btn btn-primary-custom btn-lg w-100 justify-content-center" href="{{ url('login') }}"><i class="bi bi-box-arrow-in-right" aria-hidden="true"></i> Qayta kirish</a>
+    <h1 class="page-title">{{ _("Xayr!") }}</h1>
+    <p class="muted mb-4">{{ _("Siz tizimdan muvaffaqiyatli chiqdingiz.") }}</p>
+    <a class="btn btn-primary-custom btn-lg w-100 justify-content-center" href="{{ url('login') }}"><i class="bi bi-box-arrow-in-right" aria-hidden="true"></i> {{ _("Qayta kirish") }}</a>
   </div>
 </div>
 {% endblock %}

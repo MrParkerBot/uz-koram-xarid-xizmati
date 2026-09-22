@@ -1,0 +1,70 @@
+{#
+The bar beneath every table: which page is being read on the left, how many
+rows a page holds and how many rows there are in all on the right.
+
+It is the style guide's own .pagination-wrap, which the Users page already
+drew the right-hand half of and which the stylesheet has sized a 70px row
+count box for - so this is that component filled in, not a second one beside
+it.
+
+The page buttons are links, so a reader may open one in a new tab and the
+browser's back button walks back through the pages they read. Each carries
+the filters, the period, the ordering and the row count, so paging a filtered
+table keeps it filtered.
+
+The row count is a GET form of its own rather than part of the filter bar: it
+belongs beside the total it changes, and a reader who picks a number expects
+the table to follow without hunting for Qidirish. main.js submits it on
+change; the Ko'rsatish button is what happens without JavaScript, and is
+hidden only where there is script to replace it.
+#}
+{% macro pagination_bar(table_page, action_url) -%}
+{% if table_page.is_offered %}
+<div class="pagination-wrap">
+  {% if table_page.has_previous %}
+  <a class="btn btn-outline-custom btn-sm" href="{{ action_url }}{{ table_page.previous_query }}" rel="prev"><i class="bi bi-chevron-left" aria-hidden="true"></i> {{ _("Oldingi") }}</a>
+  {% else %}
+  <span class="btn btn-outline-custom btn-sm disabled" aria-disabled="true"><i class="bi bi-chevron-left" aria-hidden="true"></i> {{ _("Oldingi") }}</span>
+  {% endif %}
+
+  {% for number in table_page.numbers %}
+    {% if number == table_page.ellipsis %}
+    <span class="pager-gap" aria-hidden="true">{{ number }}</span>
+    {% elif number == table_page.number %}
+    <span class="btn btn-primary-custom btn-sm" aria-current="page">{{ number }}</span>
+    {% else %}
+    <a class="btn btn-outline-custom btn-sm" href="{{ action_url }}{{ table_page.query_for(number) }}" aria-label="{{ _("%(number)s-sahifa", number=number) }}">{{ number }}</a>
+    {% endif %}
+  {% endfor %}
+
+  {% if table_page.has_next %}
+  <a class="btn btn-outline-custom btn-sm" href="{{ action_url }}{{ table_page.next_query }}" rel="next">{{ _("Keyingi") }} <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+  {% else %}
+  <span class="btn btn-outline-custom btn-sm disabled" aria-disabled="true">{{ _("Keyingi") }} <i class="bi bi-chevron-right" aria-hidden="true"></i></span>
+  {% endif %}
+
+  <div class="pagination-info">
+    <form method="get" action="{{ action_url }}" class="pager-rows-form" data-rows-form>
+      {#
+      The filters travel as hidden fields: changing the row count must not
+      empty a table the reader narrowed. The page number is deliberately not
+      among them - twenty rows a page put the reader on page four, and a
+      hundred a page may have no page four at all.
+      #}
+      {% for name, value in table_page.kept.items() %}
+      <input type="hidden" name="{{ name }}" value="{{ value }}"/>
+      {% endfor %}
+      <label for="rows-{{ table_page.per_page_parameter }}">{{ _("Qatorlar:") }}</label>
+      <select class="form-control" id="rows-{{ table_page.per_page_parameter }}"
+              name="{{ table_page.per_page_parameter }}" aria-label="{{ _("Sahifadagi qatorlar soni") }}">
+        {% for choice in table_page.choices %}
+        <option value="{{ choice }}"{% if choice == table_page.per_page %} selected{% endif %}>{{ choice }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-outline-custom btn-xs pager-rows-apply">{{ _("Ko'rsatish") }}</button>
+    </form>
+    <span>{{ _("Jami") }}: <span class="count">{{ table_page.total }}</span> {{ _("ta") }}</span>
+  </div>
+</div>
+{% endif %}
+{%- endmacro %}

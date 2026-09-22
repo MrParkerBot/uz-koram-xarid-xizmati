@@ -1,4 +1,5 @@
 {% extends "xarid/base.html" %}
+{% from "xarid/_pagination.html" import pagination_bar with context %}
 {#
 The notifications panel (DEC-012). Everybody's own page rather than one a
 user type may open, so it is closed by login_required alone.
@@ -6,15 +7,15 @@ user type may open, so it is closed by login_required alone.
 Showing a notification is what marks it read, which is why the bell is empty
 after this page has been opened. The note under the list says so.
 #}
-{% block title %}Bildirishnomalar{% endblock %}
-{% block breadcrumb %}Umumiy / Bildirishnomalar{% endblock %}
-{% block page_heading %}Bildirishnomalar{% endblock %}
+{% block title %}{{ _("Bildirishnomalar") }}{% endblock %}
+{% block breadcrumb %}{{ _("Umumiy / Bildirishnomalar") }}{% endblock %}
+{% block page_heading %}{{ _("Bildirishnomalar") }}{% endblock %}
 {% block content %}
 
     <div class="page-header">
       <div>
-        <h1 class="page-title">Bildirishnomalar</h1>
-        <div class="muted">Sizga tegishli xabarlar.</div>
+        <h1 class="page-title">{{ _("Bildirishnomalar") }}</h1>
+        <div class="muted">{{ _("Sizga tegishli xabarlar.") }}</div>
       </div>
     </div>
 
@@ -33,17 +34,18 @@ after this page has been opened. The note under the list says so.
               {% if notification.izoh %}<div class="muted small">{{ notification.izoh }}</div>{% endif %}
             </div>
             <div class="footer-note text-nowrap">
-              {% if not notification.read_at %}<span class="badge badge-primary">Yangi</span> {% endif %}
-              {{ notification.created_at|date("Y-m-d H:i") }}
+              {% if not notification.read_at %}<span class="badge badge-primary">{{ _("Yangi") }}</span> {% endif %}
+              {{ notification.created_at|date("d/m/Y H:i") }}
             </div>
           </div>
         {% else %}
-          <div class="muted" style="text-align:center;">Bildirishnomalar yo'q.</div>
+          <div class="muted" style="text-align:center;">{{ _("Bildirishnomalar yo'q.") }}</div>
         {% endfor %}
         </div>
       </div>
+      {{ pagination_bar(table_page, url('xarid:notifications')) }}
       <div class="panel-body footer-note">
-        Ochilgan bildirishnomalar o'qilgan deb belgilanadi. Xabarlar faqat tizim ichida yetkaziladi (DEC-012).
+        {{ _("Ochilgan bildirishnomalar o'qilgan deb belgilanadi. Xabarlar faqat tizim ichida yetkaziladi (DEC-012).") }}
       </div>
     </div>
 

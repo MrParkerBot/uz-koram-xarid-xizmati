@@ -26,6 +26,11 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
 
+# Day first, matching what the tables on the pages print. strftime spellings;
+# xarid.jinja2 carries the Django-format equivalents the templates use.
+DATE_OUTPUT = "%d/%m/%Y"
+DATETIME_OUTPUT = "%d/%m/%Y %H:%M"
+
 EXCEL_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 PDF_CONTENT_TYPE = "application/pdf"
 
@@ -86,9 +91,9 @@ class TableExport:
         if value is None:
             return ""
         if isinstance(value, datetime):
-            return timezone.localtime(value).strftime("%Y-%m-%d %H:%M")
+            return timezone.localtime(value).strftime(DATETIME_OUTPUT)
         if isinstance(value, date):
-            return value.isoformat()
+            return value.strftime(DATE_OUTPUT)
         return value
 
 
@@ -105,8 +110,8 @@ def local_date(value: datetime | date | None) -> str:
     if value is None:
         return ""
     if isinstance(value, datetime):
-        return timezone.localtime(value).strftime("%Y-%m-%d")
-    return value.isoformat()
+        return timezone.localtime(value).strftime(DATE_OUTPUT)
+    return value.strftime(DATE_OUTPUT)
 
 
 def excel_response(export: TableExport) -> HttpResponse:
