@@ -1480,14 +1480,26 @@ textarea.form-control { min-height: 80px; }
     transform: translateX(-100%);
     transition: transform .25s ease;
     z-index: 1040;
+    /* The panel covers the full height, but the header is painted over its
+       first 64px, so the nav starts below the header with a little room to
+       breathe - otherwise the first section label sits under the hamburger. */
+    padding-top: calc(var(--header-height) + 8px);
   }
   body.is-sidebar-open .sidebar {
     transform: translateX(0);
     box-shadow: 0 18px 48px rgba(23,23,23,.18);
   }
   .main-shell { margin-left: 0; }
-  .top-header { padding: 10px 12px 10px 64px; gap: 8px; }
+  /* Same vertical arithmetic as the desktop header — content(48) + 8 + 7 +
+     border(1) == --header-height — because .main-shell reserves exactly that
+     much and anything taller hides the first line of the page beneath it.
+     Hence also nowrap: a header that wrapped to a second row overflowed. */
+  .top-header { padding: 8px 12px 7px 64px; gap: 8px; flex-wrap: nowrap; }
   .top-header .sidebar-brand p { display: none; }
+  /* The trail and heading give up their width first, and ellipsize. */
+  .top-header .header-titles { flex: 0 1 auto; overflow: hidden; }
+  .top-header .header-titles > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .top-header .sidebar-brand, .top-header .header-actions { flex: none; }
   .page-wrap { padding: 16px; }
   .page-title { font-size: 22px; }
   .kpi-value { font-size: 24px; }
@@ -1501,8 +1513,17 @@ textarea.form-control { min-height: 80px; }
   .pagination-wrap { flex-wrap: wrap; }
 }
 
-/* ----- ≤576px : single-column toolbar, tighter type ----- */
+/* ----- ≤576px : phone — single-column toolbar, tighter type ----- */
 @media (max-width: 576px) {
+  /* A phone header is the hamburger, the mark, and the three controls, on one
+     row. Everything that repeats what the page itself says is dropped: the
+     brand wordmark (the mark carries it), the breadcrumb and heading (every
+     page opens with its own .page-title), and the name beside the avatar. */
+  .top-header .sidebar-brand .brand-text { display: none; }
+  .top-header .brand-mark { width: 40px; height: 40px; font-size: 16px; }
+  .top-header .header-titles { display: none; }
+  .user-chip .uname, .user-chip .urole { display: none; }
+  .user-chip { padding: 6px 10px; gap: 6px; }
   .top-header .btn .label-text { display: none; }
   .toolbar { gap: 8px; }
   .toolbar-group { width: 100%; }
@@ -1525,7 +1546,6 @@ textarea.form-control { min-height: 80px; }
 @media (max-width: 420px) {
   .top-header .btn:not(.sidebar-toggle) i { font-size: 16px; }
   .page-title { font-size: 18px; }
-  .user-chip .uname, .user-chip .urole { display: none; }
 }
 
 /* ─── REDUCED MOTION (guide §9 — a genuine improvement, not an existing convention) ─── */

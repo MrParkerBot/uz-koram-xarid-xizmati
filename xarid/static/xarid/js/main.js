@@ -132,12 +132,17 @@ const Sidebar = {
 const UserChip = {
   init() {
     const chip = document.querySelector('.user-chip');
-    const menu = document.querySelector('.account-menu');
+    // Scoped to the chip: the language picker's menu carries .account-menu too
+    // and comes first in the header, so a document-wide query found that one
+    // and the account chip opened the language list.
+    const menu = chip && chip.querySelector('.account-menu');
     if (!chip || !menu) return;
 
     chip.addEventListener('click', (e) => {
       e.stopPropagation();
       menu.classList.toggle('hidden');
+      // Two menus in one bar: opening either closes the other.
+      document.querySelector('[data-language-menu]')?.classList.add('hidden');
     });
 
     document.addEventListener('click', () => {
